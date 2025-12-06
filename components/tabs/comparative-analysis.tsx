@@ -94,20 +94,20 @@ export function ComparativeAnalysis() {
           brand: c.imported_cars.brand,
           model: c.imported_cars.model,
           year: c.imported_cars.year,
-          price: c.imported_cars.price,
-          totalExpenses: c.imported_cars.total_cost,
+          price: Number(c.imported_cars.price),
+          totalExpenses: Number(c.imported_cars.total_cost),
           steering: c.imported_cars.steering,
-          cv: c.imported_cars.cv,
-          mileage: c.imported_cars.mileage
+          cv: Number(c.imported_cars.cv),
+          mileage: Number(c.imported_cars.mileage)
         } : undefined,
         spainCar: c.spain_cars ? {
           id: c.spain_cars.id,
           brand: c.spain_cars.brand,
           model: c.spain_cars.model,
           year: c.spain_cars.year,
-          price: c.spain_cars.price,
-          cv: c.spain_cars.cv,
-          mileage: c.spain_cars.mileage,
+          price: Number(c.spain_cars.price),
+          cv: Number(c.spain_cars.cv),
+          mileage: Number(c.spain_cars.mileage),
           url: c.spain_cars.url
         } : undefined
       }))

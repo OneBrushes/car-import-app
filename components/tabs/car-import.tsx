@@ -54,14 +54,14 @@ export function CarImport() {
         brand: car.brand,
         model: car.model,
         year: car.year,
-        price: car.price,
+        price: Number(car.price),
         currency: "EUR", // Por defecto, o añadir columna currency a DB
-        mileage: car.mileage || 0,
-        cv: car.cv || 0,
+        mileage: Number(car.mileage || 0),
+        cv: Number(car.cv || 0),
         photo: car.image_url,
         tags: [], // Si quieres tags, añade columna array a DB
         origin: "Importado",
-        totalExpenses: car.total_cost,
+        totalExpenses: Number(car.total_cost),
         url: "", // Si quieres URL, añade columna a DB
         steering: car.steering
       }))

@@ -66,14 +66,17 @@ export function CarsManagement() {
         brand: car.brand,
         model: car.model,
         year: car.year,
-        initialPrice: car.initial_price,
-        initialExpenses: car.initial_expenses,
+        initialPrice: Number(car.initial_price),
+        initialExpenses: Number(car.initial_expenses),
         datePurchased: car.date_purchased,
         status: car.status,
-        sellPrice: car.sell_price,
+        sellPrice: car.sell_price ? Number(car.sell_price) : undefined,
         dateSold: car.date_sold,
         buyer: car.buyer,
-        expenses: car.expenses || []
+        expenses: (car.expenses || []).map((e: any) => ({
+          ...e,
+          amount: Number(e.amount)
+        }))
       }))
 
       setBoughtCars(formattedCars)

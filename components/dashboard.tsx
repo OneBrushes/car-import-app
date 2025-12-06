@@ -77,13 +77,16 @@ export function Dashboard() {
         brand: car.brand,
         model: car.model,
         year: car.year,
-        initialPrice: car.initial_price,
-        initialExpenses: car.initial_expenses,
+        initialPrice: Number(car.initial_price),
+        initialExpenses: Number(car.initial_expenses),
         datePurchased: car.date_purchased,
         status: car.status,
-        sellPrice: car.sell_price,
+        sellPrice: car.sell_price ? Number(car.sell_price) : undefined,
         dateSold: car.date_sold,
-        expenses: car.expenses || []
+        expenses: (car.expenses || []).map((e: any) => ({
+          ...e,
+          amount: Number(e.amount)
+        }))
       }))
 
       const formattedImported: ImportedCar[] = (importedData || []).map((car: any) => ({
@@ -91,10 +94,10 @@ export function Dashboard() {
         brand: car.brand,
         model: car.model,
         year: car.year,
-        price: car.price,
-        totalExpenses: car.total_cost,
-        mileage: car.mileage,
-        cv: car.cv
+        price: Number(car.price),
+        totalExpenses: Number(car.total_cost),
+        mileage: Number(car.mileage),
+        cv: Number(car.cv)
       }))
 
       setBoughtCars(formattedInventory)
