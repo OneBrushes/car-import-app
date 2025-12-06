@@ -1,21 +1,33 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Loader2, Shield } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { ArrowLeft, Loader2, Shield, Camera, Upload } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
+import { compressImage } from "@/lib/image-compression"
+import { Badge } from "@/components/ui/badge"
 
 export default function ProfilePage() {
     const { user, loading } = useAuth()
     const router = useRouter()
     const [role, setRole] = useState<string>("usuario")
-    const [isLoadingRole, setIsLoadingRole] = useState(true)
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+    const [isLoadingData, setIsLoadingData] = useState(true)
+    const [isUploading, setIsUploading] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // Estados para formularios
+    const [newEmail, setNewEmail] = useState("")
+    const [newPassword, setNewPassword] = useState("")
+    const [confirmPassword, setConfirmPassword] = useState("")
 
     useEffect(() => {
         if (!loading && !user) {
@@ -29,22 +41,94 @@ export default function ProfilePage() {
             try {
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('role')
+                    .select('role, avatar_url')
                     .eq('id', user.id)
                     .single()
 
                 if (data) {
                     setRole(data.role)
+                    setAvatarUrl(data.avatar_url)
                 }
             } catch (error) {
                 console.error('Error fetching profile:', error)
             } finally {
-                setIsLoadingRole(false)
+                setIsLoadingData(false)
             }
         }
 
         getProfile()
     }, [user])
+
+    const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (!event.target.files || event.target.files.length === 0) return
+
+        const file = event.target.files[0]
+        setIsUploading(true)
+
+        try {
+            // 1. Comprimir imagen
+            const compressedFile = await compressImage(file)
+
+            // 2. Subir a Supabase Storage
+            const fileExt = compressedFile.name.split('.').pop()
+            const fileName = `${user?.id}-${Math.random()}.${fileExt}`
+            const filePath = `${fileName}`
+
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, compressedFile)
+
+            if (uploadError) throw uploadError
+
+            // 3. Obtener URL pública
+            const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath)
+
+            // 4. Actualizar perfil
+            const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ avatar_url: publicUrl })
+                .eq('id', user?.id)
+
+            if (updateError) throw updateError
+
+            setAvatarUrl(publicUrl)
+            toast.success("Foto de perfil actualizada")
+        } catch (error: any) {
+            toast.error("Error al subir la imagen: " + error.message)
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const handleUpdateEmail = async (e: React.FormEvent) => {
+        e.preventDefault()
+        try {
+            const { error } = await supabase.auth.updateUser({ email: newEmail })
+            if (error) throw error
+            toast.success("Revisa tu nuevo email para confirmar el cambio")
+            setNewEmail("")
+        } catch (error: any) {
+            toast.error(error.message)
+        }
+    }
+
+    const handleUpdatePassword = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (newPassword !== confirmPassword) {
+            return toast.error("Las contraseñas no coinciden")
+        }
+        try {
+            const { error } = await supabase.auth.updateUser({ password: newPassword })
+            if (error) throw error
+            toast.success("Contraseña actualizada correctamente")
+            setNewPassword("")
+            setConfirmPassword("")
+        } catch (error: any) {
+            toast.error(error.message)
+        }
+    }
 
     if (loading || !user) {
         return (
@@ -56,7 +140,7 @@ export default function ProfilePage() {
 
     return (
         <div className="min-h-screen bg-background p-4 sm:p-8">
-            <div className="max-w-2xl mx-auto space-y-6">
+            <div className="max-w-4xl mx-auto space-y-6">
                 <Button
                     variant="ghost"
                     className="gap-2 pl-0 hover:bg-transparent hover:text-primary"
@@ -66,40 +150,127 @@ export default function ProfilePage() {
                     Volver al Dashboard
                 </Button>
 
-                <div className="space-y-2">
-                    <h1 className="text-3xl font-bold">Mi Perfil</h1>
-                    <p className="text-muted-foreground">Gestiona tu información personal y preferencias.</p>
+                <div className="flex items-center gap-6">
+                    <div className="relative group">
+                        <Avatar className="h-24 w-24 border-4 border-background shadow-xl">
+                            <AvatarImage src={avatarUrl || ""} />
+                            <AvatarFallback className="text-2xl bg-primary/10 text-primary">
+                                {user.email?.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                        </Avatar>
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="absolute bottom-0 right-0 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-colors"
+                            disabled={isUploading}
+                        >
+                            {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                        </button>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            className="hidden"
+                            accept="image/*"
+                            onChange={handleAvatarUpload}
+                        />
+                    </div>
+
+                    <div>
+                        <h1 className="text-3xl font-bold">Mi Perfil</h1>
+                        <div className="flex items-center gap-2 mt-2">
+                            <Badge variant="outline" className="capitalize gap-1">
+                                <Shield className="h-3 w-3" />
+                                {isLoadingData ? "..." : role}
+                            </Badge>
+                            <span className="text-muted-foreground text-sm">{user.email}</span>
+                        </div>
+                    </div>
                 </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Información de la Cuenta</CardTitle>
-                        <CardDescription>Detalles de tu cuenta en NorDrive</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label>Email</Label>
-                            <Input value={user.email} disabled />
-                        </div>
+                <Tabs defaultValue="general" className="w-full">
+                    <TabsList>
+                        <TabsTrigger value="general">General</TabsTrigger>
+                        <TabsTrigger value="security">Seguridad</TabsTrigger>
+                    </TabsList>
 
-                        <div className="space-y-2">
-                            <Label>ID de Usuario</Label>
-                            <Input value={user.id} disabled className="font-mono text-xs" />
-                        </div>
+                    <TabsContent value="general">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Información Personal</CardTitle>
+                                <CardDescription>Gestiona tu información básica.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-2">
+                                    <Label>Email Actual</Label>
+                                    <Input value={user.email} disabled />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Rol</Label>
+                                    <Input value={role} disabled className="capitalize" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
 
-                        <div className="pt-4 flex items-center gap-2">
-                            <div className="p-2 bg-primary/10 rounded-lg">
-                                <Shield className="h-5 w-5 text-primary" />
-                            </div>
-                            <div>
-                                <p className="text-sm font-medium">Rol actual</p>
-                                <p className="text-sm text-muted-foreground capitalize">
-                                    {isLoadingRole ? "Cargando..." : role || "Usuario Estándar"}
-                                </p>
-                            </div>
+                    <TabsContent value="security">
+                        <div className="grid gap-6">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Cambiar Email</CardTitle>
+                                    <CardDescription>Actualiza tu dirección de correo electrónico.</CardDescription>
+                                </CardHeader>
+                                <form onSubmit={handleUpdateEmail}>
+                                    <CardContent className="space-y-4">
+                                        <div className="grid gap-2">
+                                            <Label>Nuevo Email</Label>
+                                            <Input
+                                                type="email"
+                                                placeholder="nuevo@email.com"
+                                                value={newEmail}
+                                                onChange={(e) => setNewEmail(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter>
+                                        <Button type="submit">Actualizar Email</Button>
+                                    </CardFooter>
+                                </form>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Cambiar Contraseña</CardTitle>
+                                    <CardDescription>Asegura tu cuenta con una contraseña fuerte.</CardDescription>
+                                </CardHeader>
+                                <form onSubmit={handleUpdatePassword}>
+                                    <CardContent className="space-y-4">
+                                        <div className="grid gap-2">
+                                            <Label>Nueva Contraseña</Label>
+                                            <Input
+                                                type="password"
+                                                value={newPassword}
+                                                onChange={(e) => setNewPassword(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label>Confirmar Contraseña</Label>
+                                            <Input
+                                                type="password"
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter>
+                                        <Button type="submit">Actualizar Contraseña</Button>
+                                    </CardFooter>
+                                </form>
+                            </Card>
                         </div>
-                    </CardContent>
-                </Card>
+                    </TabsContent>
+                </Tabs>
             </div>
         </div>
     )

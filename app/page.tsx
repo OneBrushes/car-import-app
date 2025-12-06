@@ -7,12 +7,13 @@ import { CarsSpain } from "@/components/tabs/cars-spain"
 import { ComparativeAnalysis } from "@/components/tabs/comparative-analysis"
 import { CarsManagement } from "@/components/tabs/cars-management"
 import { ReportGenerator } from "@/components/tabs/report-generator"
+import { AdminPanel } from "@/components/tabs/admin-panel"
 import { Dashboard } from "@/components/dashboard"
 import { Navigation } from "@/components/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ExportImportTools } from "@/components/export-import-tools"
 import { useAuth } from "@/components/auth-provider"
-import { Loader2, LogOut, User as UserIcon } from "lucide-react"
+import { Loader2, LogOut, User as UserIcon, Shield } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,14 +22,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { supabase } from "@/lib/supabase"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 
-type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report"
+type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "admin"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
   const [isDark, setIsDark] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [role, setRole] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const { user, loading, signOut } = useAuth()
   const router = useRouter()
 
@@ -51,6 +57,19 @@ export default function Home() {
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login")
+    } else if (user) {
+      // Cargar rol y avatar
+      supabase
+        .from('profiles')
+        .select('role, avatar_url')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setRole(data.role)
+            setAvatarUrl(data.avatar_url)
+          }
+        })
     }
   }, [user, loading, router])
 
@@ -84,6 +103,18 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2">
+            {role === 'admin' && (
+              <Button
+                variant={activeTab === 'admin' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('admin')}
+                className="gap-2 hidden md:flex"
+              >
+                <Shield className="h-4 w-4" />
+                Admin
+              </Button>
+            )}
+
             <ExportImportTools />
             <ThemeToggle isDark={isDark} onToggle={handleToggleTheme} />
 
@@ -91,6 +122,7 @@ export default function Home() {
               <DropdownMenuTrigger asChild>
                 <button className="relative h-8 w-8 rounded-full overflow-hidden border border-border hover:opacity-80 transition-opacity">
                   <Avatar className="h-full w-full">
+                    <AvatarImage src={avatarUrl || ""} />
                     <AvatarFallback className="bg-primary/10 text-primary">
                       {user.email?.substring(0, 2).toUpperCase()}
                     </AvatarFallback>
@@ -104,6 +136,9 @@ export default function Home() {
                     <p className="text-xs leading-none text-muted-foreground truncate">
                       {user.email}
                     </p>
+                    {role === 'admin' && (
+                      <Badge variant="outline" className="mt-1 w-fit text-[10px] px-1 py-0 h-4">Admin</Badge>
+                    )}
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -111,6 +146,12 @@ export default function Home() {
                   <UserIcon className="mr-2 h-4 w-4" />
                   <span>Perfil</span>
                 </DropdownMenuItem>
+                {role === 'admin' && (
+                  <DropdownMenuItem onClick={() => setActiveTab('admin')}>
+                    <Shield className="mr-2 h-4 w-4" />
+                    <span>Panel Admin</span>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => signOut()}>
                   <LogOut className="mr-2 h-4 w-4" />
@@ -142,6 +183,7 @@ export default function Home() {
             {activeTab === "comparison" && <ComparativeAnalysis />}
             {activeTab === "management" && <CarsManagement />}
             {activeTab === "report" && <ReportGenerator />}
+            {activeTab === "admin" && role === 'admin' && <AdminPanel />}
           </div>
         </div>
       </main>
