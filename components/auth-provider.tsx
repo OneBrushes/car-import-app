@@ -24,12 +24,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        // Verificar sesión actual
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session)
-            setUser(session?.user ?? null)
-            setLoading(false)
-        })
+        const initAuth = async () => {
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession()
+                if (error) throw error
+
+                setSession(session)
+                setUser(session?.user ?? null)
+            } catch (error) {
+                console.error("Error checking auth session:", error)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        initAuth()
 
         // Escuchar cambios en la autenticación (login, logout, etc.)
         const {
