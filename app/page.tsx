@@ -78,7 +78,7 @@ export default function Home() {
               <span className="text-lg font-bold text-primary">🚗</span>
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-lg font-semibold">AutoImport Pro</h1>
+              <h1 className="text-lg font-semibold">NorDrive</h1>
               <p className="text-xs text-muted-foreground">Gestión de importación</p>
             </div>
           </div>
