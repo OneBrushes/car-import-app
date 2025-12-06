@@ -9,6 +9,9 @@ import "./globals.css"
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
+import { AuthProvider } from "@/components/auth-provider"
+import { Toaster } from "@/components/ui/sonner"
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -44,10 +47,11 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <body className={`font-sans antialiased`} suppressHydrationWarning>
         {mounted ? (
-          <>
+          <AuthProvider>
             {children}
+            <Toaster />
             <Analytics />
-          </>
+          </AuthProvider>
         ) : (
           <div className="min-h-screen bg-background" />
         )}
