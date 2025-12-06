@@ -1,8 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, X } from "lucide-react"
+import { Plus, X, Loader2 } from "lucide-react"
 import { ComparativeCard } from "@/components/cards/comparative-card"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
+import { toast } from "sonner"
 
 interface ImportedCar {
   id: string
@@ -34,12 +37,16 @@ interface Comparison {
   importedCarId: string
   spainCarId: string
   steringAdjustment: number
+  importedCar?: ImportedCar
+  spainCar?: SpainCar
 }
 
 export function ComparativeAnalysis() {
+  const { user } = useAuth()
   const [comparisons, setComparisons] = useState<Comparison[]>([])
   const [importedCars, setImportedCars] = useState<ImportedCar[]>([])
   const [spainCars, setSpainCars] = useState<SpainCar[]>([])
+  const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [newComparison, setNewComparison] = useState({
     importedCarId: "",
@@ -48,40 +55,116 @@ export function ComparativeAnalysis() {
 
   // Cargar datos
   useEffect(() => {
-    const imported = localStorage.getItem("importedCars")
-    const spain = localStorage.getItem("spainCars")
-    const comps = localStorage.getItem("comparisons")
+    if (user) {
+      fetchData()
+    }
+  }, [user])
 
-    if (imported) setImportedCars(JSON.parse(imported))
-    if (spain) setSpainCars(JSON.parse(spain))
-    if (comps) setComparisons(JSON.parse(comps))
-  }, [])
+  const fetchData = async () => {
+    try {
+      setLoading(true)
 
-  const saveComparisons = (updated: Comparison[]) => {
-    setComparisons(updated)
-    localStorage.setItem("comparisons", JSON.stringify(updated))
-  }
+      // 1. Cargar Comparativas (con JOINs)
+      const { data: compsData, error: compsError } = await supabase
+        .from('comparisons')
+        .select(`
+          *,
+          imported_cars (*),
+          spain_cars (*)
+        `)
+        .order('created_at', { ascending: false })
 
-  const addComparison = () => {
-    if (newComparison.importedCarId && newComparison.spainCarId) {
-      const comparison: Comparison = {
-        id: `COMP-${(comparisons.length + 1).toString().padStart(3, "0")}`,
-        importedCarId: newComparison.importedCarId,
-        spainCarId: newComparison.spainCarId,
-        steringAdjustment: 4000, // Ajuste por defecto para volante derecha
-      }
-      saveComparisons([...comparisons, comparison])
-      setNewComparison({ importedCarId: "", spainCarId: "" })
-      setShowForm(false)
+      if (compsError) throw compsError
+
+      // 2. Cargar listas para el select (solo ID y nombre)
+      const { data: impData } = await supabase.from('imported_cars').select('id, brand, model, year')
+      const { data: espData } = await supabase.from('spain_cars').select('id, brand, model, year')
+
+      setImportedCars(impData as any || [])
+      setSpainCars(espData as any || [])
+
+      // Formatear comparativas
+      const formattedComps: Comparison[] = compsData.map((c: any) => ({
+        id: c.id,
+        importedCarId: c.imported_car_id,
+        spainCarId: c.spain_car_id,
+        steringAdjustment: c.steering_adjustment,
+        importedCar: c.imported_cars ? {
+          id: c.imported_cars.id,
+          brand: c.imported_cars.brand,
+          model: c.imported_cars.model,
+          year: c.imported_cars.year,
+          price: c.imported_cars.price,
+          totalExpenses: c.imported_cars.total_cost,
+          steering: c.imported_cars.steering,
+          cv: c.imported_cars.cv,
+          mileage: c.imported_cars.mileage
+        } : undefined,
+        spainCar: c.spain_cars ? {
+          id: c.spain_cars.id,
+          brand: c.spain_cars.brand,
+          model: c.spain_cars.model,
+          year: c.spain_cars.year,
+          price: c.spain_cars.price,
+          cv: c.spain_cars.cv,
+          mileage: c.spain_cars.mileage,
+          url: c.spain_cars.url
+        } : undefined
+      }))
+
+      setComparisons(formattedComps)
+
+    } catch (error) {
+      console.error("Error fetching comparisons:", error)
+      toast.error("Error al cargar comparativas")
+    } finally {
+      setLoading(false)
     }
   }
 
-  const removeComparison = (id: string) => {
-    saveComparisons(comparisons.filter((c) => c.id !== id))
+  const addComparison = async () => {
+    if (!user || !newComparison.importedCarId || !newComparison.spainCarId) return
+
+    try {
+      const { error } = await supabase
+        .from('comparisons')
+        .insert({
+          user_id: user.id,
+          imported_car_id: newComparison.importedCarId,
+          spain_car_id: newComparison.spainCarId,
+          steering_adjustment: 4000 // Valor por defecto
+        })
+
+      if (error) throw error
+
+      toast.success("Comparativa creada")
+      setNewComparison({ importedCarId: "", spainCarId: "" })
+      setShowForm(false)
+      fetchData() // Recargar todo
+    } catch (error) {
+      toast.error("Error al crear comparativa")
+    }
   }
 
-  const getImportedCar = (id: string) => importedCars.find((c) => c.id === id)
-  const getSpainCar = (id: string) => spainCars.find((c) => c.id === id)
+  const removeComparison = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('comparisons')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      setComparisons(comparisons.filter(c => c.id !== id))
+      toast.success("Comparativa eliminada")
+    } catch (error) {
+      toast.error("Error al eliminar")
+    }
+  }
+
+  if (loading) {
+    return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+  }
 
   return (
     <div className="space-y-6 animate-in">
@@ -172,17 +255,14 @@ export function ComparativeAnalysis() {
       ) : (
         <div className="space-y-6">
           {comparisons.map((comp) => {
-            const imported = getImportedCar(comp.importedCarId)
-            const spain = getSpainCar(comp.spainCarId)
-
-            if (!imported || !spain) return null
+            if (!comp.importedCar || !comp.spainCar) return null
 
             return (
               <ComparativeCard
                 key={comp.id}
                 id={comp.id}
-                importedCar={imported}
-                spainCar={spain}
+                importedCar={comp.importedCar}
+                spainCar={comp.spainCar}
                 steringAdjustment={comp.steringAdjustment}
                 onDelete={() => removeComparison(comp.id)}
               />

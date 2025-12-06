@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Zap } from "lucide-react"
+import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Zap, Loader2 } from "lucide-react"
 import { RecentSalesSection } from "@/components/dashboard/recent-sales"
 import { HighlightsSection } from "@/components/dashboard/highlights"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
 
 interface BoughtCar {
   id: string
@@ -31,6 +33,8 @@ interface ImportedCar {
 }
 
 export function Dashboard() {
+  const { user } = useAuth()
+  const [loading, setLoading] = useState(true)
   const [boughtCars, setBoughtCars] = useState<BoughtCar[]>([])
   const [importedCars, setImportedCars] = useState<ImportedCar[]>([])
   const [stats, setStats] = useState({
@@ -44,71 +48,120 @@ export function Dashboard() {
     comparisons: [] as any[],
   })
 
-  // Cargar datos
   useEffect(() => {
-    const boughtData = localStorage.getItem("boughtCars")
-    const importedData = localStorage.getItem("importedCars")
-    const comparisonsData = localStorage.getItem("comparisons")
+    if (user) fetchData()
+  }, [user])
 
-    if (boughtData) setBoughtCars(JSON.parse(boughtData))
-    if (importedData) setImportedCars(JSON.parse(importedData))
+  const fetchData = async () => {
+    try {
+      setLoading(true)
 
-    // Calcular estadísticas
-    const bought = boughtData ? JSON.parse(boughtData) : []
-    const imported = importedData ? JSON.parse(importedData) : []
-    const comparisons = comparisonsData ? JSON.parse(comparisonsData) : []
+      // 1. Cargar Inventario (con gastos)
+      const { data: inventoryData } = await supabase
+        .from('inventory_cars')
+        .select(`*, expenses:car_expenses(*)`)
 
-    let totalSold = 0
-    let totalProfit = 0
-    const profitPercentages = [] as number[]
-    let totalInvestment = 0
-    let carsInInventory = 0
-    const daysInInventory = [] as number[]
+      // 2. Cargar Importados
+      const { data: importedData } = await supabase
+        .from('imported_cars')
+        .select('*')
 
-    bought.forEach((car) => {
-      const totalInvested =
-        car.initialPrice + car.initialExpenses + (car.expenses?.reduce((sum: number, e: any) => sum + e.amount, 0) || 0)
+      // 3. Cargar Comparativas
+      const { data: comparisonsData } = await supabase
+        .from('comparisons')
+        .select('*')
 
-      if (car.status === "sold" && car.sellPrice) {
-        totalSold++
-        const profit = car.sellPrice - totalInvested
-        totalProfit += profit
-        profitPercentages.push((profit / totalInvested) * 100)
+      // Transformar datos para que coincidan con las interfaces
+      const formattedInventory: BoughtCar[] = (inventoryData || []).map((car: any) => ({
+        id: car.id,
+        brand: car.brand,
+        model: car.model,
+        year: car.year,
+        initialPrice: car.initial_price,
+        initialExpenses: car.initial_expenses,
+        datePurchased: car.date_purchased,
+        status: car.status,
+        sellPrice: car.sell_price,
+        dateSold: car.date_sold,
+        expenses: car.expenses || []
+      }))
 
-        if (car.datePurchased && car.dateSold) {
-          const days = Math.floor(
-            (new Date(car.dateSold).getTime() - new Date(car.datePurchased).getTime()) / (1000 * 60 * 60 * 24),
-          )
-          daysInInventory.push(days)
+      const formattedImported: ImportedCar[] = (importedData || []).map((car: any) => ({
+        id: car.id,
+        brand: car.brand,
+        model: car.model,
+        year: car.year,
+        price: car.price,
+        totalExpenses: car.total_cost,
+        mileage: car.mileage,
+        cv: car.cv
+      }))
+
+      setBoughtCars(formattedInventory)
+      setImportedCars(formattedImported)
+
+      // Calcular Estadísticas
+      let totalSold = 0
+      let totalProfit = 0
+      const profitPercentages: number[] = []
+      let totalInvestment = 0
+      let carsInInventory = 0
+      const daysInInventory: number[] = []
+
+      formattedInventory.forEach((car) => {
+        const totalInvested =
+          car.initialPrice + car.initialExpenses + (car.expenses?.reduce((sum: number, e: any) => sum + e.amount, 0) || 0)
+
+        if (car.status === "sold" && car.sellPrice) {
+          totalSold++
+          const profit = car.sellPrice - totalInvested
+          totalProfit += profit
+          profitPercentages.push((profit / totalInvested) * 100)
+
+          if (car.datePurchased && car.dateSold) {
+            const days = Math.floor(
+              (new Date(car.dateSold).getTime() - new Date(car.datePurchased).getTime()) / (1000 * 60 * 60 * 24),
+            )
+            daysInInventory.push(days)
+          }
+        } else {
+          carsInInventory++
+          totalInvestment += totalInvested
         }
-      } else {
-        carsInInventory++
-        totalInvestment += totalInvested
-      }
-    })
+      })
 
-    const avgDays =
-      daysInInventory.length > 0 ? Math.round(daysInInventory.reduce((a, b) => a + b, 0) / daysInInventory.length) : 0
+      const avgDays =
+        daysInInventory.length > 0 ? Math.round(daysInInventory.reduce((a, b) => a + b, 0) / daysInInventory.length) : 0
 
-    const avgProfit =
-      profitPercentages.length > 0 ? profitPercentages.reduce((a, b) => a + b, 0) / profitPercentages.length : 0
+      const avgProfit =
+        profitPercentages.length > 0 ? profitPercentages.reduce((a, b) => a + b, 0) / profitPercentages.length : 0
 
-    const totalCostImports = imported.reduce(
-      (sum: number, car: any) => sum + ((car.price || 0) + (car.totalExpenses || 0)),
-      0,
-    )
+      const totalCostImports = formattedImported.reduce(
+        (sum: number, car: any) => sum + ((car.price || 0) + (car.totalExpenses || 0)),
+        0,
+      )
 
-    setStats({
-      totalSold,
-      totalProfit,
-      avgProfitability: avgProfit,
-      totalInvestment,
-      carsInInventory,
-      avgDaysInInventory: avgDays,
-      totalCostImports,
-      comparisons,
-    })
-  }, [])
+      setStats({
+        totalSold,
+        totalProfit,
+        avgProfitability: avgProfit,
+        totalInvestment,
+        carsInInventory,
+        avgDaysInInventory: avgDays,
+        totalCostImports,
+        comparisons: comparisonsData || [],
+      })
+
+    } catch (error) {
+      console.error("Error loading dashboard data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+  }
 
   return (
     <div className="space-y-8 animate-in">

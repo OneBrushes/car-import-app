@@ -1,9 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Loader2 } from "lucide-react"
 import { AddSpainCarModal } from "@/components/modals/add-spain-car-modal"
 import { SpainCarCard } from "@/components/cards/spain-car-card"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
+import { toast } from "sonner"
 
 interface SpainCar {
     id: string
@@ -19,50 +22,121 @@ interface SpainCar {
     fuelType?: string
     transmission?: string
     tags: string[]
-    comparedWithImport?: string // ID del coche importado comparado
     notes?: string
 }
 
 export function CarsSpain() {
+    const { user } = useAuth()
     const [cars, setCars] = useState<SpainCar[]>([])
+    const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState("price")
     const [editingCar, setEditingCar] = useState<SpainCar | null>(null)
 
-    // Cargar datos del localStorage
+    // Cargar datos desde Supabase
     useEffect(() => {
-        const saved = localStorage.getItem("spainCars")
-        if (saved) {
-            setCars(JSON.parse(saved))
-        }
-    }, [])
+        if (user) fetchCars()
+    }, [user])
 
-    const saveCars = (updatedCars: SpainCar[]) => {
-        setCars(updatedCars)
-        localStorage.setItem("spainCars", JSON.stringify(updatedCars))
+    const fetchCars = async () => {
+        try {
+            setLoading(true)
+            const { data, error } = await supabase
+                .from('spain_cars')
+                .select('*')
+                .order('created_at', { ascending: false })
+
+            if (error) throw error
+
+            const formattedCars: SpainCar[] = data.map((car: any) => ({
+                id: car.id,
+                brand: car.brand,
+                model: car.model,
+                year: car.year,
+                price: car.price,
+                mileage: car.mileage || 0,
+                cv: car.cv || 0,
+                url: car.url,
+                location: car.location,
+                color: car.color,
+                fuelType: car.fuel_type,
+                transmission: car.transmission,
+                tags: [],
+                notes: car.notes
+            }))
+
+            setCars(formattedCars)
+        } catch (error) {
+            console.error("Error fetching spain cars:", error)
+            toast.error("Error al cargar coches de España")
+        } finally {
+            setLoading(false)
+        }
     }
 
-    const addCar = (newCar: any) => {
-        if (editingCar) {
-            // Update existing car
-            const updatedCars = cars.map(c => c.id === editingCar.id ? { ...newCar, id: editingCar.id } : c)
-            saveCars(updatedCars)
-            setEditingCar(null)
-        } else {
-            // Add new car
-            const car: SpainCar = {
-                id: Date.now().toString(),
-                ...newCar,
-                tags: newCar.tags || [],
+    const addCar = async (newCar: any) => {
+        if (!user) return
+
+        try {
+            const carData = {
+                user_id: user.id,
+                brand: newCar.brand,
+                model: newCar.model,
+                year: newCar.year,
+                price: newCar.price,
+                mileage: newCar.mileage,
+                cv: newCar.cv,
+                url: newCar.url,
+                location: newCar.location,
+                color: newCar.color,
+                fuel_type: newCar.fuelType,
+                transmission: newCar.transmission,
+                notes: newCar.notes
             }
-            saveCars([...cars, car])
+
+            if (editingCar) {
+                // Update
+                const { error } = await supabase
+                    .from('spain_cars')
+                    .update(carData)
+                    .eq('id', editingCar.id)
+
+                if (error) throw error
+                toast.success("Coche actualizado")
+            } else {
+                // Insert
+                const { error } = await supabase
+                    .from('spain_cars')
+                    .insert(carData)
+
+                if (error) throw error
+                toast.success("Coche de referencia añadido")
+            }
+
+            setIsModalOpen(false)
+            setEditingCar(null)
+            fetchCars()
+        } catch (error: any) {
+            toast.error("Error al guardar: " + error.message)
         }
-        setIsModalOpen(false)
     }
 
-    const deleteCar = (id: string) => {
-        saveCars(cars.filter((c) => c.id !== id))
+    const deleteCar = async (id: string) => {
+        if (!confirm("¿Estás seguro de eliminar este coche?")) return
+
+        try {
+            const { error } = await supabase
+                .from('spain_cars')
+                .delete()
+                .eq('id', id)
+
+            if (error) throw error
+            toast.success("Coche eliminado")
+            fetchCars()
+        } catch (error) {
+            toast.error("Error al eliminar")
+        }
     }
 
     const handleEdit = (car: SpainCar) => {
@@ -94,6 +168,10 @@ export function CarsSpain() {
                 return 0
         }
     })
+
+    if (loading) {
+        return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+    }
 
     return (
         <div className="space-y-6 animate-in">

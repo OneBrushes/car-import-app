@@ -1,9 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Loader2 } from "lucide-react"
 import { AddCarModal } from "@/components/modals/add-car-modal"
 import { CarCard } from "@/components/cards/car-card"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
+import { toast } from "sonner"
 
 interface Car {
   id: string
@@ -19,47 +22,119 @@ interface Car {
   origin?: string
   totalExpenses?: number
   url?: string
+  steering?: string
 }
 
 export function CarImport() {
+  const { user } = useAuth()
   const [cars, setCars] = useState<Car[]>([])
+  const [loading, setLoading] = useState(true)
   const [editingCar, setEditingCar] = useState<Car | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("date")
 
-  // Cargar datos del localStorage
+  // Cargar datos desde Supabase
   useEffect(() => {
-    const saved = localStorage.getItem("importedCars")
-    if (saved) {
-      setCars(JSON.parse(saved))
-    }
-  }, [])
+    if (user) fetchCars()
+  }, [user])
 
-  // Guardar datos
-  const saveCars = (updatedCars: Car[]) => {
-    setCars(updatedCars)
-    localStorage.setItem("importedCars", JSON.stringify(updatedCars))
+  const fetchCars = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('imported_cars')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      const formattedCars: Car[] = data.map((car: any) => ({
+        id: car.id,
+        brand: car.brand,
+        model: car.model,
+        year: car.year,
+        price: car.price,
+        currency: "EUR", // Por defecto, o añadir columna currency a DB
+        mileage: car.mileage || 0,
+        cv: car.cv || 0,
+        photo: car.image_url,
+        tags: [], // Si quieres tags, añade columna array a DB
+        origin: "Importado",
+        totalExpenses: car.total_cost,
+        url: "", // Si quieres URL, añade columna a DB
+        steering: car.steering
+      }))
+
+      setCars(formattedCars)
+    } catch (error) {
+      console.error("Error fetching imported cars:", error)
+      toast.error("Error al cargar coches importados")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const addCar = (newCar: any) => {
-    if (editingCar) {
-      const updatedCars = cars.map((c) => (c.id === editingCar.id ? { ...newCar, id: editingCar.id } : c))
-      saveCars(updatedCars)
-      setEditingCar(null)
-    } else {
-      const car: Car = {
-        id: Date.now().toString(),
-        ...newCar,
-        tags: newCar.tags || [],
+  const addCar = async (newCar: any) => {
+    if (!user) return
+
+    try {
+      const carData = {
+        user_id: user.id,
+        brand: newCar.brand,
+        model: newCar.model,
+        year: newCar.year,
+        price: newCar.price,
+        mileage: newCar.mileage,
+        cv: newCar.cv,
+        steering: newCar.steering,
+        image_url: newCar.photo,
+        // Calcular costes totales (simplificado por ahora)
+        total_cost: newCar.price + (newCar.expenses || 0)
       }
-      saveCars([...cars, car])
+
+      if (editingCar) {
+        // Actualizar
+        const { error } = await supabase
+          .from('imported_cars')
+          .update(carData)
+          .eq('id', editingCar.id)
+
+        if (error) throw error
+        toast.success("Coche actualizado")
+      } else {
+        // Crear
+        const { error } = await supabase
+          .from('imported_cars')
+          .insert(carData)
+
+        if (error) throw error
+        toast.success("Coche añadido")
+      }
+
+      setIsModalOpen(false)
+      setEditingCar(null)
+      fetchCars()
+    } catch (error: any) {
+      toast.error("Error al guardar coche: " + error.message)
     }
-    setIsModalOpen(false)
   }
 
-  const deleteCar = (id: string) => {
-    saveCars(cars.filter((c) => c.id !== id))
+  const deleteCar = async (id: string) => {
+    if (!confirm("¿Estás seguro de eliminar este coche?")) return
+
+    try {
+      const { error } = await supabase
+        .from('imported_cars')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      toast.success("Coche eliminado")
+      fetchCars()
+    } catch (error) {
+      toast.error("Error al eliminar coche")
+    }
   }
 
   const handleEdit = (car: Car) => {
@@ -74,11 +149,10 @@ export function CarImport() {
 
   // Filtrar y buscar
   const filteredCars = cars.filter((car) => {
-    const matchesSearch =
+    return (
       car.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
       car.model.toLowerCase().includes(searchTerm.toLowerCase())
-
-    return matchesSearch
+    )
   })
 
   // Ordenar
@@ -92,6 +166,10 @@ export function CarImport() {
         return 0
     }
   })
+
+  if (loading) {
+    return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+  }
 
   return (
     <div className="space-y-6 animate-in">
