@@ -23,6 +23,9 @@ interface SpainCar {
     transmission?: string
     tags: string[]
     notes?: string
+    equipmentLevel?: string
+    images?: string[]
+    imageUrl?: string
 }
 
 interface CarsSpainProps {
@@ -66,8 +69,11 @@ export function CarsSpain({ role }: CarsSpainProps) {
                 color: car.color,
                 fuelType: car.fuel_type,
                 transmission: car.transmission,
-                tags: [],
-                notes: car.notes
+                tags: car.tags || [],
+                notes: car.notes,
+                equipmentLevel: car.equipment_level,
+                images: car.images || [],
+                imageUrl: car.image_url
             }))
 
             setCars(formattedCars)
@@ -96,7 +102,11 @@ export function CarsSpain({ role }: CarsSpainProps) {
                 color: newCar.color,
                 fuel_type: newCar.fuelType,
                 transmission: newCar.transmission,
-                notes: newCar.notes
+                notes: newCar.notes,
+                equipment_level: newCar.equipmentLevel || null,
+                tags: newCar.tags || [],
+                images: newCar.images || [],
+                image_url: newCar.images && newCar.images.length > 0 ? newCar.images[0] : null
             }
 
             if (editingCar) {
