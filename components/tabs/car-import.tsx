@@ -12,6 +12,8 @@ import { toast } from "sonner"
 
 interface Car {
   id: string
+  user_id?: string
+  shared_with?: string[]
   brand: string
   model: string
   year: number
@@ -20,6 +22,8 @@ interface Car {
   mileage: number
   cv: number
   photo?: string
+  image_url?: string
+  images?: string[]
   tags: string[]
   origin?: string
   totalExpenses?: number
@@ -65,18 +69,22 @@ export function CarImport({ role }: CarImportProps) {
 
       const formattedCars: Car[] = data.map((car: any) => ({
         id: car.id,
+        user_id: car.user_id, // IMPORTANTE: Para saber quién es el dueño
+        shared_with: car.shared_with || [], // IMPORTANTE: Para saber con quién está compartido
         brand: car.brand,
         model: car.model,
         year: car.year,
         price: Number(car.price),
-        currency: "EUR", // Por defecto, o añadir columna currency a DB
+        currency: "EUR",
         mileage: Number(car.mileage || 0),
         cv: Number(car.cv || 0),
         photo: car.image_url,
-        tags: [], // Si quieres tags, añade columna array a DB
+        image_url: car.image_url, // Para compatibilidad con CarCard
+        images: car.image_url ? [car.image_url] : [], // Para compatibilidad
+        tags: [],
         origin: "Importado",
         totalExpenses: Number(car.total_cost) - Number(car.price),
-        url: "", // Si quieres URL, añade columna a DB
+        url: "",
         steering: car.steering
       }))
 
