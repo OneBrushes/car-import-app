@@ -1,27 +1,50 @@
 "use client"
 
-import { ExternalLink, Trash2 } from "lucide-react"
+import { ExternalLink, Trash2, Share2, Users } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 interface CarCardProps {
   car: any
   onDelete: () => void
   onEdit: (car: any) => void
+  onShare?: (car: any) => void
+  currentUserId?: string
 }
 
-export function CarCard({ car, onDelete, onEdit }: CarCardProps) {
+export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCardProps) {
   const finalPrice = (car.price || 0) + (car.totalExpenses || 0)
-  const photoUrl = car.images?.[0]
+  const photoUrl = car.images?.[0] || car.image_url
+
+  const isOwner = currentUserId === car.user_id
+  const isSharedWithMe = !isOwner && currentUserId
+  const isSharedByMe = isOwner && car.shared_with && car.shared_with.length > 0
 
   return (
     <div
-      onClick={() => onEdit(car)}
-      className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/30 transition-colors group cursor-pointer"
+      onClick={() => isOwner ? onEdit(car) : null}
+      className={`bg-card border rounded-lg overflow-hidden transition-all group relative ${isOwner ? 'cursor-pointer hover:border-primary/30' : 'cursor-default border-blue-500/30 bg-blue-500/5'
+        } ${isSharedByMe ? 'border-blue-500/50' : 'border-border'}`}
     >
+      {/* Badges de Estado */}
+      <div className="absolute top-2 right-2 z-10 flex flex-col gap-1">
+        {isSharedWithMe && (
+          <Badge variant="secondary" className="bg-blue-500/20 text-blue-400 border-blue-500/20">
+            <Users className="w-3 h-3 mr-1" /> Compartido contigo
+          </Badge>
+        )}
+        {isSharedByMe && (
+          <Badge variant="secondary" className="bg-blue-500/20 text-blue-400 border-blue-500/20">
+            <Share2 className="w-3 h-3 mr-1" /> Compartido
+          </Badge>
+        )}
+      </div>
+
       {/* Imagen */}
       <div className="w-full h-40 bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center text-4xl overflow-hidden">
         {photoUrl ? (
           <img
-            src={photoUrl || "/placeholder.svg"}
+            src={photoUrl}
             alt={`${car.brand} ${car.model}`}
             className="w-full h-full object-cover"
           />
@@ -53,24 +76,13 @@ export function CarCard({ car, onDelete, onEdit }: CarCardProps) {
         </div>
 
         {/* Precio final destacado */}
-        <div className="bg-primary/10 rounded-lg p-3">
+        <div className={`rounded-lg p-3 ${isSharedWithMe ? 'bg-blue-500/10' : 'bg-primary/10'}`}>
           <p className="text-xs text-muted-foreground">Precio Final</p>
-          <p className="text-2xl font-bold text-primary">{finalPrice.toFixed(0)}€</p>
+          <p className={`text-2xl font-bold ${isSharedWithMe ? 'text-blue-400' : 'text-primary'}`}>{finalPrice.toFixed(0)}€</p>
           {car.totalExpenses > 0 && (
             <p className="text-xs text-muted-foreground mt-1">(Gastos: {car.totalExpenses}€)</p>
           )}
         </div>
-
-        {/* Etiquetas */}
-        {car.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {car.tags.map((tag: string) => (
-              <span key={tag} className="px-2 py-1 bg-accent/20 text-accent text-xs rounded-full">
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
 
         {/* Botones */}
         <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
@@ -86,14 +98,37 @@ export function CarCard({ car, onDelete, onEdit }: CarCardProps) {
               <span className="hidden sm:inline">Ver</span>
             </a>
           )}
-          <button
-            onClick={onDelete}
-            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 transition-colors text-sm font-medium"
-          >
-            <Trash2 className="w-4 h-4" />
-            <span className="hidden sm:inline">Eliminar</span>
-          </button>
+
+          {isOwner && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                onClick={() => onShare && onShare(car)}
+                title="Compartir"
+              >
+                <Share2 className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                onClick={onDelete}
+                title="Eliminar"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </>
+          )}
         </div>
+
+        {/* Info Compartido */}
+        {isSharedWithMe && (
+          <p className="text-xs text-center text-muted-foreground">
+            Solo lectura (Compartido por propietario)
+          </p>
+        )}
       </div>
     </div>
   )

@@ -6,19 +6,22 @@ import { useState } from "react"
 interface NavigationProps {
   activeTab: string
   onTabChange: (tab: any) => void
+  role?: string | null
 }
 
-export function Navigation({ activeTab, onTabChange }: NavigationProps) {
+export function Navigation({ activeTab, onTabChange, role }: NavigationProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const tabs = [
-    { id: "dashboard", label: "Dashboard", icon: Home },
-    { id: "import", label: "Importación", icon: Car },
-    { id: "spain", label: "España", icon: MapPin },
-    { id: "comparison", label: "Comparativa", icon: Scale },
-    { id: "management", label: "Comprados", icon: Archive },
-    { id: "report", label: "Informe", icon: FileText },
+  const allTabs = [
+    { id: "dashboard", label: "Dashboard", icon: Home, roles: ['usuario', 'gestor', 'importador', 'admin'] },
+    { id: "import", label: "Importación", icon: Car, roles: ['usuario', 'gestor', 'importador', 'admin'] },
+    { id: "spain", label: "España", icon: MapPin, roles: ['usuario', 'gestor', 'importador', 'admin'] },
+    { id: "comparison", label: "Comparativa", icon: Scale, roles: ['usuario', 'gestor', 'importador', 'admin'] },
+    { id: "management", label: "Comprados", icon: Archive, roles: ['gestor', 'importador', 'admin'] },
+    { id: "report", label: "Informe", icon: FileText, roles: ['importador', 'admin'] },
   ]
+
+  const tabs = allTabs.filter(tab => !role || tab.roles.includes(role))
 
   return (
     <>
@@ -32,8 +35,8 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${isActive
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                ? "bg-primary/10 text-primary font-medium"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                 }`}
             >
               <Icon className="w-4 h-4" />
@@ -67,8 +70,8 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
                     setMenuOpen(false)
                   }}
                   className={`flex items-center gap-3 px-4 py-3 border-b border-border/50 transition-colors ${isActive
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                     }`}
                 >
                   <Icon className="w-5 h-5" />

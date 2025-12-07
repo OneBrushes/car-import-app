@@ -349,54 +349,56 @@ export function AdminPanel() {
                             <CardDescription>Gestiona roles y permisos.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Email</TableHead>
-                                        <TableHead>Rol</TableHead>
-                                        <TableHead>Registro</TableHead>
-                                        <TableHead>Acciones</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {users.map((user) => (
-                                        <TableRow key={user.id} className={user.role === 'banned' ? 'bg-destructive/10' : ''}>
-                                            <TableCell>
-                                                {user.email}
-                                                {user.role === 'banned' && <span className="ml-2 text-xs text-destructive font-bold">(BANEADO)</span>}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Select
-                                                    defaultValue={user.role}
-                                                    onValueChange={(val) => handleRoleChange(user.id, val)}
-                                                    disabled={user.role === 'banned'}
-                                                >
-                                                    <SelectTrigger className="w-[130px]">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="usuario">Usuario</SelectItem>
-                                                        <SelectItem value="gestor">Gestor</SelectItem>
-                                                        <SelectItem value="importador">Importador</SelectItem>
-                                                        <SelectItem value="admin">Admin</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </TableCell>
-                                            <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
-                                            <TableCell>
-                                                <Button
-                                                    variant={user.role === 'banned' ? "outline" : "secondary"}
-                                                    size="sm"
-                                                    onClick={() => handleBanUser(user.id, user.role)}
-                                                >
-                                                    {user.role === 'banned' ? <Shield className="w-4 h-4 text-green-600 mr-2" /> : <Ban className="w-4 h-4 text-destructive mr-2" />}
-                                                    {user.role === 'banned' ? "Desbloquear" : "Bloquear"}
-                                                </Button>
-                                            </TableCell>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Email</TableHead>
+                                            <TableHead>Rol</TableHead>
+                                            <TableHead>Registro</TableHead>
+                                            <TableHead>Acciones</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {users.map((user) => (
+                                            <TableRow key={user.id} className={user.role === 'banned' ? 'bg-destructive/10' : ''}>
+                                                <TableCell className="whitespace-nowrap">
+                                                    {user.email}
+                                                    {user.role === 'banned' && <span className="ml-2 text-xs text-destructive font-bold">(BANEADO)</span>}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Select
+                                                        defaultValue={user.role}
+                                                        onValueChange={(val) => handleRoleChange(user.id, val)}
+                                                        disabled={user.role === 'banned'}
+                                                    >
+                                                        <SelectTrigger className="w-[130px]">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="usuario">Usuario</SelectItem>
+                                                            <SelectItem value="gestor">Gestor</SelectItem>
+                                                            <SelectItem value="importador">Importador</SelectItem>
+                                                            <SelectItem value="admin">Admin</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </TableCell>
+                                                <TableCell className="whitespace-nowrap">{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        variant={user.role === 'banned' ? "outline" : "secondary"}
+                                                        size="sm"
+                                                        onClick={() => handleBanUser(user.id, user.role)}
+                                                    >
+                                                        {user.role === 'banned' ? <Shield className="w-4 h-4 text-green-600 mr-2" /> : <Ban className="w-4 h-4 text-destructive mr-2" />}
+                                                        {user.role === 'banned' ? "Desbloquear" : "Bloquear"}
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -477,43 +479,38 @@ export function AdminPanel() {
                             <CardDescription>Visualiza y libera espacio ocupado por los usuarios.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="flex items-start gap-2 mb-4 text-xs text-muted-foreground p-3 bg-secondary/20 rounded border border-border">
-                                <Info className="w-4 h-4 mt-0.5 text-primary" />
-                                <div>
-                                    <p><strong>Nota sobre Supabase:</strong> Los <strong>5GB</strong> que aparecen en el panel de Supabase se refieren al <strong>Ancho de Banda (Egress)</strong>, no al espacio en disco.</p>
-                                </div>
-                            </div>
-
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Usuario</TableHead>
-                                        <TableHead>Coches</TableHead>
-                                        <TableHead>Almacenamiento (Est.)</TableHead>
-                                        <TableHead>Acciones</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {users.map((user) => (
-                                        <TableRow key={user.id}>
-                                            <TableCell>{user.email}</TableCell>
-                                            <TableCell>{carsCount[user.id] || 0}</TableCell>
-                                            <TableCell>{calculateUserStorage(user.id)} MB</TableCell>
-                                            <TableCell>
-                                                <Button
-                                                    variant="destructive"
-                                                    size="sm"
-                                                    onClick={() => handleDeleteData(user.id)}
-                                                    disabled={!carsCount[user.id]}
-                                                >
-                                                    <Trash2 className="w-4 h-4 mr-2" />
-                                                    Eliminar Datos
-                                                </Button>
-                                            </TableCell>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Usuario</TableHead>
+                                            <TableHead>Coches</TableHead>
+                                            <TableHead>Almacenamiento (Est.)</TableHead>
+                                            <TableHead>Acciones</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {users.map((user) => (
+                                            <TableRow key={user.id}>
+                                                <TableCell className="whitespace-nowrap">{user.email}</TableCell>
+                                                <TableCell>{carsCount[user.id] || 0}</TableCell>
+                                                <TableCell className="whitespace-nowrap">{calculateUserStorage(user.id)} MB</TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        onClick={() => handleDeleteData(user.id)}
+                                                        disabled={!carsCount[user.id]}
+                                                    >
+                                                        <Trash2 className="w-4 h-4 mr-2" />
+                                                        Eliminar Datos
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -588,30 +585,32 @@ export function AdminPanel() {
                             <CardDescription>Auditoría de acciones importantes.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Usuario</TableHead>
-                                        <TableHead>Acción</TableHead>
-                                        <TableHead>Detalles</TableHead>
-                                        <TableHead>Fecha</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {logs.map((log) => (
-                                        <TableRow key={log.id}>
-                                            <TableCell className="font-medium">{log.profiles?.email || 'Desconocido'}</TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline">{log.action}</Badge>
-                                            </TableCell>
-                                            <TableCell>{log.details}</TableCell>
-                                            <TableCell className="text-muted-foreground text-sm">
-                                                {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: es })}
-                                            </TableCell>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Usuario</TableHead>
+                                            <TableHead>Acción</TableHead>
+                                            <TableHead>Detalles</TableHead>
+                                            <TableHead>Fecha</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {logs.map((log) => (
+                                            <TableRow key={log.id}>
+                                                <TableCell className="font-medium whitespace-nowrap">{log.profiles?.email || 'Desconocido'}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="whitespace-nowrap">{log.action}</Badge>
+                                                </TableCell>
+                                                <TableCell className="min-w-[200px]">{log.details}</TableCell>
+                                                <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                                                    {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: es })}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>

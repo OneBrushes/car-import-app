@@ -165,12 +165,12 @@ export default function Home() {
 
       {/* Navigation - Desktop */}
       <div className="hidden md:block border-b sticky top-16 z-30 bg-background">
-        <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
+        <Navigation activeTab={activeTab} onTabChange={setActiveTab} role={role} />
       </div>
 
       {/* Navigation - Mobile */}
       <div className="md:hidden border-b sticky top-16 z-30 bg-background px-4 py-2">
-        <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
+        <Navigation activeTab={activeTab} onTabChange={setActiveTab} role={role} />
       </div>
 
       {/* Main Content */}
@@ -178,11 +178,11 @@ export default function Home() {
         <div className="max-w-[1920px] mx-auto w-full">
           <div className="p-4 sm:p-6 lg:p-8">
             {activeTab === "dashboard" && <Dashboard />}
-            {activeTab === "import" && <CarImport />}
-            {activeTab === "spain" && <CarsSpain />}
+            {activeTab === "import" && <CarImport role={role} />}
+            {activeTab === "spain" && <CarsSpain role={role} />}
             {activeTab === "comparison" && <ComparativeAnalysis />}
-            {activeTab === "management" && <CarsManagement />}
-            {activeTab === "report" && <ReportGenerator />}
+            {activeTab === "management" && (role === 'gestor' || role === 'importador' || role === 'admin') && <CarsManagement />}
+            {activeTab === "report" && (role === 'importador' || role === 'admin') && <ReportGenerator />}
             {activeTab === "admin" && role === 'admin' && <AdminPanel />}
           </div>
         </div>

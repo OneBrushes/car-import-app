@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Search, Filter, Trash2, Edit, ChevronDown, ChevronUp, Image as ImageIcon, Loader2 } from "lucide-react"
 import { AddCarModal } from "@/components/modals/add-car-modal"
+import { Button } from "@/components/ui/button"
 import { CarCard } from "@/components/cards/car-card"
+import { ShareCarModal } from "@/components/modals/share-car-modal"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
@@ -25,11 +27,23 @@ interface Car {
   steering?: string
 }
 
-export function CarImport() {
+interface CarImportProps {
+  role?: string | null
+}
+
+export function CarImport({ role }: CarImportProps) {
   const { user } = useAuth()
   const [cars, setCars] = useState<Car[]>([])
   const [loading, setLoading] = useState(true)
   const [editingCar, setEditingCar] = useState<Car | null>(null)
+  // Share State
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [carToShare, setCarToShare] = useState<any>(null)
+
+  const handleShareClick = (car: any) => {
+    setCarToShare(car)
+    setIsShareModalOpen(true)
+  }
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("date")
@@ -196,18 +210,17 @@ export function CarImport() {
   return (
     <div className="space-y-6 animate-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-3xl font-bold mb-2">Coches Importación</h2>
-          <p className="text-muted-foreground">Gestiona tus vehículos importados ({cars.length})</p>
+          <h2 className="text-2xl font-bold">Importación de Coches</h2>
+          <p className="text-muted-foreground">Gestiona y calcula costes de importación</p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
-        >
-          <Plus className="w-5 h-5" />
-          Añadir Coche
-        </button>
+        {role !== 'usuario' && (
+          <Button onClick={() => setIsModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Añadir Coche
+          </Button>
+        )}
       </div>
 
       {/* Búsqueda y Filtros */}
@@ -242,9 +255,16 @@ export function CarImport() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sortedCars.map((car) => (
-            <CarCard key={car.id} car={car} onDelete={() => deleteCar(car.id)} onEdit={handleEdit} />
+            <CarCard
+              key={car.id}
+              car={car}
+              onDelete={() => deleteCar(car.id)}
+              onEdit={() => handleEdit(car)}
+              onShare={() => handleShareClick(car)}
+              currentUserId={user?.id}
+            />
           ))}
         </div>
       )}
@@ -252,10 +272,26 @@ export function CarImport() {
       {/* Modal */}
       <AddCarModal
         isOpen={isModalOpen}
-        onClose={handleCloseModal}
+        onClose={() => {
+          setIsModalOpen(false)
+          setEditingCar(null)
+        }}
         onSubmit={addCar}
         initialData={editingCar}
       />
+
+      {carToShare && (
+        <ShareCarModal
+          isOpen={isShareModalOpen}
+          onClose={() => {
+            setIsShareModalOpen(false)
+            setCarToShare(null)
+          }}
+          carId={carToShare.id}
+          currentSharedWith={carToShare.shared_with || []}
+          onShare={fetchCars}
+        />
+      )}
     </div>
   )
 }
