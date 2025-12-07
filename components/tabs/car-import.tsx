@@ -84,14 +84,15 @@ export function CarImport() {
         brand: newCar.brand,
         model: newCar.model,
         year: newCar.year,
-        price: newCar.price,
+        price: Number(newCar.price),
         mileage: newCar.mileage,
         cv: newCar.cv,
         steering: newCar.steering,
         image_url: newCar.photo,
-        // Usar el precio final calculado por el modal si existe, sino calcularlo correctamente
-        // newCar.totalExpenses son solo los gastos extra.
-        total_cost: newCar.finalPrice || (newCar.price + (newCar.totalExpenses || 0))
+        // Guardar el array de gastos para poder editar luego (si la columna existe en DB)
+        expenses: newCar.expenses,
+        // Asegurar que total_cost es numérico y correcto
+        total_cost: Number(newCar.finalPrice) || (Number(newCar.price) + Number(newCar.totalExpenses || 0))
       }
 
       if (editingCar) {
@@ -122,8 +123,7 @@ export function CarImport() {
   }
 
   const deleteCar = async (id: string) => {
-    if (!confirm("¿Estás seguro de eliminar este coche?")) return
-
+    // Eliminado confirmación nativa a petición del usuario
     try {
       const { error } = await supabase
         .from('imported_cars')
@@ -131,7 +131,7 @@ export function CarImport() {
         .eq('id', id)
 
       if (error) throw error
-      toast.success("Coche eliminado")
+      toast.success("Coche eliminado correctamente")
       fetchCars()
     } catch (error) {
       toast.error("Error al eliminar coche")

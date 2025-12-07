@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Loader2, Shield, ShieldAlert, Users, Activity, Trash2, Database, Lock, Save, AlertTriangle, Ban } from "lucide-react"
+import { Loader2, Shield, ShieldAlert, Users, Activity, Trash2, Database, Lock, Save, AlertTriangle, Ban, Info } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 
@@ -117,8 +117,7 @@ export function AdminPanel() {
     }
 
     const handleDeleteData = async (userId: string) => {
-        if (!confirm("¿ESTÁS SEGURO? Esto eliminará TODOS los coches importados de este usuario. Esta acción no se puede deshacer.")) return
-
+        // Eliminado confirmación a petición del usuario
         try {
             const { error } = await supabase
                 .from('imported_cars')
@@ -141,10 +140,7 @@ export function AdminPanel() {
 
     const handleBanUser = async (userId: string, currentRole: string) => {
         const newRole = currentRole === 'banned' ? 'usuario' : 'banned'
-        const action = currentRole === 'banned' ? 'Desbloquear' : 'Bloquear'
-
-        if (!confirm(`¿Estás seguro de ${action} a este usuario?`)) return
-
+        // Eliminado confirmación a petición del usuario
         handleRoleChange(userId, newRole)
     }
 
@@ -180,7 +176,7 @@ export function AdminPanel() {
 
     // --- Storage Calculations ---
     const ESTIMATED_MB_PER_CAR = 0.5 // 500KB per car (data + images approx)
-    const TOTAL_STORAGE_LIMIT_MB = 500 // Supabase Free Tier Limit
+    const TOTAL_STORAGE_LIMIT_MB = 1000 // 1GB Supabase Free Tier Storage
 
     const calculateUserStorage = (userId: string) => {
         const count = carsCount[userId] || 0
@@ -324,9 +320,13 @@ export function AdminPanel() {
                                         style={{ width: `${Math.min(storagePercentage, 100)}%` }}
                                     />
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-2">
-                                    *Estimación basada en {ESTIMATED_MB_PER_CAR}MB por coche importado (incluyendo imágenes).
-                                </p>
+                                <div className="flex items-start gap-2 mt-4 text-xs text-muted-foreground p-3 bg-background rounded border border-border">
+                                    <Info className="w-4 h-4 mt-0.5 text-primary" />
+                                    <div>
+                                        <p><strong>Nota sobre Supabase:</strong> El plan gratuito incluye <strong>1GB de Almacenamiento</strong> (fotos/archivos) y <strong>0.5GB de Base de Datos</strong> (texto).</p>
+                                        <p className="mt-1">Los <strong>5GB</strong> que ves en el panel de Supabase se refieren al <strong>Ancho de Banda (Egress)</strong>, es decir, la cantidad de datos que se pueden descargar/ver al mes, no el espacio en disco.</p>
+                                    </div>
+                                </div>
                             </div>
 
                             <Table>
