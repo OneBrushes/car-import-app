@@ -3,9 +3,8 @@
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2, Share2, UserPlus } from "lucide-react"
+import { Loader2, Share2 } from "lucide-react"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 
@@ -18,38 +17,50 @@ interface ShareCarModalProps {
 }
 
 export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onShare }: ShareCarModalProps) {
-    const [searchTerm, setSearchTerm] = useState("")
     const [users, setUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
-    const [selectedUser, setSelectedUser] = useState<string | null>(null)
+    const [selectedUser, setSelectedUser] = useState<string>("")
+    const [currentUserId, setCurrentUserId] = useState<string>("")
 
-    // Buscar usuarios cuando cambia el término
+    // Cargar usuarios cuando se abre el modal
     useEffect(() => {
-        const searchUsers = async () => {
-            if (searchTerm.length < 2) {
-                setUsers([])
-                return
-            }
+        const loadUsers = async () => {
+            if (!isOpen) return
 
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('id, email, first_name, last_name')
-                .or(`email.ilike.%${searchTerm}%,first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`)
-                .limit(5)
+            try {
+                // Obtener el ID del usuario actual
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) setCurrentUserId(user.id)
 
-            if (!error && data) {
-                // Filtrar los que ya tienen el coche compartido
-                const filtered = data.filter(u => !currentSharedWith.includes(u.id))
-                setUsers(filtered)
+                // Cargar todos los usuarios
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, email, first_name, last_name')
+                    .order('first_name', { ascending: true, nullsFirst: false })
+
+                if (!error && data) {
+                    // Filtrar: excluir al usuario actual y los que ya tienen el coche compartido
+                    const filtered = data.filter(u =>
+                        u.id !== user?.id && !currentSharedWith.includes(u.id)
+                    )
+                    setUsers(filtered)
+                }
+            } catch (error) {
+                console.error(error)
             }
         }
 
-        const timeoutId = setTimeout(searchUsers, 300)
-        return () => clearTimeout(timeoutId)
-    }, [searchTerm, currentSharedWith])
+        loadUsers()
+        // Resetear selección al abrir
+        setSelectedUser("")
+    }, [isOpen, currentSharedWith])
 
     const handleShare = async () => {
-        if (!selectedUser) return
+        if (!selectedUser) {
+            toast.error("Selecciona un usuario")
+            return
+        }
+
         setLoading(true)
 
         try {
@@ -65,8 +76,7 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
             toast.success("Coche compartido correctamente")
             onShare()
             onClose()
-            setSearchTerm("")
-            setSelectedUser(null)
+            setSelectedUser("")
         } catch (error) {
             console.error(error)
             toast.error("Error al compartir")
@@ -79,7 +89,7 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
         if (user.first_name && user.last_name) {
             return `${user.first_name} ${user.last_name.charAt(0).toUpperCase()}.`
         }
-        return user.email.split('@')[0] // Fallback si no hay nombre
+        return user.email.split('@')[0]
     }
 
     return (
@@ -90,47 +100,28 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
                         <Share2 className="w-5 h-5" /> Compartir Coche
                     </DialogTitle>
                     <DialogDescription>
-                        Busca un usuario para darle acceso de lectura.
+                        Selecciona un usuario para darle acceso de lectura.
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
                     <div className="space-y-2">
-                        <Label>Buscar Usuario</Label>
-                        <div className="relative">
-                            <UserPlus className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Nombre o Email..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-9"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Lista de resultados */}
-                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                        {users.map((user) => (
-                            <div
-                                key={user.id}
-                                onClick={() => setSelectedUser(user.id)}
-                                className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${selectedUser === user.id
-                                        ? "bg-primary/10 border-primary"
-                                        : "bg-card border-border hover:bg-accent"
-                                    }`}
-                            >
-                                <div>
-                                    <p className="font-medium text-sm">{formatName(user)}</p>
-                                    <p className="text-xs text-muted-foreground">{user.email}</p>
-                                </div>
-                                {selectedUser === user.id && (
-                                    <div className="w-2 h-2 rounded-full bg-primary" />
-                                )}
-                            </div>
-                        ))}
-                        {searchTerm.length >= 2 && users.length === 0 && (
-                            <p className="text-sm text-center text-muted-foreground py-2">
-                                No se encontraron usuarios.
+                        <Label>Usuario</Label>
+                        <select
+                            value={selectedUser}
+                            onChange={(e) => setSelectedUser(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                        >
+                            <option value="">Selecciona un usuario...</option>
+                            {users.map((user) => (
+                                <option key={user.id} value={user.id}>
+                                    {formatName(user)} ({user.email})
+                                </option>
+                            ))}
+                        </select>
+                        {users.length === 0 && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                                No hay usuarios disponibles para compartir.
                             </p>
                         )}
                     </div>
