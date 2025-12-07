@@ -61,7 +61,7 @@ export function CarImport() {
         photo: car.image_url,
         tags: [], // Si quieres tags, añade columna array a DB
         origin: "Importado",
-        totalExpenses: Number(car.total_cost),
+        totalExpenses: Number(car.total_cost) - Number(car.price),
         url: "", // Si quieres URL, añade columna a DB
         steering: car.steering
       }))
