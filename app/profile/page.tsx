@@ -138,6 +138,13 @@ export default function ProfilePage() {
         )
     }
 
+    const firstName = user.user_metadata?.first_name || ""
+    const lastName = user.user_metadata?.last_name || ""
+    const fullName = firstName || lastName ? `${firstName} ${lastName}`.trim() : "Mi Perfil"
+    const initials = firstName || lastName
+        ? `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase()
+        : user.email?.substring(0, 2).toUpperCase()
+
     return (
         <div className="min-h-screen bg-background p-4 sm:p-8">
             <div className="max-w-4xl mx-auto space-y-6">
@@ -155,7 +162,7 @@ export default function ProfilePage() {
                         <Avatar className="h-24 w-24 border-4 border-background shadow-xl">
                             <AvatarImage src={avatarUrl || ""} />
                             <AvatarFallback className="text-2xl bg-primary/10 text-primary">
-                                {user.email?.substring(0, 2).toUpperCase()}
+                                {initials}
                             </AvatarFallback>
                         </Avatar>
                         <button
@@ -175,7 +182,7 @@ export default function ProfilePage() {
                     </div>
 
                     <div>
-                        <h1 className="text-3xl font-bold">Mi Perfil</h1>
+                        <h1 className="text-3xl font-bold">{fullName}</h1>
                         <div className="flex items-center gap-2 mt-2">
                             <Badge variant="outline" className="capitalize gap-1">
                                 <Shield className="h-3 w-3" />

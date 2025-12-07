@@ -17,6 +17,7 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false)
     const [isSignUp, setIsSignUp] = useState(false)
     const [registrationsEnabled, setRegistrationsEnabled] = useState(true)
+    const [isAnimating, setIsAnimating] = useState(false)
     const router = useRouter()
 
     useEffect(() => {
@@ -24,6 +25,14 @@ export default function LoginPage() {
         const savedReg = localStorage.getItem('registrationsEnabled')
         if (savedReg !== null) setRegistrationsEnabled(JSON.parse(savedReg))
     }, [])
+
+    const toggleMode = () => {
+        setIsAnimating(true)
+        setTimeout(() => {
+            setIsSignUp(!isSignUp)
+            setIsAnimating(false)
+        }, 300)
+    }
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -124,122 +133,124 @@ export default function LoginPage() {
                 </div>
 
                 {/* Login Card */}
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
-                    <div className="mb-6">
-                        <h2 className="text-xl font-semibold text-white mb-1">
-                            {isSignUp ? "Crear cuenta nueva" : "Bienvenido de nuevo"}
-                        </h2>
-                        <p className="text-sm text-slate-400">
-                            {isSignUp ? "Introduce tus datos para registrarte" : "Accede a tu panel de control"}
-                        </p>
-                    </div>
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl transition-all duration-300 ease-in-out" style={{ minHeight: '400px' }}>
+                    <div className={`transition-all duration-300 ease-in-out ${isAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
+                        <div className="mb-6">
+                            <h2 className="text-xl font-semibold text-white mb-1">
+                                {isSignUp ? "Crear cuenta nueva" : "Bienvenido de nuevo"}
+                            </h2>
+                            <p className="text-sm text-slate-400">
+                                {isSignUp ? "Introduce tus datos para registrarte" : "Accede a tu panel de control"}
+                            </p>
+                        </div>
 
-                    <form onSubmit={handleAuth} className="space-y-4">
-                        {isSignUp && (
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="firstName" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Nombre</Label>
-                                    <div className="relative">
-                                        <User className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                        <form onSubmit={handleAuth} className="space-y-4">
+                            {isSignUp && (
+                                <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-bottom-4 duration-300">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="firstName" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Nombre</Label>
+                                        <div className="relative">
+                                            <User className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                            <Input
+                                                id="firstName"
+                                                type="text"
+                                                placeholder="Juan"
+                                                value={firstName}
+                                                onChange={(e) => setFirstName(e.target.value)}
+                                                required={isSignUp}
+                                                className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="lastName" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Apellido</Label>
                                         <Input
-                                            id="firstName"
+                                            id="lastName"
                                             type="text"
-                                            placeholder="Juan"
-                                            value={firstName}
-                                            onChange={(e) => setFirstName(e.target.value)}
+                                            placeholder="Pérez"
+                                            value={lastName}
+                                            onChange={(e) => setLastName(e.target.value)}
                                             required={isSignUp}
-                                            className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                            className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
                                         />
                                     </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="lastName" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Apellido</Label>
+                            )}
+
+                            <div className="space-y-2">
+                                <Label htmlFor="email" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Email</Label>
+                                <div className="relative">
+                                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                                     <Input
-                                        id="lastName"
-                                        type="text"
-                                        placeholder="Pérez"
-                                        value={lastName}
-                                        onChange={(e) => setLastName(e.target.value)}
-                                        required={isSignUp}
-                                        className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                        id="email"
+                                        type="email"
+                                        placeholder="nombre@empresa.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required
+                                        className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
                                     />
                                 </div>
                             </div>
-                        )}
-
-                        <div className="space-y-2">
-                            <Label htmlFor="email" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Email</Label>
-                            <div className="relative">
-                                <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    placeholder="nombre@empresa.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                    className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
-                                />
+                            <div className="space-y-2">
+                                <Label htmlFor="password" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Contraseña</Label>
+                                <div className="relative">
+                                    <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                    <Input
+                                        id="password"
+                                        type="password"
+                                        placeholder="••••••••"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                        className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                    />
+                                </div>
                             </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Contraseña</Label>
-                            <div className="relative">
-                                <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
-                                <Input
-                                    id="password"
-                                    type="password"
-                                    placeholder="••••••••"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                    className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
-                                />
-                            </div>
-                        </div>
 
-                        <Button
-                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium py-5 shadow-lg shadow-blue-900/20 border-0 mt-2 transition-all hover:scale-[1.02]"
-                            type="submit"
-                            disabled={loading}
-                        >
-                            {loading ? (
-                                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            <Button
+                                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium py-5 shadow-lg shadow-blue-900/20 border-0 mt-2 transition-all hover:scale-[1.02]"
+                                type="submit"
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                ) : (
+                                    <span className="flex items-center justify-center gap-2">
+                                        {isSignUp ? "Registrarse" : "Iniciar Sesión"} <ArrowRight className="w-4 h-4" />
+                                    </span>
+                                )}
+                            </Button>
+                        </form>
+
+                        <div className="mt-6 pt-6 border-t border-white/5 text-center">
+                            {registrationsEnabled ? (
+                                <button
+                                    type="button"
+                                    onClick={toggleMode}
+                                    className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group"
+                                >
+                                    {isSignUp
+                                        ? "¿Ya tienes cuenta? Inicia sesión"
+                                        : "¿No tienes cuenta? Regístrate gratis"}
+                                </button>
                             ) : (
-                                <span className="flex items-center justify-center gap-2">
-                                    {isSignUp ? "Registrarse" : "Iniciar Sesión"} <ArrowRight className="w-4 h-4" />
-                                </span>
+                                !isSignUp && (
+                                    <p className="text-xs text-slate-500">
+                                        El registro de nuevos usuarios está deshabilitado por el administrador.
+                                    </p>
+                                )
                             )}
-                        </Button>
-                    </form>
-
-                    <div className="mt-6 pt-6 border-t border-white/5 text-center">
-                        {registrationsEnabled ? (
-                            <button
-                                type="button"
-                                onClick={() => setIsSignUp(!isSignUp)}
-                                className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group"
-                            >
-                                {isSignUp
-                                    ? "¿Ya tienes cuenta? Inicia sesión"
-                                    : "¿No tienes cuenta? Regístrate gratis"}
-                            </button>
-                        ) : (
-                            !isSignUp && (
-                                <p className="text-xs text-slate-500">
-                                    El registro de nuevos usuarios está deshabilitado por el administrador.
-                                </p>
-                            )
-                        )}
-                        {isSignUp && !registrationsEnabled && (
-                            <button
-                                type="button"
-                                onClick={() => setIsSignUp(false)}
-                                className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group mt-2"
-                            >
-                                Volver al inicio de sesión
-                            </button>
-                        )}
+                            {isSignUp && !registrationsEnabled && (
+                                <button
+                                    type="button"
+                                    onClick={toggleMode}
+                                    className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group mt-2"
+                                >
+                                    Volver al inicio de sesión
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 

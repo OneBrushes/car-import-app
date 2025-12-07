@@ -88,7 +88,7 @@ export function CarImport() {
         mileage: newCar.mileage,
         cv: newCar.cv,
         steering: newCar.steering,
-        image_url: newCar.photo,
+        image_url: newCar.images && newCar.images.length > 0 ? newCar.images[0] : null,
         // expenses: newCar.expenses, // Comentado porque la columna no existe en DB
         // Asegurar que total_cost es numérico y correcto
         total_cost: Number(newCar.finalPrice) || (Number(newCar.price) + Number(newCar.totalExpenses || 0))
