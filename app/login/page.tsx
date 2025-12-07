@@ -304,7 +304,7 @@ export default function LoginPage() {
                         </form>
 
                         <div className="mt-6 pt-6 border-t border-white/5 text-center">
-                            {registrationsEnabled ? (
+                            {registrationsEnabled && (
                                 <button
                                     type="button"
                                     onClick={toggleMode}
@@ -314,12 +314,6 @@ export default function LoginPage() {
                                         ? "¿Ya tienes cuenta? Inicia sesión"
                                         : "¿No tienes cuenta? Regístrate gratis"}
                                 </button>
-                            ) : (
-                                !isSignUp && (
-                                    <p className="text-xs text-slate-500">
-                                        El registro de nuevos usuarios está deshabilitado por el administrador.
-                                    </p>
-                                )
                             )}
                             {isSignUp && !registrationsEnabled && (
                                 <button
