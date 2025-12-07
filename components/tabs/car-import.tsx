@@ -103,6 +103,12 @@ export function CarImport() {
 
         if (error) throw error
         toast.success("Coche actualizado")
+
+        await supabase.from('activity_logs').insert({
+          user_id: user.id,
+          action: 'UPDATE_CAR',
+          details: `Actualizado coche: ${newCar.brand} ${newCar.model}`
+        })
       } else {
         // Crear
         const { error } = await supabase
@@ -111,6 +117,12 @@ export function CarImport() {
 
         if (error) throw error
         toast.success("Coche añadido")
+
+        await supabase.from('activity_logs').insert({
+          user_id: user.id,
+          action: 'ADD_CAR',
+          details: `Añadido coche: ${newCar.brand} ${newCar.model} (${newCar.year})`
+        })
       }
 
       setIsModalOpen(false)
@@ -124,6 +136,7 @@ export function CarImport() {
   const deleteCar = async (id: string) => {
     // Eliminado confirmación nativa a petición del usuario
     try {
+      const carToDelete = cars.find(c => c.id === id)
       const { error } = await supabase
         .from('imported_cars')
         .delete()
@@ -131,6 +144,15 @@ export function CarImport() {
 
       if (error) throw error
       toast.success("Coche eliminado correctamente")
+
+      if (user && carToDelete) {
+        await supabase.from('activity_logs').insert({
+          user_id: user.id,
+          action: 'DELETE_CAR',
+          details: `Eliminado coche: ${carToDelete.brand} ${carToDelete.model}`
+        })
+      }
+
       fetchCars()
     } catch (error) {
       toast.error("Error al eliminar coche")

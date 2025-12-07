@@ -140,7 +140,7 @@ export function Dashboard() {
         profitPercentages.length > 0 ? profitPercentages.reduce((a, b) => a + b, 0) / profitPercentages.length : 0
 
       const totalCostImports = formattedImported.reduce(
-        (sum: number, car: any) => sum + ((car.price || 0) + (car.totalExpenses || 0)),
+        (sum: number, car: any) => sum + (car.totalExpenses || 0),
         0,
       )
 

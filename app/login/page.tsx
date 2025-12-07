@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Loader2, Car, Lock, Mail, ArrowRight } from "lucide-react"
+import { Loader2, Car, Lock, Mail, ArrowRight, User } from "lucide-react"
 
 export default function LoginPage() {
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
+    const [firstName, setFirstName] = useState("")
+    const [lastName, setLastName] = useState("")
     const [loading, setLoading] = useState(false)
     const [isSignUp, setIsSignUp] = useState(false)
     const [registrationsEnabled, setRegistrationsEnabled] = useState(true)
@@ -39,11 +41,33 @@ export default function LoginPage() {
                     throw new Error("El registro de nuevos usuarios está temporalmente deshabilitado.")
                 }
 
-                const { error } = await supabase.auth.signUp({
+                const { data, error } = await supabase.auth.signUp({
                     email,
                     password,
+                    options: {
+                        data: {
+                            first_name: firstName,
+                            last_name: lastName,
+                        }
+                    }
                 })
                 if (error) throw error
+
+                // Intentar actualizar perfil si existe
+                if (data.user) {
+                    await supabase.from('profiles').update({
+                        first_name: firstName,
+                        last_name: lastName
+                    }).eq('id', data.user.id)
+
+                    // Log Signup
+                    await supabase.from('activity_logs').insert({
+                        user_id: data.user.id,
+                        action: 'SIGNUP',
+                        details: `Nuevo usuario registrado: ${email} (${firstName} ${lastName})`
+                    })
+                }
+
                 toast.success("Cuenta creada. ¡Revisa tu email para confirmar!")
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
@@ -52,7 +76,7 @@ export default function LoginPage() {
                 })
                 if (error) throw error
 
-                // Check if user is banned (role check happens in AuthProvider, but good to double check)
+                // Check if user is banned
                 const { data: { user } } = await supabase.auth.getUser()
                 if (user) {
                     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
@@ -60,6 +84,13 @@ export default function LoginPage() {
                         await supabase.auth.signOut()
                         throw new Error("Tu cuenta ha sido suspendida.")
                     }
+
+                    // Log Login
+                    await supabase.from('activity_logs').insert({
+                        user_id: user.id,
+                        action: 'LOGIN',
+                        details: `Inicio de sesión exitoso`
+                    })
                 }
 
                 toast.success("Has iniciado sesión correctamente")
@@ -88,7 +119,7 @@ export default function LoginPage() {
                     <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-900/50 mb-4 transform rotate-3 hover:rotate-0 transition-all duration-300">
                         <Car className="w-8 h-8 text-white" />
                     </div>
-                    <h1 className="text-3xl font-bold text-white tracking-tight">Car Import Manager</h1>
+                    <h1 className="text-3xl font-bold text-white tracking-tight">NorDrive Manager</h1>
                     <p className="text-slate-400 mt-2 text-sm">Gestión profesional de importación de vehículos</p>
                 </div>
 
@@ -104,6 +135,38 @@ export default function LoginPage() {
                     </div>
 
                     <form onSubmit={handleAuth} className="space-y-4">
+                        {isSignUp && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="firstName" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Nombre</Label>
+                                    <div className="relative">
+                                        <User className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                        <Input
+                                            id="firstName"
+                                            type="text"
+                                            placeholder="Juan"
+                                            value={firstName}
+                                            onChange={(e) => setFirstName(e.target.value)}
+                                            required={isSignUp}
+                                            className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="lastName" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Apellido</Label>
+                                    <Input
+                                        id="lastName"
+                                        type="text"
+                                        placeholder="Pérez"
+                                        value={lastName}
+                                        onChange={(e) => setLastName(e.target.value)}
+                                        required={isSignUp}
+                                        className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         <div className="space-y-2">
                             <Label htmlFor="email" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Email</Label>
                             <div className="relative">
@@ -151,20 +214,37 @@ export default function LoginPage() {
                     </form>
 
                     <div className="mt-6 pt-6 border-t border-white/5 text-center">
-                        <button
-                            type="button"
-                            onClick={() => setIsSignUp(!isSignUp)}
-                            className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group"
-                        >
-                            {isSignUp
-                                ? "¿Ya tienes cuenta? Inicia sesión"
-                                : "¿No tienes cuenta? Regístrate gratis"}
-                        </button>
+                        {registrationsEnabled ? (
+                            <button
+                                type="button"
+                                onClick={() => setIsSignUp(!isSignUp)}
+                                className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group"
+                            >
+                                {isSignUp
+                                    ? "¿Ya tienes cuenta? Inicia sesión"
+                                    : "¿No tienes cuenta? Regístrate gratis"}
+                            </button>
+                        ) : (
+                            !isSignUp && (
+                                <p className="text-xs text-slate-500">
+                                    El registro de nuevos usuarios está deshabilitado por el administrador.
+                                </p>
+                            )
+                        )}
+                        {isSignUp && !registrationsEnabled && (
+                            <button
+                                type="button"
+                                onClick={() => setIsSignUp(false)}
+                                className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group mt-2"
+                            >
+                                Volver al inicio de sesión
+                            </button>
+                        )}
                     </div>
                 </div>
 
                 <p className="text-center text-xs text-slate-600 mt-8">
-                    &copy; {new Date().getFullYear()} Car Import App. Todos los derechos reservados.
+                    &copy; {new Date().getFullYear()} NorDrive Manager. Todos los derechos reservados.
                 </p>
             </div>
         </div>

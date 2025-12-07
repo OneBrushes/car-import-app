@@ -95,7 +95,7 @@ export function ComparativeAnalysis() {
           model: c.imported_cars.model,
           year: c.imported_cars.year,
           price: Number(c.imported_cars.price),
-          totalExpenses: Number(c.imported_cars.total_cost),
+          totalExpenses: Number(c.imported_cars.total_cost) - Number(c.imported_cars.price),
           steering: c.imported_cars.steering,
           cv: Number(c.imported_cars.cv),
           mileage: Number(c.imported_cars.mileage)
