@@ -51,8 +51,16 @@ export function AdminPanel() {
     }, [])
 
     const loadSettings = async () => {
-        const savedReg = localStorage.getItem('registrationsEnabled')
-        if (savedReg !== null) setRegistrationsEnabled(JSON.parse(savedReg))
+        // Cargar configuración global desde DB
+        const { data } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'registrations_enabled')
+            .single()
+
+        if (data) {
+            setRegistrationsEnabled(data.value)
+        }
 
         const savedBlocked = localStorage.getItem('blockedEmails')
         if (savedBlocked) setBlockedEmails(JSON.parse(savedBlocked))
@@ -189,16 +197,29 @@ export function AdminPanel() {
 
     // --- Security Functions ---
 
-    const toggleRegistrations = () => {
+    const toggleRegistrations = async () => {
         const newValue = !registrationsEnabled
         setRegistrationsEnabled(newValue)
-        localStorage.setItem('registrationsEnabled', JSON.stringify(newValue))
-        toast.success(`Registros ${newValue ? 'habilitados' : 'deshabilitados'}`)
 
-        supabase.from('activity_logs').insert({
-            action: 'SETTINGS_CHANGE',
-            details: `Registros ${newValue ? 'habilitados' : 'deshabilitados'}`
-        })
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({ key: 'registrations_enabled', value: newValue })
+
+            if (error) throw error
+
+            toast.success(`Registros ${newValue ? 'habilitados' : 'deshabilitados'}`)
+
+            supabase.from('activity_logs').insert({
+                action: 'SETTINGS_CHANGE',
+                details: `Registros ${newValue ? 'habilitados' : 'deshabilitados'}`
+            })
+        } catch (error) {
+            console.error(error)
+            toast.error("Error al guardar configuración")
+            // Revertir cambio visual si falla
+            setRegistrationsEnabled(!newValue)
+        }
     }
 
     const addBlockedEmail = () => {

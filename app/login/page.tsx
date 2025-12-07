@@ -18,12 +18,23 @@ export default function LoginPage() {
     const [isSignUp, setIsSignUp] = useState(false)
     const [registrationsEnabled, setRegistrationsEnabled] = useState(true)
     const [isAnimating, setIsAnimating] = useState(false)
+    const [resetMode, setResetMode] = useState(false)
     const router = useRouter()
 
     useEffect(() => {
-        // Check if registrations are enabled (simulated from Admin Panel settings)
-        const savedReg = localStorage.getItem('registrationsEnabled')
-        if (savedReg !== null) setRegistrationsEnabled(JSON.parse(savedReg))
+        // Cargar configuración global desde Supabase
+        const fetchSettings = async () => {
+            const { data } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'registrations_enabled')
+                .single()
+
+            if (data) {
+                setRegistrationsEnabled(data.value)
+            }
+        }
+        fetchSettings()
     }, [])
 
     const toggleMode = () => {
@@ -32,6 +43,23 @@ export default function LoginPage() {
             setIsSignUp(!isSignUp)
             setIsAnimating(false)
         }, 300)
+    }
+
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setLoading(true)
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${window.location.origin}/update-password`,
+            })
+            if (error) throw error
+            toast.success("Se ha enviado un correo para restablecer tu contraseña.")
+            setResetMode(false)
+        } catch (error: any) {
+            toast.error(error.message)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const handleAuth = async (e: React.FormEvent) => {
@@ -113,6 +141,45 @@ export default function LoginPage() {
         }
     }
 
+    if (resetMode) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#0f172a] to-black p-4 overflow-hidden relative">
+                <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in duration-500">
+                    <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+                        <h2 className="text-xl font-semibold text-white mb-4">Recuperar Contraseña</h2>
+                        <p className="text-sm text-slate-400 mb-6">Introduce tu email y te enviaremos un enlace para restablecerla.</p>
+
+                        <form onSubmit={handleResetPassword} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="reset-email" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Email</Label>
+                                <Input
+                                    id="reset-email"
+                                    type="email"
+                                    placeholder="nombre@empresa.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                    className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                />
+                            </div>
+                            <Button className="w-full bg-primary" type="submit" disabled={loading}>
+                                {loading ? <Loader2 className="animate-spin" /> : "Enviar enlace"}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="w-full text-slate-400 hover:text-white"
+                                onClick={() => setResetMode(false)}
+                            >
+                                Volver al login
+                            </Button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#0f172a] to-black p-4 overflow-hidden relative">
 
@@ -178,7 +245,9 @@ export default function LoginPage() {
                             )}
 
                             <div className="space-y-2">
-                                <Label htmlFor="email" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Email</Label>
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="email" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Email</Label>
+                                </div>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                                     <Input
@@ -193,7 +262,18 @@ export default function LoginPage() {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="password" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Contraseña</Label>
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="password" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Contraseña</Label>
+                                    {!isSignUp && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setResetMode(true)}
+                                            className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                                        >
+                                            ¿Olvidaste tu contraseña?
+                                        </button>
+                                    )}
+                                </div>
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                                     <Input
