@@ -17,7 +17,7 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCa
   const photoUrl = car.images?.[0] || car.image_url
 
   const isOwner = currentUserId === car.user_id
-  const isSharedWithMe = !isOwner && currentUserId
+  const isSharedWithMe = !isOwner && currentUserId && car.shared_with?.includes(currentUserId)
   const isSharedByMe = isOwner && car.shared_with && car.shared_with.length > 0
 
   return (
