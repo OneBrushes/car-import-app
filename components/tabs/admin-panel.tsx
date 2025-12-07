@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Loader2, Shield, ShieldAlert, Users, Activity, Trash2, Database, Lock, Save, AlertTriangle, Ban, Info, HardDrive } from "lucide-react"
+import { Loader2, Shield, Users, Trash2, Database, Lock, Ban, Info, HardDrive, RefreshCw } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 
@@ -35,6 +35,10 @@ export function AdminPanel() {
     const [logs, setLogs] = useState<Log[]>([])
     const [loading, setLoading] = useState(true)
     const [carsCount, setCarsCount] = useState<Record<string, number>>({})
+
+    // Real Storage Calculation State
+    const [realStorageMB, setRealStorageMB] = useState<number | null>(null)
+    const [calculatingStorage, setCalculatingStorage] = useState(false)
 
     // Security State
     const [registrationsEnabled, setRegistrationsEnabled] = useState(true)
@@ -90,6 +94,48 @@ export function AdminPanel() {
             toast.error("Error cargando datos de administración")
         } finally {
             setLoading(false)
+        }
+    }
+
+    const calculateRealStorage = async () => {
+        setCalculatingStorage(true)
+        try {
+            let totalBytes = 0
+            const { data: allCars } = await supabase.from('imported_cars').select('image_url')
+
+            if (allCars) {
+                // Limit concurrency to avoid browser limits
+                const chunks = [];
+                const chunkSize = 5;
+                const carsWithImages = allCars.filter(c => c.image_url);
+
+                for (let i = 0; i < carsWithImages.length; i += chunkSize) {
+                    chunks.push(carsWithImages.slice(i, i + chunkSize));
+                }
+
+                for (const chunk of chunks) {
+                    const promises = chunk.map(async (c) => {
+                        try {
+                            const res = await fetch(c.image_url!, { method: 'HEAD' })
+                            const size = res.headers.get('content-length')
+                            return size ? parseInt(size) : 0
+                        } catch {
+                            return 0
+                        }
+                    })
+                    const sizes = await Promise.all(promises)
+                    totalBytes += sizes.reduce((a, b) => a + b, 0)
+                }
+            }
+
+            const mb = totalBytes / (1024 * 1024)
+            setRealStorageMB(mb)
+            toast.success(`Almacenamiento real calculado: ${mb.toFixed(2)} MB`)
+        } catch (error) {
+            console.error(error)
+            toast.error("Error calculando almacenamiento real")
+        } finally {
+            setCalculatingStorage(false)
         }
     }
 
@@ -177,7 +223,8 @@ export function AdminPanel() {
     // 1. Almacenamiento (Archivos/Fotos) - Límite 1GB
     const STORAGE_LIMIT_MB = 1000
     const EST_MB_PER_CAR_IMAGES = 0.5 // 500KB images per car
-    const storageUsageMB = totalCars * EST_MB_PER_CAR_IMAGES
+    // Use real storage if calculated, otherwise estimate
+    const storageUsageMB = realStorageMB !== null ? realStorageMB : (totalCars * EST_MB_PER_CAR_IMAGES)
     const storagePercentage = (storageUsageMB / STORAGE_LIMIT_MB) * 100
 
     // 2. Base de Datos (Texto) - Límite 500MB
@@ -186,8 +233,7 @@ export function AdminPanel() {
     const EST_BYTES_PER_CAR_DATA = 4096 // 4KB per car data (text fields)
     const EST_BYTES_PER_LOG = 512 // 0.5KB per log entry
 
-    // Estimación muy aproximada
-    const dbUsageBytes = (users.length * EST_BYTES_PER_USER) + (totalCars * EST_BYTES_PER_CAR_DATA) + (logs.length * EST_BYTES_PER_LOG * 10) // *10 assuming more logs in DB than fetched
+    const dbUsageBytes = (users.length * EST_BYTES_PER_USER) + (totalCars * EST_BYTES_PER_CAR_DATA) + (logs.length * EST_BYTES_PER_LOG * 10)
     const dbUsageMB = dbUsageBytes / (1024 * 1024)
     const dbPercentage = (dbUsageMB / DB_LIMIT_MB) * 100
 
@@ -220,7 +266,10 @@ export function AdminPanel() {
                         <HardDrive className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{storageUsageMB.toFixed(1)} MB</div>
+                        <div className="text-2xl font-bold">
+                            {storageUsageMB.toFixed(1)} MB
+                            {realStorageMB === null && <span className="text-xs text-muted-foreground ml-1">(Est.)</span>}
+                        </div>
                         <p className="text-xs text-muted-foreground">de {STORAGE_LIMIT_MB} MB (Fotos)</p>
                         <div className="h-1.5 w-full bg-secondary mt-2 rounded-full overflow-hidden">
                             <div
@@ -328,6 +377,7 @@ export function AdminPanel() {
                                 </TableBody>
                             </Table>
                         </CardContent>
+                    </Card>
                 </TabsContent>
 
                 {/* --- STORAGE TAB --- */}
@@ -335,13 +385,27 @@ export function AdminPanel() {
                     <div className="grid gap-6 md:grid-cols-2 mb-6">
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <HardDrive className="w-5 h-5" /> Almacenamiento (Archivos)
-                                </CardTitle>
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="flex items-center gap-2">
+                                        <HardDrive className="w-5 h-5" /> Almacenamiento (Archivos)
+                                    </CardTitle>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={calculateRealStorage}
+                                        disabled={calculatingStorage}
+                                    >
+                                        {calculatingStorage ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                                        {calculatingStorage ? "Calculando..." : "Calcular Real"}
+                                    </Button>
+                                </div>
                                 <CardDescription>Espacio usado por imágenes y documentos.</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold mb-2">{storageUsageMB.toFixed(1)} MB</div>
+                                <div className="text-3xl font-bold mb-2">
+                                    {storageUsageMB.toFixed(1)} MB
+                                    {realStorageMB !== null && <span className="text-sm font-normal text-green-600 ml-2">(Real)</span>}
+                                </div>
                                 <div className="flex justify-between text-sm text-muted-foreground mb-2">
                                     <span>Usado</span>
                                     <span>Límite: {STORAGE_LIMIT_MB} MB</span>
@@ -353,7 +417,9 @@ export function AdminPanel() {
                                     />
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-4">
-                                    *Estimación basada en {EST_MB_PER_CAR_IMAGES}MB por coche importado.
+                                    {realStorageMB !== null
+                                        ? "Dato calculado escaneando el tamaño real de las imágenes."
+                                        : `*Estimación basada en ${EST_MB_PER_CAR_IMAGES}MB por coche importado.`}
                                 </p>
                             </CardContent>
                         </Card>
