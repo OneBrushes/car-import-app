@@ -303,28 +303,30 @@ export default function LoginPage() {
                             </Button>
                         </form>
 
-                        <div className="mt-6 pt-6 border-t border-white/5 text-center">
-                            {registrationsEnabled && (
-                                <button
-                                    type="button"
-                                    onClick={toggleMode}
-                                    className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group"
-                                >
-                                    {isSignUp
-                                        ? "¿Ya tienes cuenta? Inicia sesión"
-                                        : "¿No tienes cuenta? Regístrate gratis"}
-                                </button>
-                            )}
-                            {isSignUp && !registrationsEnabled && (
-                                <button
-                                    type="button"
-                                    onClick={toggleMode}
-                                    className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group mt-2"
-                                >
-                                    Volver al inicio de sesión
-                                </button>
-                            )}
-                        </div>
+                        {(registrationsEnabled || isSignUp) && (
+                            <div className="mt-6 pt-6 border-t border-white/5 text-center">
+                                {registrationsEnabled && (
+                                    <button
+                                        type="button"
+                                        onClick={toggleMode}
+                                        className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group"
+                                    >
+                                        {isSignUp
+                                            ? "¿Ya tienes cuenta? Inicia sesión"
+                                            : "¿No tienes cuenta? Regístrate gratis"}
+                                    </button>
+                                )}
+                                {isSignUp && !registrationsEnabled && (
+                                    <button
+                                        type="button"
+                                        onClick={toggleMode}
+                                        className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group mt-2"
+                                    >
+                                        Volver al inicio de sesión
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
