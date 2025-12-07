@@ -101,8 +101,8 @@ export function CarImport({ role }: CarImportProps) {
     if (!user) return
 
     try {
-      const carData = {
-        user_id: user.id,
+      // Datos comunes para INSERT y UPDATE
+      const baseCarData = {
         brand: newCar.brand,
         model: newCar.model,
         year: newCar.year,
@@ -111,16 +111,14 @@ export function CarImport({ role }: CarImportProps) {
         cv: newCar.cv,
         steering: newCar.steering,
         image_url: newCar.images && newCar.images.length > 0 ? newCar.images[0] : null,
-        // expenses: newCar.expenses, // Comentado porque la columna no existe en DB
-        // Asegurar que total_cost es numérico y correcto
         total_cost: Number(newCar.finalPrice) || (Number(newCar.price) + Number(newCar.totalExpenses || 0))
       }
 
       if (editingCar) {
-        // Actualizar
+        // Actualizar (SIN user_id, no se puede cambiar el propietario)
         const { error } = await supabase
           .from('imported_cars')
-          .update(carData)
+          .update(baseCarData)
           .eq('id', editingCar.id)
 
         if (error) throw error
@@ -132,10 +130,13 @@ export function CarImport({ role }: CarImportProps) {
           details: `Actualizado coche: ${newCar.brand} ${newCar.model}`
         })
       } else {
-        // Crear
+        // Crear (CON user_id)
         const { error } = await supabase
           .from('imported_cars')
-          .insert(carData)
+          .insert({
+            ...baseCarData,
+            user_id: user.id // Solo al crear
+          })
 
         if (error) throw error
         toast.success("Coche añadido")
