@@ -43,7 +43,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Escuchar cambios en la autenticación (login, logout, etc.)
         const {
             data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
+        } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session?.user) {
+                // Check if banned
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', session.user.id)
+                    .single()
+
+                if (profile?.role === 'banned') {
+                    await supabase.auth.signOut()
+                    setSession(null)
+                    setUser(null)
+                    // alert("Tu cuenta ha sido suspendida.") // Opcional
+                    return
+                }
+            }
+
             setSession(session)
             setUser(session?.user ?? null)
             setLoading(false)

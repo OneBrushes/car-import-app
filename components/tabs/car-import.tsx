@@ -89,8 +89,9 @@ export function CarImport() {
         cv: newCar.cv,
         steering: newCar.steering,
         image_url: newCar.photo,
-        // Calcular costes totales (simplificado por ahora)
-        total_cost: newCar.price + (newCar.expenses || 0)
+        // Usar el precio final calculado por el modal si existe, sino calcularlo correctamente
+        // newCar.totalExpenses son solo los gastos extra.
+        total_cost: newCar.finalPrice || (newCar.price + (newCar.totalExpenses || 0))
       }
 
       if (editingCar) {

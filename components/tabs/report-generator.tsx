@@ -5,6 +5,8 @@ import {
     Calendar, User, MoveUp, MoveDown, Trash2, Eye, EyeOff,
     Type, Layout, Settings, TrendingDown
 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
 
 // --- Interfaces ---
 
@@ -76,16 +78,72 @@ export function ReportGenerator() {
 
     const reportRef = useRef<HTMLDivElement>(null)
 
-    // Load Cars
+    // Load Cars from Supabase
     useEffect(() => {
-        const saved = localStorage.getItem("importedCars")
-        if (saved) {
-            setCars(JSON.parse(saved))
+        const fetchReportData = async () => {
+            try {
+                // Fetch Imported Cars
+                const { data: importedData, error: importedError } = await supabase
+                    .from('imported_cars')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+
+                if (importedError) throw importedError
+
+                const formattedCars: Car[] = (importedData || []).map((car: any) => ({
+                    id: car.id,
+                    brand: car.brand,
+                    model: car.model,
+                    year: car.year,
+                    month: 1, // Default or add to DB
+                    price: Number(car.price),
+                    totalExpenses: Number(car.total_cost) - Number(car.price), // Aprox
+                    finalPrice: Number(car.total_cost),
+                    mileage: Number(car.mileage),
+                    cv: Number(car.cv),
+                    fuel: car.fuel_type || "Gasolina", // Add to DB if missing
+                    fuelType: car.fuel_type || "Gasolina",
+                    transmission: car.transmission || "Manual", // Add to DB
+                    images: car.image_url ? [car.image_url] : [], // Handle multiple images if array
+                    equipment: [], // Add to DB
+                    url: "",
+                    color: car.color || "",
+                    location: car.location || "",
+                    notes: "",
+                    motorType: "",
+                    displacement: "",
+                    doors: "",
+                    traction: ""
+                }))
+                setCars(formattedCars)
+
+                // Fetch Spain Cars
+                const { data: spainData, error: spainError } = await supabase
+                    .from('spain_cars')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+
+                if (spainError) throw spainError
+
+                const formattedSpainCars: SpainCar[] = (spainData || []).map((car: any) => ({
+                    id: car.id,
+                    brand: car.brand,
+                    model: car.model,
+                    year: car.year,
+                    price: Number(car.price),
+                    mileage: Number(car.mileage),
+                    cv: Number(car.cv),
+                    equipmentLevel: "Medio" // Default
+                }))
+                setSpainCars(formattedSpainCars)
+
+            } catch (error) {
+                console.error("Error loading report data:", error)
+                toast.error("Error al cargar datos para informes")
+            }
         }
-        const savedSpain = localStorage.getItem("spainCars")
-        if (savedSpain) {
-            setSpainCars(JSON.parse(savedSpain))
-        }
+
+        fetchReportData()
     }, [])
 
     const selectedCar = cars.find((c) => c.id === selectedCarId)
