@@ -89,8 +89,7 @@ export function CarImport() {
         cv: newCar.cv,
         steering: newCar.steering,
         image_url: newCar.photo,
-        // Guardar el array de gastos para poder editar luego (si la columna existe en DB)
-        expenses: newCar.expenses,
+        // expenses: newCar.expenses, // Comentado porque la columna no existe en DB
         // Asegurar que total_cost es numérico y correcto
         total_cost: Number(newCar.finalPrice) || (Number(newCar.price) + Number(newCar.totalExpenses || 0))
       }
