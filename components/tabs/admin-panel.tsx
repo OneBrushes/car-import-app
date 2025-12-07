@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Loader2, Shield, ShieldAlert, Users, Activity, Trash2, Database, Lock, Save, AlertTriangle, Ban, Info } from "lucide-react"
+import { Loader2, Shield, ShieldAlert, Users, Activity, Trash2, Database, Lock, Save, AlertTriangle, Ban, Info, HardDrive } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 
@@ -47,7 +47,6 @@ export function AdminPanel() {
     }, [])
 
     const loadSettings = async () => {
-        // Simular carga de configuración (Idealmente desde tabla 'app_settings')
         const savedReg = localStorage.getItem('registrationsEnabled')
         if (savedReg !== null) setRegistrationsEnabled(JSON.parse(savedReg))
 
@@ -117,7 +116,6 @@ export function AdminPanel() {
     }
 
     const handleDeleteData = async (userId: string) => {
-        // Eliminado confirmación a petición del usuario
         try {
             const { error } = await supabase
                 .from('imported_cars')
@@ -140,7 +138,6 @@ export function AdminPanel() {
 
     const handleBanUser = async (userId: string, currentRole: string) => {
         const newRole = currentRole === 'banned' ? 'usuario' : 'banned'
-        // Eliminado confirmación a petición del usuario
         handleRoleChange(userId, newRole)
     }
 
@@ -174,17 +171,31 @@ export function AdminPanel() {
         toast.success("Email desbloqueado")
     }
 
-    // --- Storage Calculations ---
-    const ESTIMATED_MB_PER_CAR = 0.5 // 500KB per car (data + images approx)
-    const TOTAL_STORAGE_LIMIT_MB = 1000 // 1GB Supabase Free Tier Storage
+    // --- Storage & DB Calculations ---
+    const totalCars = Object.values(carsCount).reduce((a, b) => a + b, 0)
+
+    // 1. Almacenamiento (Archivos/Fotos) - Límite 1GB
+    const STORAGE_LIMIT_MB = 1000
+    const EST_MB_PER_CAR_IMAGES = 0.5 // 500KB images per car
+    const storageUsageMB = totalCars * EST_MB_PER_CAR_IMAGES
+    const storagePercentage = (storageUsageMB / STORAGE_LIMIT_MB) * 100
+
+    // 2. Base de Datos (Texto) - Límite 500MB
+    const DB_LIMIT_MB = 500
+    const EST_BYTES_PER_USER = 2048 // 2KB per user profile
+    const EST_BYTES_PER_CAR_DATA = 4096 // 4KB per car data (text fields)
+    const EST_BYTES_PER_LOG = 512 // 0.5KB per log entry
+
+    // Estimación muy aproximada
+    const dbUsageBytes = (users.length * EST_BYTES_PER_USER) + (totalCars * EST_BYTES_PER_CAR_DATA) + (logs.length * EST_BYTES_PER_LOG * 10) // *10 assuming more logs in DB than fetched
+    const dbUsageMB = dbUsageBytes / (1024 * 1024)
+    const dbPercentage = (dbUsageMB / DB_LIMIT_MB) * 100
+
 
     const calculateUserStorage = (userId: string) => {
         const count = carsCount[userId] || 0
-        return (count * ESTIMATED_MB_PER_CAR).toFixed(2)
+        return (count * EST_MB_PER_CAR_IMAGES).toFixed(2)
     }
-
-    const totalUsedStorage = Object.values(carsCount).reduce((acc, count) => acc + (count * ESTIMATED_MB_PER_CAR), 0)
-    const storagePercentage = (totalUsedStorage / TOTAL_STORAGE_LIMIT_MB) * 100
 
     if (loading) {
         return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
@@ -192,43 +203,62 @@ export function AdminPanel() {
 
     return (
         <div className="space-y-6 animate-in">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Usuarios Totales</CardTitle>
+                        <CardTitle className="text-sm font-medium">Usuarios</CardTitle>
                         <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{users.length}</div>
                     </CardContent>
                 </Card>
+
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Almacenamiento Usado</CardTitle>
-                        <Database className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Almacenamiento</CardTitle>
+                        <HardDrive className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{totalUsedStorage.toFixed(1)} MB</div>
-                        <p className="text-xs text-muted-foreground">de {TOTAL_STORAGE_LIMIT_MB} MB ({storagePercentage.toFixed(1)}%)</p>
-                        <div className="h-2 w-full bg-secondary mt-2 rounded-full overflow-hidden">
+                        <div className="text-2xl font-bold">{storageUsageMB.toFixed(1)} MB</div>
+                        <p className="text-xs text-muted-foreground">de {STORAGE_LIMIT_MB} MB (Fotos)</p>
+                        <div className="h-1.5 w-full bg-secondary mt-2 rounded-full overflow-hidden">
                             <div
-                                className={`h-full ${storagePercentage > 90 ? 'bg-destructive' : 'bg-primary'}`}
+                                className={`h-full ${storagePercentage > 90 ? 'bg-destructive' : 'bg-blue-500'}`}
                                 style={{ width: `${Math.min(storagePercentage, 100)}%` }}
                             />
                         </div>
                     </CardContent>
                 </Card>
+
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Estado Seguridad</CardTitle>
+                        <CardTitle className="text-sm font-medium">Base de Datos</CardTitle>
+                        <Database className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{dbUsageMB.toFixed(2)} MB</div>
+                        <p className="text-xs text-muted-foreground">de {DB_LIMIT_MB} MB (Texto)</p>
+                        <div className="h-1.5 w-full bg-secondary mt-2 rounded-full overflow-hidden">
+                            <div
+                                className={`h-full ${dbPercentage > 90 ? 'bg-destructive' : 'bg-green-500'}`}
+                                style={{ width: `${Math.min(dbPercentage, 100)}%` }}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Seguridad</CardTitle>
                         <Lock className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${registrationsEnabled ? 'bg-green-500' : 'bg-red-500'}`} />
-                            <span className="font-bold">{registrationsEnabled ? 'Registros Abiertos' : 'Registros Cerrados'}</span>
+                            <div className={`w-2 h-2 rounded-full ${registrationsEnabled ? 'bg-green-500' : 'bg-red-500'}`} />
+                            <span className="font-bold text-sm">{registrationsEnabled ? 'Reg. Abierto' : 'Reg. Cerrado'}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">{blockedEmails.length} emails bloqueados</p>
+                        <p className="text-xs text-muted-foreground mt-1">{blockedEmails.length} bloqueados</p>
                     </CardContent>
                 </Card>
             </div>
@@ -236,7 +266,7 @@ export function AdminPanel() {
             <Tabs defaultValue="users" className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="users">Gestión Usuarios</TabsTrigger>
-                    <TabsTrigger value="storage">Almacenamiento</TabsTrigger>
+                    <TabsTrigger value="storage">Almacenamiento & DB</TabsTrigger>
                     <TabsTrigger value="security">Seguridad</TabsTrigger>
                     <TabsTrigger value="logs">Logs Sistema</TabsTrigger>
                 </TabsList>
@@ -298,34 +328,72 @@ export function AdminPanel() {
                                 </TableBody>
                             </Table>
                         </CardContent>
-                    </Card>
                 </TabsContent>
 
                 {/* --- STORAGE TAB --- */}
                 <TabsContent value="storage">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Gestión de Almacenamiento</CardTitle>
-                            <CardDescription>Visualiza y libera espacio ocupado por los usuarios.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="mb-6 p-4 bg-secondary/20 rounded-lg border border-border">
-                                <div className="flex justify-between mb-2">
-                                    <span className="font-medium">Espacio Total Usado</span>
-                                    <span className="font-bold">{totalUsedStorage.toFixed(1)} MB / {TOTAL_STORAGE_LIMIT_MB} MB</span>
+                    <div className="grid gap-6 md:grid-cols-2 mb-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <HardDrive className="w-5 h-5" /> Almacenamiento (Archivos)
+                                </CardTitle>
+                                <CardDescription>Espacio usado por imágenes y documentos.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold mb-2">{storageUsageMB.toFixed(1)} MB</div>
+                                <div className="flex justify-between text-sm text-muted-foreground mb-2">
+                                    <span>Usado</span>
+                                    <span>Límite: {STORAGE_LIMIT_MB} MB</span>
                                 </div>
-                                <div className="h-4 w-full bg-secondary rounded-full overflow-hidden">
+                                <div className="h-3 w-full bg-secondary rounded-full overflow-hidden">
                                     <div
-                                        className={`h-full transition-all duration-500 ${storagePercentage > 90 ? 'bg-destructive' : 'bg-primary'}`}
+                                        className={`h-full transition-all duration-500 ${storagePercentage > 90 ? 'bg-destructive' : 'bg-blue-500'}`}
                                         style={{ width: `${Math.min(storagePercentage, 100)}%` }}
                                     />
                                 </div>
-                                <div className="flex items-start gap-2 mt-4 text-xs text-muted-foreground p-3 bg-background rounded border border-border">
-                                    <Info className="w-4 h-4 mt-0.5 text-primary" />
-                                    <div>
-                                        <p><strong>Nota sobre Supabase:</strong> El plan gratuito incluye <strong>1GB de Almacenamiento</strong> (fotos/archivos) y <strong>0.5GB de Base de Datos</strong> (texto).</p>
-                                        <p className="mt-1">Los <strong>5GB</strong> que ves en el panel de Supabase se refieren al <strong>Ancho de Banda (Egress)</strong>, es decir, la cantidad de datos que se pueden descargar/ver al mes, no el espacio en disco.</p>
-                                    </div>
+                                <p className="text-xs text-muted-foreground mt-4">
+                                    *Estimación basada en {EST_MB_PER_CAR_IMAGES}MB por coche importado.
+                                </p>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Database className="w-5 h-5" /> Base de Datos (Texto)
+                                </CardTitle>
+                                <CardDescription>Espacio usado por registros de texto.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold mb-2">{dbUsageMB.toFixed(2)} MB</div>
+                                <div className="flex justify-between text-sm text-muted-foreground mb-2">
+                                    <span>Usado</span>
+                                    <span>Límite: {DB_LIMIT_MB} MB</span>
+                                </div>
+                                <div className="h-3 w-full bg-secondary rounded-full overflow-hidden">
+                                    <div
+                                        className={`h-full transition-all duration-500 ${dbPercentage > 90 ? 'bg-destructive' : 'bg-green-500'}`}
+                                        style={{ width: `${Math.min(dbPercentage, 100)}%` }}
+                                    />
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-4">
+                                    *Estimación basada en el volumen de registros de texto.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Gestión por Usuario</CardTitle>
+                            <CardDescription>Visualiza y libera espacio ocupado por los usuarios.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex items-start gap-2 mb-4 text-xs text-muted-foreground p-3 bg-secondary/20 rounded border border-border">
+                                <Info className="w-4 h-4 mt-0.5 text-primary" />
+                                <div>
+                                    <p><strong>Nota sobre Supabase:</strong> Los <strong>5GB</strong> que aparecen en el panel de Supabase se refieren al <strong>Ancho de Banda (Egress)</strong>, no al espacio en disco.</p>
                                 </div>
                             </div>
 
@@ -333,8 +401,8 @@ export function AdminPanel() {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Usuario</TableHead>
-                                        <TableHead>Coches Guardados</TableHead>
-                                        <TableHead>Espacio Ocupado (Est.)</TableHead>
+                                        <TableHead>Coches</TableHead>
+                                        <TableHead>Almacenamiento (Est.)</TableHead>
                                         <TableHead>Acciones</TableHead>
                                     </TableRow>
                                 </TableHeader>
