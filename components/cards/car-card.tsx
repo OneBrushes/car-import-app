@@ -106,7 +106,7 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCa
                 size="icon"
                 className="h-9 w-9 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
                 onClick={() => onShare && onShare(car)}
-                title="Compartir"
+                title={isSharedByMe ? "Gestionar compartidos" : "Compartir"}
               >
                 <Share2 className="w-4 h-4" />
               </Button>

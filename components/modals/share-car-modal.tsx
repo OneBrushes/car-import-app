@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Loader2, Share2 } from "lucide-react"
+import { Loader2, Share2, UserMinus, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 
@@ -17,7 +17,8 @@ interface ShareCarModalProps {
 }
 
 export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onShare }: ShareCarModalProps) {
-    const [users, setUsers] = useState<any[]>([])
+    const [allUsers, setAllUsers] = useState<any[]>([])
+    const [sharedUsers, setSharedUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [selectedUser, setSelectedUser] = useState<string>("")
     const [currentUserId, setCurrentUserId] = useState<string>("")
@@ -39,11 +40,14 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
                     .order('first_name', { ascending: true, nullsFirst: false })
 
                 if (!error && data) {
-                    // Filtrar: excluir al usuario actual y los que ya tienen el coche compartido
-                    const filtered = data.filter(u =>
+                    // Separar usuarios compartidos y disponibles
+                    const shared = data.filter(u => currentSharedWith.includes(u.id))
+                    const available = data.filter(u =>
                         u.id !== user?.id && !currentSharedWith.includes(u.id)
                     )
-                    setUsers(filtered)
+
+                    setSharedUsers(shared)
+                    setAllUsers(available)
                 }
             } catch (error) {
                 console.error(error)
@@ -51,7 +55,6 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
         }
 
         loadUsers()
-        // Resetear selección al abrir
         setSelectedUser("")
     }, [isOpen, currentSharedWith])
 
@@ -75,11 +78,33 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
 
             toast.success("Coche compartido correctamente")
             onShare()
-            onClose()
             setSelectedUser("")
         } catch (error) {
             console.error(error)
             toast.error("Error al compartir")
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleUnshare = async (userId: string) => {
+        setLoading(true)
+
+        try {
+            const newSharedWith = currentSharedWith.filter(id => id !== userId)
+
+            const { error } = await supabase
+                .from('imported_cars')
+                .update({ shared_with: newSharedWith })
+                .eq('id', carId)
+
+            if (error) throw error
+
+            toast.success("Compartido eliminado")
+            onShare()
+        } catch (error) {
+            console.error(error)
+            toast.error("Error al eliminar compartido")
         } finally {
             setLoading(false)
         }
@@ -94,42 +119,78 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <Share2 className="w-5 h-5" /> Compartir Coche
+                        <Share2 className="w-5 h-5" /> Gestionar Compartidos
                     </DialogTitle>
                     <DialogDescription>
-                        Selecciona un usuario para darle acceso de lectura.
+                        Comparte o deja de compartir este coche con otros usuarios.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 py-4">
+                <div className="space-y-6 py-4">
+                    {/* Usuarios compartidos actualmente */}
+                    {sharedUsers.length > 0 && (
+                        <div className="space-y-2">
+                            <Label className="text-sm font-semibold">Compartido con ({sharedUsers.length})</Label>
+                            <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                                {sharedUsers.map((user) => (
+                                    <div
+                                        key={user.id}
+                                        className="flex items-center justify-between p-3 rounded-lg bg-blue-500/10 border border-blue-500/20"
+                                    >
+                                        <div>
+                                            <p className="font-medium text-sm">{formatName(user)}</p>
+                                            <p className="text-xs text-muted-foreground">{user.email}</p>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleUnshare(user.id)}
+                                            disabled={loading}
+                                            className="text-destructive hover:text-destructive/80"
+                                        >
+                                            <UserMinus className="w-4 h-4 mr-1" />
+                                            Quitar
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Añadir nuevo usuario */}
                     <div className="space-y-2">
-                        <Label>Usuario</Label>
+                        <Label className="text-sm font-semibold flex items-center gap-2">
+                            <UserPlus className="w-4 h-4" /> Compartir con
+                        </Label>
                         <select
                             value={selectedUser}
                             onChange={(e) => setSelectedUser(e.target.value)}
                             className="w-full px-3 py-2 rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                         >
                             <option value="">Selecciona un usuario...</option>
-                            {users.map((user) => (
+                            {allUsers.map((user) => (
                                 <option key={user.id} value={user.id}>
                                     {formatName(user)} ({user.email})
                                 </option>
                             ))}
                         </select>
-                        {users.length === 0 && (
+                        {allUsers.length === 0 && (
                             <p className="text-xs text-muted-foreground mt-2">
-                                No hay usuarios disponibles para compartir.
+                                {sharedUsers.length > 0
+                                    ? "No hay más usuarios disponibles para compartir."
+                                    : "No hay usuarios disponibles para compartir."}
                             </p>
                         )}
                     </div>
 
-                    <DialogFooter>
-                        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+                    <DialogFooter className="gap-2">
+                        <Button variant="outline" onClick={onClose}>Cerrar</Button>
                         <Button onClick={handleShare} disabled={!selectedUser || loading}>
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <UserPlus className="mr-2 h-4 w-4" />
                             Compartir
                         </Button>
                     </DialogFooter>

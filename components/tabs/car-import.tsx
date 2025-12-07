@@ -84,7 +84,7 @@ export function CarImport({ role }: CarImportProps) {
         tags: [],
         origin: "Importado",
         totalExpenses: Number(car.total_cost) - Number(car.price),
-        url: "",
+        url: car.url || "",
         steering: car.steering
       }))
 
@@ -101,17 +101,53 @@ export function CarImport({ role }: CarImportProps) {
     if (!user) return
 
     try {
-      // Datos comunes para INSERT y UPDATE
+      // Datos completos del coche
       const baseCarData = {
+        // Básicos
         brand: newCar.brand,
         model: newCar.model,
         year: newCar.year,
+        month: newCar.month,
+        vehicle_type: newCar.vehicleType,
+
+        // Ubicación y origen
+        url: newCar.url || null,
+        location: newCar.location || null,
+        origin: newCar.origin || null,
+        platform: newCar.platform || null,
+
+        // Apariencia
+        color: newCar.color || null,
+        doors: newCar.doors || null,
+
+        // Especificaciones técnicas
         price: Number(newCar.price),
         mileage: newCar.mileage,
         cv: newCar.cv,
+        motor_type: newCar.motorType || null,
+        displacement: newCar.displacement || null,
+        co2: newCar.co2 || null,
+        fuel_type: newCar.fuelType || null,
+        transmission: newCar.transmission || null,
+        traction: newCar.traction || null,
         steering: newCar.steering,
+
+        // ITV/Inspección
+        inspection_name: newCar.inspectionName || null,
+        inspection_status: newCar.inspectionStatus || null,
+        inspection_expiry: newCar.inspectionExpiry || null,
+
+        // Costes
+        transfer_cost: newCar.transferCost ? Number(newCar.transferCost) : null,
+        total_cost: Number(newCar.finalPrice) || (Number(newCar.price) + Number(newCar.totalExpenses || 0)),
+        expenses: newCar.expenses || null,
+
+        // Multimedia y notas
         image_url: newCar.images && newCar.images.length > 0 ? newCar.images[0] : null,
-        total_cost: Number(newCar.finalPrice) || (Number(newCar.price) + Number(newCar.totalExpenses || 0))
+        defects: newCar.defects || null,
+        notes: newCar.notes || null,
+        tags: newCar.tags || [],
+        equipment: newCar.equipment || []
       }
 
       if (editingCar) {
