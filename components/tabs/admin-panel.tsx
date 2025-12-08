@@ -78,15 +78,38 @@ export function AdminPanel() {
             if (usersError) throw usersError
             setUsers(usersData || [])
 
-            // Cargar logs
+            // Cargar logs SIN JOIN (para evitar problemas de RLS)
             const { data: logsData, error: logsError } = await supabase
                 .from('activity_logs')
-                .select('*, profiles(email)')
+                .select('*')
                 .order('created_at', { ascending: false })
                 .limit(50)
 
-            if (!logsError && logsData) {
-                setLogs(logsData as any)
+            console.log('Logs query result:', { logsData, logsError })
+
+            if (logsError) {
+                console.error('Error loading logs:', logsError)
+                toast.error(`Error cargando logs: ${logsError.message}`)
+                setLogs([])
+            } else if (logsData) {
+                // Obtener emails de usuarios manualmente
+                const userIds = [...new Set(logsData.map(log => log.user_id).filter(Boolean))]
+                const { data: profilesData } = await supabase
+                    .from('profiles')
+                    .select('id, email')
+                    .in('id', userIds)
+
+                // Crear un mapa de user_id -> email
+                const emailMap = new Map(profilesData?.map(p => [p.id, p.email]) || [])
+
+                // Combinar logs con emails
+                const logsWithEmails = logsData.map(log => ({
+                    ...log,
+                    profiles: { email: emailMap.get(log.user_id) || 'Desconocido' }
+                }))
+
+                setLogs(logsWithEmails as any)
+                console.log('Logs loaded:', logsWithEmails.length)
             }
 
             // Contar coches por usuario
@@ -603,18 +626,26 @@ export function AdminPanel() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {logs.map((log) => (
-                                            <TableRow key={log.id}>
-                                                <TableCell className="font-medium whitespace-nowrap">{log.profiles?.email || 'Desconocido'}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline" className="whitespace-nowrap">{log.action}</Badge>
-                                                </TableCell>
-                                                <TableCell className="min-w-[200px]">{log.details}</TableCell>
-                                                <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                                                    {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: es })}
+                                        {logs.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                                                    No hay logs de actividad registrados
                                                 </TableCell>
                                             </TableRow>
-                                        ))}
+                                        ) : (
+                                            logs.map((log) => (
+                                                <TableRow key={log.id}>
+                                                    <TableCell className="font-medium whitespace-nowrap">{log.profiles?.email || 'Desconocido'}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline" className="whitespace-nowrap">{log.action}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="min-w-[200px]">{log.details}</TableCell>
+                                                    <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                                                        {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: es })}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
                                     </TableBody>
                                 </Table>
                             </div>
