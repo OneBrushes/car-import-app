@@ -69,6 +69,13 @@ export default function ProfilePage() {
             // 1. Comprimir imagen
             const compressedFile = await compressImage(file)
 
+            // 1.5. Borrar avatar anterior si existe para no acumular basura
+            const { data: oldFiles } = await supabase.storage.from('avatars').list('', { search: user?.id })
+            if (oldFiles && oldFiles.length > 0) {
+                const filesToRemove = oldFiles.map(f => f.name)
+                await supabase.storage.from('avatars').remove(filesToRemove)
+            }
+
             // 2. Subir a Supabase Storage
             const fileExt = compressedFile.name.split('.').pop()
             const fileName = `${user?.id}-${Math.random()}.${fileExt}`

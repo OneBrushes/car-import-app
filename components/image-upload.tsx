@@ -4,6 +4,8 @@ import type React from "react"
 
 import { useState } from "react"
 import { Upload, X, ImageIcon } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
 
 interface ImageUploadProps {
   images: string[]
@@ -35,26 +37,48 @@ export function ImageUpload({ images, onImagesChange, maxImages = 10 }: ImageUpl
     handleFiles(files)
   }
 
+
+
   const handleFiles = async (files: File[]) => {
     const imageFiles = files.filter((file) => file.type.startsWith("image/"))
+    if (imageFiles.length === 0) return
 
-    // Leer todos los archivos en paralelo
-    const promises = imageFiles.map(file => {
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader()
-        reader.onload = (e) => resolve(e.target?.result as string)
-        reader.readAsDataURL(file)
+    const toastId = toast.loading("Subiendo imágenes...")
+
+    try {
+      const uploadPromises = imageFiles.map(async (file) => {
+        // Comprimir si es necesario (opcional, por ahora directo)
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+
+        const { error } = await supabase.storage
+          .from('car-images')
+          .upload(fileName, file)
+
+        if (error) throw error
+
+        const { data } = supabase.storage
+          .from('car-images')
+          .getPublicUrl(fileName)
+
+        return data.publicUrl
       })
-    })
 
-    const newImages = await Promise.all(promises)
+      const uploadedUrls = await Promise.all(uploadPromises)
 
-    // Calcular cuántas imágenes podemos añadir
-    const availableSlots = maxImages - images.length
-    const imagesToAdd = newImages.slice(0, availableSlots)
+      // Calcular slots disponibles
+      const availableSlots = maxImages - images.length
+      const imagesToAdd = uploadedUrls.slice(0, availableSlots)
 
-    if (imagesToAdd.length > 0) {
-      onImagesChange([...images, ...imagesToAdd])
+      if (imagesToAdd.length > 0) {
+        onImagesChange([...images, ...imagesToAdd])
+        toast.success(`Se han subido ${imagesToAdd.length} imágenes`)
+      }
+    } catch (error) {
+      console.error("Error uploading images:", error)
+      toast.error("Error al subir imágenes. Asegúrate de que el bucket 'car-images' existe y es público.")
+    } finally {
+      toast.dismiss(toastId)
     }
   }
 
