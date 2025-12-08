@@ -3,6 +3,7 @@
 import { ExternalLink, Trash2, Share2, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ImageCarousel } from "@/components/ui/image-carousel"
 
 interface CarCardProps {
   car: any
@@ -14,7 +15,7 @@ interface CarCardProps {
 
 export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCardProps) {
   const finalPrice = (car.price || 0) + (car.totalExpenses || 0)
-  const photoUrl = car.images?.[0] || car.image_url
+  const images = car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : [])
 
   const isOwner = currentUserId === car.user_id
   const isSharedWithMe = !isOwner && currentUserId && car.shared_with?.includes(currentUserId)
@@ -40,17 +41,9 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCa
         )}
       </div>
 
-      {/* Imagen */}
-      <div className="w-full h-40 bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center text-4xl overflow-hidden">
-        {photoUrl ? (
-          <img
-            src={photoUrl}
-            alt={`${car.brand} ${car.model}`}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <span>🚗</span>
-        )}
+      {/* Carrusel de Imágenes */}
+      <div className="w-full h-40">
+        <ImageCarousel images={images} alt={`${car.brand} ${car.model}`} />
       </div>
 
       {/* Contenido */}
