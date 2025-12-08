@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { X, Plus, Trash2, ChevronUp, ChevronDown, ImageIcon } from "lucide-react"
+import { X, Plus, Trash2, ChevronUp, ChevronDown, ImageIcon, FileText, Gauge, ClipboardCheck, Euro, Settings, Tag } from "lucide-react"
 import { toast } from "sonner"
 import { ImageUpload } from "../image-upload"
 
@@ -34,6 +34,7 @@ const colors = ["Blanco", "Negro", "Gris", "Plata", "Azul", "Rojo", "Verde", "Ma
 const doorsOptions = ["2", "3", "4", "5", "6", "7"]
 
 export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarModalProps) {
+  const [activeMobileTab, setActiveMobileTab] = useState("photos")
   const [formData, setFormData] = useState({
     // Información Básica
     brand: "",
@@ -322,6 +323,16 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     { id: "photos", label: "Fotos" },
   ]
 
+  const mobileTabs = [
+    { id: "photos", label: "Fotos", icon: ImageIcon },
+    { id: "basic", label: "Básica", icon: FileText },
+    { id: "technical", label: "Técnica", icon: Gauge },
+    { id: "itv", label: "Estado", icon: ClipboardCheck },
+    { id: "pricing", label: "Costes", icon: Euro },
+    { id: "equipment", label: "Extras", icon: Settings },
+    { id: "tags", label: "Notas", icon: Tag },
+  ]
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-background rounded-lg w-full max-w-6xl shadow-xl border border-border flex flex-col max-h-[90vh]">
@@ -333,9 +344,26 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
           </button>
         </div>
 
+        {/* Mobile Tabs Navigation */}
+        <div className="lg:hidden flex overflow-x-auto border-b border-border bg-muted/5 p-2 gap-2 no-scrollbar">
+          {mobileTabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveMobileTab(tab.id)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${activeMobileTab === tab.id
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-background text-muted-foreground border border-border"
+                }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
           {/* Columna Izquierda: Imágenes (4 cols) */}
-          <div className="lg:col-span-4 p-6 border-r border-border overflow-y-auto bg-muted/5">
+          <div className={`lg:col-span-4 p-6 border-r border-border overflow-y-auto bg-muted/5 ${activeMobileTab === 'photos' ? 'block' : 'hidden lg:block'}`}>
             <h3 className="font-semibold mb-4 flex items-center gap-2">
               <ImageIcon className="w-5 h-5" />
               Galería de Fotos
@@ -347,494 +375,506 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
           </div>
 
           {/* Columna Derecha: Formulario (8 cols) */}
-          <div className="lg:col-span-8 p-6 overflow-y-auto bg-background">
+          <div className={`lg:col-span-8 p-6 overflow-y-auto bg-background ${activeMobileTab !== 'photos' ? 'block' : 'hidden lg:block'}`}>
             <form id="car-form" onSubmit={handleSubmit} className="space-y-6">
               {/* Información Básica */}
-              <CollapsibleSection
-                title="Información Básica"
-                id="basic"
-                expanded={expandedSection}
-                onToggle={setExpandedSection}
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input
-                    type="text"
-                    name="brand"
-                    placeholder="Marca"
-                    value={formData.brand}
-                    onChange={handleChange}
-                    required
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <input
-                    type="text"
-                    name="model"
-                    placeholder="Modelo"
-                    value={formData.model}
-                    onChange={handleChange}
-                    required
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <select
-                    name="vehicleType"
-                    value={formData.vehicleType}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  >
-                    <option value="">Tipo de vehículo</option>
-                    {vehicleTypes.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex gap-2">
+              <div className={activeMobileTab === 'basic' ? 'block' : 'hidden lg:block'}>
+                <CollapsibleSection
+                  title="Información Básica"
+                  id="basic"
+                  expanded={expandedSection}
+                  onToggle={setExpandedSection}
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <input
-                      type="number"
-                      name="year"
-                      placeholder="Año"
-                      value={formData.year}
+                      type="text"
+                      name="brand"
+                      placeholder="Marca"
+                      value={formData.brand}
                       onChange={handleChange}
-                      className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      required
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                    <input
+                      type="text"
+                      name="model"
+                      placeholder="Modelo"
+                      value={formData.model}
+                      onChange={handleChange}
+                      required
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                     />
                     <select
-                      name="month"
-                      value={formData.month}
-                      onChange={handleChange}
-                      className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                    >
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                        <option key={m} value={m}>
-                          {new Date(0, m - 1).toLocaleString("es-ES", { month: "long" })}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <select
-                    name="platform"
-                    value={formData.platform}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  >
-                    <option value="">Plataforma</option>
-                    {platforms.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="url"
-                    name="url"
-                    placeholder="URL del anuncio"
-                    value={formData.url}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <input
-                    type="text"
-                    name="location"
-                    placeholder="Ubicación"
-                    value={formData.location}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <input
-                    type="text"
-                    name="origin"
-                    placeholder="País de origen"
-                    value={formData.origin}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                </div>
-              </CollapsibleSection>
-
-              {/* Especificaciones Técnicas */}
-              <CollapsibleSection
-                title="Especificaciones Técnicas"
-                id="technical"
-                expanded={expandedSection}
-                onToggle={setExpandedSection}
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2 grid grid-cols-2 gap-4">
-                    <select
-                      name="color"
-                      value={formData.color}
+                      name="vehicleType"
+                      value={formData.vehicleType}
                       onChange={handleChange}
                       className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                     >
-                      <option value="">Color</option>
-                      {colors.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
+                      <option value="">Tipo de vehículo</option>
+                      {vehicleTypes.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
                         </option>
                       ))}
                     </select>
-                    <select
-                      name="doors"
-                      value={formData.doors}
-                      onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                    >
-                      <option value="">Puertas</option>
-                      {doorsOptions.map((d) => (
-                        <option key={d} value={d}>
-                          {d} puertas
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <select
-                    name="motorType"
-                    value={formData.motorType}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  >
-                    <option value="">Tipo de Motor</option>
-                    {motorTypes.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    name="displacement"
-                    placeholder="Cilindrada (cc)"
-                    value={formData.displacement}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <input
-                    type="text"
-                    name="co2"
-                    placeholder="Emisiones CO2 (g/km)"
-                    value={formData.co2}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <input
-                    type="number"
-                    name="cv"
-                    placeholder="Potencia (CV)"
-                    value={formData.cv}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <input
-                    type="number"
-                    name="mileage"
-                    placeholder="Kilometraje"
-                    value={formData.mileage}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <select
-                    name="fuelType"
-                    value={formData.fuelType}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  >
-                    <option value="">Combustible</option>
-                    {fuelTypes.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    name="transmission"
-                    value={formData.transmission}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  >
-                    <option value="">Transmisión</option>
-                    {transmissionTypes.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    name="traction"
-                    value={formData.traction}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  >
-                    <option value="">Tracción</option>
-                    {tractionTypes.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    name="steering"
-                    value={formData.steering}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  >
-                    {steeringOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </CollapsibleSection>
-
-              {/* Estado e ITV */}
-              <CollapsibleSection
-                title="Estado e ITV"
-                id="itv"
-                expanded={expandedSection}
-                onToggle={setExpandedSection}
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input
-                    type="text"
-                    name="inspectionName"
-                    placeholder="Nombre Inspección (ej: TÜV)"
-                    value={formData.inspectionName}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <select
-                    name="inspectionStatus"
-                    value={formData.inspectionStatus}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  >
-                    <option value="aprobada">Aprobada</option>
-                    <option value="pendiente">Pendiente</option>
-                    <option value="caducada">Caducada</option>
-                  </select>
-                  <input
-                    type="date"
-                    name="inspectionExpiry"
-                    placeholder="Fecha caducidad"
-                    value={formData.inspectionExpiry}
-                    onChange={handleChange}
-                    className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                  <textarea
-                    name="defects"
-                    placeholder="Defectos o daños conocidos..."
-                    value={formData.defects}
-                    onChange={handleChange}
-                    rows={3}
-                    className="sm:col-span-2 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
-                  />
-                </div>
-              </CollapsibleSection>
-
-              {/* Precio y Costes */}
-              <CollapsibleSection
-                title="Precio y Costes"
-                id="pricing"
-                expanded={expandedSection}
-                onToggle={setExpandedSection}
-              >
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Precio Base</label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          name="price"
-                          placeholder="0"
-                          value={formData.price}
-                          onChange={handleChange}
-                          className="w-full pl-8 pr-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                        />
-                        <span className="absolute left-3 top-2 text-muted-foreground">€</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Coste Transferencia</label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          name="transferCost"
-                          placeholder="0"
-                          value={formData.transferCost}
-                          onChange={handleChange}
-                          className="w-full pl-8 pr-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                        />
-                        <span className="absolute left-3 top-2 text-muted-foreground">€</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Lista de Gastos */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Gastos Adicionales</label>
-                    <div className="flex flex-wrap gap-2 mb-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        name="year"
+                        placeholder="Año"
+                        value={formData.year}
+                        onChange={handleChange}
+                        className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      />
                       <select
-                        value={newExpense.type}
-                        onChange={(e) => setNewExpense({ ...newExpense, type: e.target.value })}
-                        className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        name="month"
+                        value={formData.month}
+                        onChange={handleChange}
+                        className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                       >
-                        {expenseTypes.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                          <option key={m} value={m}>
+                            {new Date(0, m - 1).toLocaleString("es-ES", { month: "long" })}
                           </option>
                         ))}
                       </select>
-                      <input
-                        type="number"
-                        placeholder="€"
-                        value={newExpense.amount}
-                        onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                        className="w-24 px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddExpense}
-                        className="px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                      >
-                        <Plus className="w-5 h-5" />
-                      </button>
                     </div>
-
-                    {formData.expenses.length > 0 && (
-                      <div className="bg-muted/30 rounded-lg p-2 space-y-1">
-                        {formData.expenses.map((expense) => (
-                          <div key={expense.id} className="flex justify-between items-center text-sm p-1 hover:bg-muted/50 rounded">
-                            <span>{expense.type}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{expense.amount}€</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveExpense(expense.id)}
-                                className="text-destructive hover:text-destructive/80"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Totales */}
-                  <div className="bg-primary/5 p-4 rounded-lg space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Precio Base:</span>
-                      <span>{Number(formData.price || 0).toLocaleString()}€</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Gastos Totales:</span>
-                      <span>{calculateTotalExpenses().toLocaleString()}€</span>
-                    </div>
-                    <div className="flex justify-between font-bold text-lg pt-2 border-t border-primary/10">
-                      <span>Precio Final:</span>
-                      <span className="text-primary">{calculateFinalPrice().toLocaleString()}€</span>
-                    </div>
-                  </div>
-                </div>
-              </CollapsibleSection>
-
-              {/* Equipamiento */}
-              <CollapsibleSection
-                title="Equipamiento"
-                id="equipment"
-                expanded={expandedSection}
-                onToggle={setExpandedSection}
-              >
-                <div className="space-y-2">
-                  <div className="flex gap-2">
+                    <select
+                      name="platform"
+                      value={formData.platform}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    >
+                      <option value="">Plataforma</option>
+                      {platforms.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="url"
+                      name="url"
+                      placeholder="URL del anuncio"
+                      value={formData.url}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
                     <input
                       type="text"
-                      placeholder="Añadir equipamiento..."
-                      value={formData.newEquipment}
-                      onChange={(e) => setFormData({ ...formData, newEquipment: e.target.value })}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddEquipment())}
-                      className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      name="location"
+                      placeholder="Ubicación"
+                      value={formData.location}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                     />
-                    <button
-                      type="button"
-                      onClick={handleAddEquipment}
-                      className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
-                    >
-                      <Plus className="w-5 h-5" />
-                    </button>
+                    <input
+                      type="text"
+                      name="origin"
+                      placeholder="País de origen"
+                      value={formData.origin}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {formData.equipment.map((item) => (
-                      <span
-                        key={item}
-                        className="px-2 py-1 bg-secondary/50 text-secondary-foreground rounded-md text-sm flex items-center gap-1"
-                      >
-                        {item}
-                        <button onClick={() => handleRemoveEquipment(item)} className="hover:text-destructive">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </CollapsibleSection>
+                </CollapsibleSection>
+              </div>
 
-              {/* Etiquetas y Notas */}
-              <CollapsibleSection
-                title="Etiquetas y Notas"
-                id="tags"
-                expanded={expandedSection}
-                onToggle={setExpandedSection}
-              >
-                <div className="space-y-4">
+              {/* Especificaciones Técnicas */}
+              <div className={activeMobileTab === 'technical' ? 'block' : 'hidden lg:block'}>
+                <CollapsibleSection
+                  title="Especificaciones Técnicas"
+                  id="technical"
+                  expanded={expandedSection}
+                  onToggle={setExpandedSection}
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2 grid grid-cols-2 gap-4">
+                      <select
+                        name="color"
+                        value={formData.color}
+                        onChange={handleChange}
+                        className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      >
+                        <option value="">Color</option>
+                        {colors.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        name="doors"
+                        value={formData.doors}
+                        onChange={handleChange}
+                        className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      >
+                        <option value="">Puertas</option>
+                        {doorsOptions.map((d) => (
+                          <option key={d} value={d}>
+                            {d} puertas
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <select
+                      name="motorType"
+                      value={formData.motorType}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    >
+                      <option value="">Tipo de Motor</option>
+                      {motorTypes.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      name="displacement"
+                      placeholder="Cilindrada (cc)"
+                      value={formData.displacement}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                    <input
+                      type="text"
+                      name="co2"
+                      placeholder="Emisiones CO2 (g/km)"
+                      value={formData.co2}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                    <input
+                      type="number"
+                      name="cv"
+                      placeholder="Potencia (CV)"
+                      value={formData.cv}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                    <input
+                      type="number"
+                      name="mileage"
+                      placeholder="Kilometraje"
+                      value={formData.mileage}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                    <select
+                      name="fuelType"
+                      value={formData.fuelType}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    >
+                      <option value="">Combustible</option>
+                      {fuelTypes.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      name="transmission"
+                      value={formData.transmission}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    >
+                      <option value="">Transmisión</option>
+                      {transmissionTypes.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      name="traction"
+                      value={formData.traction}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    >
+                      <option value="">Tracción</option>
+                      {tractionTypes.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      name="steering"
+                      value={formData.steering}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    >
+                      {steeringOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </CollapsibleSection>
+              </div>
+
+              {/* Estado e ITV */}
+              <div className={activeMobileTab === 'itv' ? 'block' : 'hidden lg:block'}>
+                <CollapsibleSection
+                  title="Estado e ITV"
+                  id="itv"
+                  expanded={expandedSection}
+                  onToggle={setExpandedSection}
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <input
+                      type="text"
+                      name="inspectionName"
+                      placeholder="Nombre Inspección (ej: TÜV)"
+                      value={formData.inspectionName}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                    <select
+                      name="inspectionStatus"
+                      value={formData.inspectionStatus}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    >
+                      <option value="aprobada">Aprobada</option>
+                      <option value="pendiente">Pendiente</option>
+                      <option value="caducada">Caducada</option>
+                    </select>
+                    <input
+                      type="date"
+                      name="inspectionExpiry"
+                      placeholder="Fecha caducidad"
+                      value={formData.inspectionExpiry}
+                      onChange={handleChange}
+                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                    <textarea
+                      name="defects"
+                      placeholder="Defectos o daños conocidos..."
+                      value={formData.defects}
+                      onChange={handleChange}
+                      rows={3}
+                      className="sm:col-span-2 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
+                    />
+                  </div>
+                </CollapsibleSection>
+              </div>
+
+              {/* Precio y Costes */}
+              <div className={activeMobileTab === 'pricing' ? 'block' : 'hidden lg:block'}>
+                <CollapsibleSection
+                  title="Precio y Costes"
+                  id="pricing"
+                  expanded={expandedSection}
+                  onToggle={setExpandedSection}
+                >
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Precio Base</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            name="price"
+                            placeholder="0"
+                            value={formData.price}
+                            onChange={handleChange}
+                            className="w-full pl-8 pr-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                          />
+                          <span className="absolute left-3 top-2 text-muted-foreground">€</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Coste Transferencia</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            name="transferCost"
+                            placeholder="0"
+                            value={formData.transferCost}
+                            onChange={handleChange}
+                            className="w-full pl-8 pr-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                          />
+                          <span className="absolute left-3 top-2 text-muted-foreground">€</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Lista de Gastos */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Gastos Adicionales</label>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <select
+                          value={newExpense.type}
+                          onChange={(e) => setNewExpense({ ...newExpense, type: e.target.value })}
+                          className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        >
+                          {expenseTypes.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          placeholder="€"
+                          value={newExpense.amount}
+                          onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
+                          className="w-24 px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddExpense}
+                          className="px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      {formData.expenses.length > 0 && (
+                        <div className="bg-muted/30 rounded-lg p-2 space-y-1">
+                          {formData.expenses.map((expense) => (
+                            <div key={expense.id} className="flex justify-between items-center text-sm p-1 hover:bg-muted/50 rounded">
+                              <span>{expense.type}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{expense.amount}€</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveExpense(expense.id)}
+                                  className="text-destructive hover:text-destructive/80"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Totales */}
+                    <div className="bg-primary/5 p-4 rounded-lg space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Precio Base:</span>
+                        <span>{Number(formData.price || 0).toLocaleString()}€</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Gastos Totales:</span>
+                        <span>{calculateTotalExpenses().toLocaleString()}€</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-lg pt-2 border-t border-primary/10">
+                        <span>Precio Final:</span>
+                        <span className="text-primary">{calculateFinalPrice().toLocaleString()}€</span>
+                      </div>
+                    </div>
+                  </div>
+                </CollapsibleSection>
+              </div>
+
+              {/* Equipamiento */}
+              <div className={activeMobileTab === 'equipment' ? 'block' : 'hidden lg:block'}>
+                <CollapsibleSection
+                  title="Equipamiento"
+                  id="equipment"
+                  expanded={expandedSection}
+                  onToggle={setExpandedSection}
+                >
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Etiquetas</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Nueva etiqueta..."
-                        value={formData.newTag}
-                        onChange={(e) => setFormData({ ...formData, newTag: e.target.value })}
-                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
+                        placeholder="Añadir equipamiento..."
+                        value={formData.newEquipment}
+                        onChange={(e) => setFormData({ ...formData, newEquipment: e.target.value })}
+                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddEquipment())}
                         className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                       />
                       <button
                         type="button"
-                        onClick={handleAddTag}
+                        onClick={handleAddEquipment}
                         className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
                       >
                         <Plus className="w-5 h-5" />
                       </button>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {formData.tags.map((tag) => (
+                      {formData.equipment.map((item) => (
                         <span
-                          key={tag}
-                          className="px-2 py-1 bg-accent/20 text-accent rounded-md text-sm flex items-center gap-1"
+                          key={item}
+                          className="px-2 py-1 bg-secondary/50 text-secondary-foreground rounded-md text-sm flex items-center gap-1"
                         >
-                          {tag}
-                          <button onClick={() => handleRemoveTag(tag)} className="hover:text-destructive">
+                          {item}
+                          <button onClick={() => handleRemoveEquipment(item)} className="hover:text-destructive">
                             <X className="w-3 h-3" />
                           </button>
                         </span>
                       ))}
                     </div>
                   </div>
+                </CollapsibleSection>
+              </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Notas Privadas</label>
-                    <textarea
-                      name="notes"
-                      placeholder="Notas internas sobre el coche..."
-                      value={formData.notes}
-                      onChange={handleChange}
-                      rows={4}
-                      className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
-                    />
+              {/* Etiquetas y Notas */}
+              <div className={activeMobileTab === 'tags' ? 'block' : 'hidden lg:block'}>
+                <CollapsibleSection
+                  title="Etiquetas y Notas"
+                  id="tags"
+                  expanded={expandedSection}
+                  onToggle={setExpandedSection}
+                >
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Etiquetas</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Nueva etiqueta..."
+                          value={formData.newTag}
+                          onChange={(e) => setFormData({ ...formData, newTag: e.target.value })}
+                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
+                          className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddTag}
+                          className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="px-2 py-1 bg-accent/20 text-accent rounded-md text-sm flex items-center gap-1"
+                          >
+                            {tag}
+                            <button onClick={() => handleRemoveTag(tag)} className="hover:text-destructive">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Notas Privadas</label>
+                      <textarea
+                        name="notes"
+                        placeholder="Notas internas sobre el coche..."
+                        value={formData.notes}
+                        onChange={handleChange}
+                        rows={4}
+                        className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
+                      />
+                    </div>
                   </div>
-                </div>
-              </CollapsibleSection>
+                </CollapsibleSection>
+              </div>
             </form>
           </div>
         </div>
@@ -873,24 +913,14 @@ function CollapsibleSection({
   onToggle: (id: string | null) => void
   children: React.ReactNode
 }) {
-  const isExpanded = expanded === id
-
   return (
-    <div className="md:block">
-      <button
-        type="button"
-        onClick={() => onToggle(isExpanded ? null : id)}
-        className="md:hidden w-full flex items-center justify-between p-3 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors"
-      >
-        <h3 className="font-semibold text-sm">{title}</h3>
-        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-      </button>
-
-      <div className="hidden md:block">
-        <h3 className="text-lg font-semibold mb-4">{title}</h3>
+    <div className="h-full">
+      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-primary">
+        {title}
+      </h3>
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+        {children}
       </div>
-
-      {(isExpanded || window.innerWidth >= 768) && <div className={isExpanded ? "mt-3 md:mt-0" : ""}>{children}</div>}
     </div>
   )
 }
