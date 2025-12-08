@@ -142,6 +142,18 @@ export function CarImport({ role }: CarImportProps) {
         total_cost: Number(newCar.finalPrice) || (Number(newCar.price) + Number(newCar.totalExpenses || 0)),
         expenses: newCar.expenses || null,
 
+        // Desglose de costes (mapeo desde expenses)
+        import_tax: newCar.expenses?.find((e: any) => e.type === 'Impuestos Aduana' || e.type === 'IVA' || e.type === 'Aranceles')?.amount || 0,
+        shipping_cost: newCar.expenses?.find((e: any) => e.type === 'Transporte' || e.type === 'Grúa')?.amount || 0,
+        registration_tax: newCar.expenses?.find((e: any) => e.type === 'Matriculación' || e.type === 'Impuesto Matriculación')?.amount || 0,
+        other_costs: newCar.expenses?.reduce((sum: number, e: any) => {
+          const mainTypes = ['Impuestos Aduana', 'IVA', 'Aranceles', 'Transporte', 'Grúa', 'Matriculación', 'Impuesto Matriculación'];
+          if (!mainTypes.includes(e.type)) {
+            return sum + (Number(e.amount) || 0);
+          }
+          return sum;
+        }, 0) || 0,
+
         // Multimedia y notas
         image_url: newCar.images && newCar.images.length > 0 ? newCar.images[0] : null,
         images: newCar.images || [],

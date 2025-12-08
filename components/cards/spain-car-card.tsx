@@ -1,6 +1,7 @@
 "use client"
 
 import { ExternalLink, Trash2, Edit } from "lucide-react"
+import { ImageCarousel } from "@/components/ui/image-carousel"
 
 interface SpainCarCardProps {
     car: any
@@ -9,21 +10,13 @@ interface SpainCarCardProps {
 }
 
 export function SpainCarCard({ car, onDelete, onEdit }: SpainCarCardProps) {
-    const photoUrl = car.images?.[0]
+    const images = car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : [])
 
     return (
         <div className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/30 transition-colors">
-            {/* Imagen */}
-            <div className="w-full h-40 bg-gradient-to-br from-accent/10 to-primary/10 flex items-center justify-center text-4xl overflow-hidden">
-                {photoUrl ? (
-                    <img
-                        src={photoUrl || "/placeholder.svg"}
-                        alt={`${car.brand} ${car.model}`}
-                        className="w-full h-full object-cover"
-                    />
-                ) : (
-                    <span>🚗</span>
-                )}
+            {/* Carrusel de Imágenes */}
+            <div className="w-full h-40">
+                <ImageCarousel images={images} alt={`${car.brand} ${car.model}`} />
             </div>
 
             {/* Contenido */}

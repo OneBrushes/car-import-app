@@ -35,19 +35,27 @@ export function ImageUpload({ images, onImagesChange, maxImages = 10 }: ImageUpl
     handleFiles(files)
   }
 
-  const handleFiles = (files: File[]) => {
+  const handleFiles = async (files: File[]) => {
     const imageFiles = files.filter((file) => file.type.startsWith("image/"))
 
-    imageFiles.forEach((file) => {
-      if (images.length < maxImages) {
+    // Leer todos los archivos en paralelo
+    const promises = imageFiles.map(file => {
+      return new Promise<string>((resolve) => {
         const reader = new FileReader()
-        reader.onload = (e) => {
-          const base64 = e.target?.result as string
-          onImagesChange([...images, base64])
-        }
+        reader.onload = (e) => resolve(e.target?.result as string)
         reader.readAsDataURL(file)
-      }
+      })
     })
+
+    const newImages = await Promise.all(promises)
+
+    // Calcular cuántas imágenes podemos añadir
+    const availableSlots = maxImages - images.length
+    const imagesToAdd = newImages.slice(0, availableSlots)
+
+    if (imagesToAdd.length > 0) {
+      onImagesChange([...images, ...imagesToAdd])
+    }
   }
 
   const removeImage = (index: number) => {
@@ -61,9 +69,8 @@ export function ImageUpload({ images, onImagesChange, maxImages = 10 }: ImageUpl
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
-          isDragging ? "border-primary bg-primary/10" : "border-border bg-background hover:border-primary/50"
-        }`}
+        className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${isDragging ? "border-primary bg-primary/10" : "border-border bg-background hover:border-primary/50"
+          }`}
       >
         <input
           type="file"
@@ -97,7 +104,7 @@ export function ImageUpload({ images, onImagesChange, maxImages = 10 }: ImageUpl
                 key={index}
                 className="relative group rounded-lg overflow-hidden border border-border hover:border-primary/50 transition-colors"
               >
-                <img src={image || "/placeholder.svg"} alt={`Foto ${index + 1}`} className="w-full h-24 object-cover" />
+                <img src={image || "/placeholder.svg"} alt={`Foto ${index + 1}`} className="w-full h-40 object-cover" />
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <button
                     type="button"
