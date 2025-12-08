@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import { Loader2, Shield, Users, Trash2, Database, Lock, Ban, Info, HardDrive, RefreshCw } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
+import { format } from "date-fns"
 import { es } from "date-fns/locale"
 
 interface Profile {
@@ -641,7 +641,7 @@ export function AdminPanel() {
                                                     </TableCell>
                                                     <TableCell className="min-w-[200px]">{log.details}</TableCell>
                                                     <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                                                        {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: es })}
+                                                        {format(new Date(log.created_at), "dd/MM/yyyy HH:mm", { locale: es })}
                                                     </TableCell>
                                                 </TableRow>
                                             ))
