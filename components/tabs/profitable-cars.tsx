@@ -21,6 +21,9 @@ interface ProfitableCar {
     year_from: number
     year_to: number | null
     motor_type: string
+    avg_mileage: number | null
+    avg_cv: number | null
+    transmission: string | null
     avg_import_cost: number
     avg_spain_price: number
     profit_margin: number
@@ -32,7 +35,13 @@ interface ProfitableCarModalProps {
     role: string
 }
 
-const COUNTRIES = ["Alemania", "Francia", "Italia", "Países Bajos", "Bélgica", "Austria", "Suiza", "Otros"]
+const COUNTRIES = [
+    "Alemania", "Francia", "Italia", "Países Bajos", "Bélgica", "Austria",
+    "Suiza", "Polonia", "República Checa", "Dinamarca", "Suecia", "Noruega",
+    "Portugal", "Reino Unido", "Irlanda", "Luxemburgo", "Otros"
+]
+
+const TRANSMISSIONS = ["Manual", "Automático", "Semiautomático"]
 
 export function ProfitableCars({ role }: ProfitableCarModalProps) {
     const [cars, setCars] = useState<ProfitableCar[]>([])
@@ -54,6 +63,9 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
         year_from: new Date().getFullYear() - 5,
         year_to: new Date().getFullYear(),
         motor_type: "",
+        avg_mileage: "",
+        avg_cv: "",
+        transmission: "",
         avg_import_cost: "",
         avg_spain_price: "",
         notes: ""
@@ -123,6 +135,9 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                 year_from: formData.year_from,
                 year_to: formData.year_to || null,
                 motor_type: formData.motor_type,
+                avg_mileage: formData.avg_mileage ? Number(formData.avg_mileage) : null,
+                avg_cv: formData.avg_cv ? Number(formData.avg_cv) : null,
+                transmission: formData.transmission || null,
                 avg_import_cost: Number(formData.avg_import_cost),
                 avg_spain_price: Number(formData.avg_spain_price),
                 notes: formData.notes || null
@@ -166,6 +181,9 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
             year_from: car.year_from,
             year_to: car.year_to || new Date().getFullYear(),
             motor_type: car.motor_type,
+            avg_mileage: car.avg_mileage?.toString() || "",
+            avg_cv: car.avg_cv?.toString() || "",
+            transmission: car.transmission || "",
             avg_import_cost: car.avg_import_cost.toString(),
             avg_spain_price: car.avg_spain_price.toString(),
             notes: car.notes || ""
@@ -199,6 +217,9 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
             year_from: new Date().getFullYear() - 5,
             year_to: new Date().getFullYear(),
             motor_type: "",
+            avg_mileage: "",
+            avg_cv: "",
+            transmission: "",
             avg_import_cost: "",
             avg_spain_price: "",
             notes: ""
@@ -211,10 +232,13 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
         return <Badge variant="destructive"><TrendingDown className="w-3 h-3 mr-1" /> {margin.toFixed(1)}%</Badge>
     }
 
-    const uniqueBrands = Array.from(new Set(cars.map(c => c.brand))).sort()
     const avgProfit = filteredCars.length > 0
         ? filteredCars.reduce((sum, c) => sum + c.profit_margin, 0) / filteredCars.length
         : 0
+
+    // Datos para el gráfico (top 10 más rentables)
+    const chartData = filteredCars.slice(0, 10)
+    const maxProfit = Math.max(...chartData.map(c => c.profit_margin), 0)
 
     if (loading) {
         return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
@@ -263,6 +287,38 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Gráfico de Rentabilidad */}
+            {chartData.length > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Top 10 Más Rentables</CardTitle>
+                        <CardDescription>Comparativa de márgenes de beneficio</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            {chartData.map((car, index) => (
+                                <div key={car.id} className="space-y-1">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="font-medium">
+                                            {index + 1}. {car.brand} {car.model} ({car.year_from})
+                                        </span>
+                                        <span className="text-muted-foreground">{car.profit_margin.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full transition-all ${car.profit_margin >= 30 ? 'bg-green-600' :
+                                                    car.profit_margin >= 15 ? 'bg-yellow-600' : 'bg-red-600'
+                                                }`}
+                                            style={{ width: `${(car.profit_margin / maxProfit) * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Filters and Add Button */}
             <Card>
@@ -326,7 +382,10 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                                     <TableHead>Modelo</TableHead>
                                     <TableHead>Años</TableHead>
                                     <TableHead>Motor</TableHead>
-                                    <TableHead className="text-right">Coste Import.</TableHead>
+                                    <TableHead>KM</TableHead>
+                                    <TableHead>CV</TableHead>
+                                    <TableHead>Trans.</TableHead>
+                                    <TableHead className="text-right">Precio Final</TableHead>
                                     <TableHead className="text-right">Precio España</TableHead>
                                     <TableHead>Rentabilidad</TableHead>
                                     {role === 'admin' && <TableHead>Acciones</TableHead>}
@@ -342,6 +401,9 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                                             {car.year_from}{car.year_to ? ` - ${car.year_to}` : '+'}
                                         </TableCell>
                                         <TableCell className="text-sm text-muted-foreground">{car.motor_type}</TableCell>
+                                        <TableCell className="text-sm">{car.avg_mileage ? `${car.avg_mileage.toLocaleString()} km` : '-'}</TableCell>
+                                        <TableCell className="text-sm">{car.avg_cv || '-'}</TableCell>
+                                        <TableCell className="text-sm">{car.transmission || '-'}</TableCell>
                                         <TableCell className="text-right">{car.avg_import_cost.toLocaleString()}€</TableCell>
                                         <TableCell className="text-right">{car.avg_spain_price.toLocaleString()}€</TableCell>
                                         <TableCell>{getProfitBadge(car.profit_margin)}</TableCell>
@@ -373,7 +435,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
 
             {/* Modal Añadir/Editar */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent className="sm:max-w-[600px]">
+                <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>{editingCar ? "Editar" : "Añadir"} Coche Rentable</DialogTitle>
                         <DialogDescription>
@@ -445,10 +507,45 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Coste Importación (€) *</Label>
+                                <Label>Kilómetros (promedio)</Label>
+                                <Input
+                                    type="number"
+                                    placeholder="ej: 150000"
+                                    value={formData.avg_mileage}
+                                    onChange={(e) => setFormData({ ...formData, avg_mileage: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <Label>CV (promedio)</Label>
+                                <Input
+                                    type="number"
+                                    placeholder="ej: 150"
+                                    value={formData.avg_cv}
+                                    onChange={(e) => setFormData({ ...formData, avg_cv: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <Label>Transmisión</Label>
+                                <Select value={formData.transmission} onValueChange={(val) => setFormData({ ...formData, transmission: val })}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecciona..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {TRANSMISSIONS.map(t => (
+                                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div>
+                                <Label>Precio Final Importado (€) *</Label>
                                 <Input
                                     type="number"
                                     step="0.01"
+                                    placeholder="Coste total del coche"
                                     value={formData.avg_import_cost}
                                     onChange={(e) => setFormData({ ...formData, avg_import_cost: e.target.value })}
                                     required
