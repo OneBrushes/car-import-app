@@ -35,6 +35,8 @@ export function AdminPanel() {
     const [logs, setLogs] = useState<Log[]>([])
     const [loading, setLoading] = useState(true)
     const [carsCount, setCarsCount] = useState<Record<string, number>>({})
+    const [dbSizeMB, setDbSizeMB] = useState<number>(0)
+    const [usersCountReal, setUsersCountReal] = useState<number>(0)
 
     // Real Storage Calculation State
     const [realStorageMB, setRealStorageMB] = useState<number | null>(null)
@@ -120,6 +122,17 @@ export function AdminPanel() {
             })
             setCarsCount(counts)
 
+            // Métricas Reales (RPC)
+            try {
+                const { data: dbBytes } = await supabase.rpc('get_database_size')
+                if (dbBytes) setDbSizeMB(Number(dbBytes) / (1024 * 1024))
+
+                const { data: usersReal } = await supabase.rpc('get_users_count')
+                if (usersReal) setUsersCountReal(Number(usersReal))
+            } catch (e) {
+                console.warn("RPC metrics failed, using fallback", e)
+            }
+
         } catch (error) {
             console.error("Error fetching admin data:", error)
             toast.error("Error cargando datos de administración")
@@ -131,6 +144,19 @@ export function AdminPanel() {
     const calculateRealStorage = async () => {
         setCalculatingStorage(true)
         try {
+            // 1. Intentar RPC (Rápido y preciso)
+            const { data: storageBytes, error: rpcError } = await supabase.rpc('get_storage_size')
+
+            if (!rpcError && storageBytes !== null) {
+                const mb = Number(storageBytes) / (1024 * 1024)
+                setRealStorageMB(mb)
+                toast.success(`Almacenamiento real (RPC): ${mb.toFixed(2)} MB`)
+                return
+            }
+
+            console.warn("RPC storage failed, falling back to manual calculation", rpcError)
+
+            // 2. Fallback: Iterar sobre archivos (Lento)
             let totalBytes = 0
             const { data: allCars } = await supabase.from('imported_cars').select('image_url')
 
@@ -285,7 +311,7 @@ export function AdminPanel() {
     const EST_BYTES_PER_LOG = 512 // 0.5KB per log entry
 
     const dbUsageBytes = (users.length * EST_BYTES_PER_USER) + (totalCars * EST_BYTES_PER_CAR_DATA) + (logs.length * EST_BYTES_PER_LOG * 10)
-    const dbUsageMB = dbUsageBytes / (1024 * 1024)
+    const dbUsageMB = dbSizeMB > 0 ? dbSizeMB : (dbUsageBytes / (1024 * 1024))
     const dbPercentage = (dbUsageMB / DB_LIMIT_MB) * 100
 
 
@@ -307,7 +333,7 @@ export function AdminPanel() {
                         <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{users.length}</div>
+                        <div className="text-2xl font-bold">{usersCountReal > 0 ? usersCountReal : users.length}</div>
                     </CardContent>
                 </Card>
 
