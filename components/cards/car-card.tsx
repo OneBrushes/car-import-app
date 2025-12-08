@@ -42,7 +42,7 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCa
       </div>
 
       {/* Carrusel de Imágenes */}
-      <div className="w-full h-40">
+      <div className="w-full aspect-video bg-muted/20">
         <ImageCarousel images={images} alt={`${car.brand} ${car.model}`} />
       </div>
 

@@ -15,7 +15,7 @@ export function SpainCarCard({ car, onDelete, onEdit }: SpainCarCardProps) {
     return (
         <div className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/30 transition-colors">
             {/* Carrusel de Imágenes */}
-            <div className="w-full h-40">
+            <div className="w-full aspect-video bg-muted/20">
                 <ImageCarousel images={images} alt={`${car.brand} ${car.model}`} />
             </div>
 
