@@ -31,6 +31,7 @@ interface ImportedCar {
   totalExpenses?: number
   mileage?: number
   cv?: number
+  origin?: string
 }
 
 export function Dashboard() {
@@ -98,7 +99,8 @@ export function Dashboard() {
         price: Number(car.price),
         totalExpenses: Number(car.total_cost),
         mileage: Number(car.mileage),
-        cv: Number(car.cv)
+        cv: Number(car.cv),
+        origin: car.origin
       }))
 
       setBoughtCars(formattedInventory)

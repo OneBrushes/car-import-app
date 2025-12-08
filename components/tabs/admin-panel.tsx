@@ -364,11 +364,11 @@ export function AdminPanel() {
             </div>
 
             <Tabs defaultValue="users" className="space-y-4">
-                <TabsList>
-                    <TabsTrigger value="users">Gestión Usuarios</TabsTrigger>
-                    <TabsTrigger value="storage">Almacenamiento & DB</TabsTrigger>
-                    <TabsTrigger value="security">Seguridad</TabsTrigger>
-                    <TabsTrigger value="logs">Logs Sistema</TabsTrigger>
+                <TabsList className="flex flex-wrap h-auto w-full justify-start gap-2 bg-muted/50 p-1">
+                    <TabsTrigger value="users" className="flex-1 min-w-[120px]">Gestión Usuarios</TabsTrigger>
+                    <TabsTrigger value="storage" className="flex-1 min-w-[120px]">Almacenamiento & DB</TabsTrigger>
+                    <TabsTrigger value="security" className="flex-1 min-w-[120px]">Seguridad</TabsTrigger>
+                    <TabsTrigger value="logs" className="flex-1 min-w-[120px]">Logs Sistema</TabsTrigger>
                 </TabsList>
 
                 {/* --- USERS TAB --- */}

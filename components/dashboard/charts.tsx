@@ -101,11 +101,11 @@ export function DashboardCharts({ boughtCars, importedCars }: DashboardChartsPro
                     <CardDescription>Coches comprados por mes</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div style={{ height: '300px' }}>
+                    <div style={{ height: '350px' }}>
                         {monthlyData[0]?.data.length > 0 ? (
                             <ResponsiveLine
                                 data={monthlyData}
-                                margin={{ top: 20, right: 20, bottom: 60, left: 60 }}
+                                margin={{ top: 20, right: 20, bottom: 70, left: 60 }}
                                 xScale={{ type: 'point' }}
                                 yScale={{ type: 'linear', min: 'auto', max: 'auto', stacked: false }}
                                 curve="monotoneX"
@@ -159,13 +159,13 @@ export function DashboardCharts({ boughtCars, importedCars }: DashboardChartsPro
                     <CardDescription>Beneficio por coche vendido</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div style={{ height: '300px' }}>
+                    <div style={{ height: '350px' }}>
                         {profitabilityData.length > 0 ? (
                             <ResponsiveBar
                                 data={profitabilityData}
                                 keys={['profit']}
                                 indexBy="car"
-                                margin={{ top: 20, right: 20, bottom: 80, left: 60 }}
+                                margin={{ top: 20, right: 20, bottom: 100, left: 60 }}
                                 padding={0.3}
                                 colors={(bar) => (bar.data as any).profitColor}
                                 axisBottom={{
@@ -211,7 +211,7 @@ export function DashboardCharts({ boughtCars, importedCars }: DashboardChartsPro
                     <CardDescription>Origen de los coches importados</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div style={{ height: '300px' }}>
+                    <div style={{ height: '350px' }}>
                         {countryData.length > 0 ? (
                             <ResponsivePie
                                 data={countryData}
@@ -228,10 +228,20 @@ export function DashboardCharts({ boughtCars, importedCars }: DashboardChartsPro
                                 arcLinkLabelsThickness={2}
                                 arcLinkLabelsColor={{ from: 'color' }}
                                 arcLabelsSkipAngle={10}
-                                arcLabelsTextColor={{ from: 'color', modifiers: [['darker', 2]] }}
+                                arcLabelsTextColor="#ffffff"
                                 theme={{
                                     labels: {
                                         text: { fill: 'hsl(var(--foreground))' }
+                                    },
+                                    tooltip: {
+                                        container: {
+                                            background: 'hsl(var(--background))',
+                                            color: 'hsl(var(--foreground))',
+                                            fontSize: '12px',
+                                            borderRadius: '6px',
+                                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                                            border: '1px solid hsl(var(--border))'
+                                        }
                                     }
                                 }}
                             />
@@ -251,7 +261,7 @@ export function DashboardCharts({ boughtCars, importedCars }: DashboardChartsPro
                     <CardDescription>Top 8 marcas más caras</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div style={{ height: '300px' }}>
+                    <div style={{ height: '350px' }}>
                         {brandPriceData.length > 0 ? (
                             <ResponsiveBar
                                 data={brandPriceData}

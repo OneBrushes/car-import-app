@@ -81,7 +81,7 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCa
         <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
           {car.url && (
             <a
-              href={car.url}
+              href={car.url.startsWith('http') ? car.url : `https://${car.url}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors text-sm font-medium"
