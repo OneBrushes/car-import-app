@@ -102,10 +102,24 @@ export function ImageUpload({ images, onImagesChange, maxImages = 10 }: ImageUpl
             {images.map((image, index) => (
               <div
                 key={index}
-                className="relative group rounded-lg overflow-hidden border border-border hover:border-primary/50 transition-colors"
+                className="relative group rounded-lg overflow-hidden border border-border hover:border-primary/50 transition-colors bg-black/5"
               >
-                <img src={image || "/placeholder.svg"} alt={`Foto ${index + 1}`} className="w-full h-40 object-cover" />
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="aspect-video w-full relative">
+                  <img
+                    src={image || "/placeholder.svg"}
+                    alt={`Foto ${index + 1}`}
+                    className="absolute inset-0 w-full h-full object-contain"
+                  />
+                </div>
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.open(image, '_blank')}
+                    className="p-2 bg-primary/90 text-white rounded-lg hover:bg-primary transition-colors"
+                    title="Ver grande"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => removeImage(index)}

@@ -329,6 +329,7 @@ export function CarImport({ role }: CarImportProps) {
 
       {/* Modal */}
       <AddCarModal
+        key={editingCar ? editingCar.id : `new-${Date.now()}`}
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false)
