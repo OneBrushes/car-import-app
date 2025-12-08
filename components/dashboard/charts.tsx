@@ -93,9 +93,9 @@ export function DashboardCharts({ boughtCars, importedCars }: DashboardChartsPro
     const brandPriceData = getBrandPriceComparison()
 
     return (
-        <div className="grid gap-6 md:grid-cols-2 mt-6">
+        <div className="grid gap-6 lg:grid-cols-2 mt-6">
             {/* Gráfico 1: Evolución Temporal */}
-            <Card className="col-span-2">
+            <Card className="lg:col-span-2">
                 <CardHeader>
                     <CardTitle>Evolución de Compras</CardTitle>
                     <CardDescription>Coches comprados por mes</CardDescription>
@@ -255,7 +255,7 @@ export function DashboardCharts({ boughtCars, importedCars }: DashboardChartsPro
             </Card>
 
             {/* Gráfico 4: Precio Promedio por Marca */}
-            <Card className="col-span-2">
+            <Card className="lg:col-span-2">
                 <CardHeader>
                     <CardTitle>Precio Promedio por Marca</CardTitle>
                     <CardDescription>Top 8 marcas más caras</CardDescription>
