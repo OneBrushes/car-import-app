@@ -124,7 +124,7 @@ export function ImageCarousel({ images, alt = "Car image" }: ImageCarouselProps)
             </div>
 
             {/* Image Counter */}
-            <div className="absolute top-2 right-2 bg-black/50 text-white px-2 py-0.5 rounded text-[10px] font-medium z-10 pointer-events-none">
+            <div className="absolute top-2 left-2 bg-black/50 text-white px-2 py-0.5 rounded text-[10px] font-medium z-10 pointer-events-none">
                 {selectedIndex + 1}/{images.length}
             </div>
         </div>
