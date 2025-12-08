@@ -164,6 +164,13 @@ export function AdminPanel() {
                 details: `Rol cambiado a ${newRole} para el usuario ${userId}`
             })
 
+            // Si el admin cambió su propio rol, recargar la página
+            const { data: { user: currentUser } } = await supabase.auth.getUser()
+            if (currentUser?.id === userId) {
+                toast.info("Recargando página para aplicar cambios...")
+                setTimeout(() => window.location.reload(), 1500)
+            }
+
         } catch (error) {
             toast.error("Error al actualizar el rol")
         }

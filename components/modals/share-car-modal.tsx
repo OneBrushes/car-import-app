@@ -21,7 +21,6 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
     const [sharedUsers, setSharedUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [selectedUser, setSelectedUser] = useState<string>("")
-    const [currentUserId, setCurrentUserId] = useState<string>("")
 
     // Cargar usuarios cuando se abre el modal
     useEffect(() => {
@@ -29,18 +28,14 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
             if (!isOpen) return
 
             try {
-                // Obtener el ID del usuario actual
                 const { data: { user } } = await supabase.auth.getUser()
-                if (user) setCurrentUserId(user.id)
 
-                // Cargar todos los usuarios
                 const { data, error } = await supabase
                     .from('profiles')
                     .select('id, email, first_name, last_name')
                     .order('first_name', { ascending: true, nullsFirst: false })
 
                 if (!error && data) {
-                    // Separar usuarios compartidos y disponibles
                     const shared = data.filter(u => currentSharedWith.includes(u.id))
                     const available = data.filter(u =>
                         u.id !== user?.id && !currentSharedWith.includes(u.id)
@@ -77,8 +72,13 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
             if (error) throw error
 
             toast.success("Coche compartido correctamente")
-            onShare()
+
+            // Cerrar modal ANTES de recargar
+            onClose()
             setSelectedUser("")
+
+            // Recargar en segundo plano
+            onShare()
         } catch (error) {
             console.error(error)
             toast.error("Error al compartir")
@@ -101,6 +101,11 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
             if (error) throw error
 
             toast.success("Compartido eliminado")
+
+            // Cerrar modal ANTES de recargar
+            onClose()
+
+            // Recargar en segundo plano
             onShare()
         } catch (error) {
             console.error(error)

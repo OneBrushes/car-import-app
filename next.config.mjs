@@ -7,6 +7,9 @@ const nextConfig = {
     unoptimized: true,
   },
   output: 'export',
+  analytics: {
+    disabled: true,
+  },
 }
 
 export default nextConfig
