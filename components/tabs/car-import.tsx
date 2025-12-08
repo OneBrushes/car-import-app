@@ -68,9 +68,10 @@ export function CarImport({ role }: CarImportProps) {
       if (error) throw error
 
       const formattedCars: Car[] = data.map((car: any) => ({
+        ...car, // Pasar todos los campos de la BD (snake_case) para que AddCarModal los pueda leer
         id: car.id,
-        user_id: car.user_id, // IMPORTANTE: Para saber quién es el dueño
-        shared_with: car.shared_with || [], // IMPORTANTE: Para saber con quién está compartido
+        user_id: car.user_id,
+        shared_with: car.shared_with || [],
         brand: car.brand,
         model: car.model,
         year: car.year,
@@ -79,13 +80,16 @@ export function CarImport({ role }: CarImportProps) {
         mileage: Number(car.mileage || 0),
         cv: Number(car.cv || 0),
         photo: car.image_url,
-        image_url: car.image_url, // Para compatibilidad con CarCard
-        images: car.image_url ? [car.image_url] : [], // Para compatibilidad
-        tags: [],
-        origin: "Importado",
+        image_url: car.image_url,
+        // Priorizar el array de imágenes real, si no existe, usar image_url
+        images: car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : []),
+        tags: car.tags || [],
+        origin: car.origin || "Importado",
         totalExpenses: Number(car.total_cost) - Number(car.price),
         url: car.url || "",
-        steering: car.steering
+        steering: car.steering,
+        // Asegurar que expenses se pasa
+        expenses: car.expenses || []
       }))
 
       setCars(formattedCars)
