@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Zap, Loader2 } from "lucide-react"
 import { RecentSalesSection } from "@/components/dashboard/recent-sales"
 import { HighlightsSection } from "@/components/dashboard/highlights"
+import { DashboardCharts } from "@/components/dashboard/charts"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 
@@ -223,6 +224,9 @@ export function Dashboard() {
 
       {/* Sección de Últimas Ventas */}
       <RecentSalesSection boughtCars={boughtCars} />
+
+      {/* Gráficos Analíticos */}
+      <DashboardCharts boughtCars={boughtCars} importedCars={importedCars} />
     </div>
   )
 }
