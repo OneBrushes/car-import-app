@@ -3,6 +3,7 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import { X, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react"
+import { toast } from "sonner"
 import { ImageUpload } from "../image-upload"
 
 interface AddCarModalProps {
@@ -186,19 +187,21 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
   }
 
   const handleAddExpense = () => {
-    if (newExpense.amount) {
+    if (newExpense.amount && !isNaN(parseFloat(newExpense.amount))) {
+      const newExpenseItem = {
+        id: crypto.randomUUID(),
+        type: newExpense.type,
+        amount: parseFloat(newExpense.amount),
+      }
+
       setFormData((prev) => ({
         ...prev,
-        expenses: [
-          ...prev.expenses,
-          {
-            id: Date.now().toString(),
-            ...newExpense,
-            amount: Number.parseFloat(newExpense.amount),
-          },
-        ],
+        expenses: [...prev.expenses, newExpenseItem],
       }))
+
       setNewExpense({ type: expenseTypes[0], amount: "" })
+    } else {
+      toast.error("Introduce un monto válido")
     }
   }
 
