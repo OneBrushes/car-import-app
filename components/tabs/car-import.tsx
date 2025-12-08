@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Search, Filter, Trash2, Edit, ChevronDown, ChevronUp, Image as ImageIcon, Loader2 } from "lucide-react"
+import { Plus, Search, Filter, Trash2, Edit, ChevronDown, ChevronUp, Image as ImageIcon, Loader2, LayoutGrid, List } from "lucide-react"
 import { AddCarModal } from "@/components/modals/add-car-modal"
 import { Button } from "@/components/ui/button"
 import { CarCard } from "@/components/cards/car-card"
@@ -29,6 +29,8 @@ interface Car {
   totalExpenses?: number
   url?: string
   steering?: string
+  expenses?: any[]
+  vehicleType?: string
 }
 
 interface CarImportProps {
@@ -39,6 +41,7 @@ export function CarImport({ role }: CarImportProps) {
   const { user } = useAuth()
   const [cars, setCars] = useState<Car[]>([])
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<'grid' | 'table' | 'gallery'>('grid')
   const [editingCar, setEditingCar] = useState<Car | null>(null)
   // Share State
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
@@ -295,7 +298,7 @@ export function CarImport({ role }: CarImportProps) {
           className="w-full px-4 py-2 rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
         />
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
@@ -305,6 +308,30 @@ export function CarImport({ role }: CarImportProps) {
             <option value="price">Precio menor</option>
             <option value="mileage">Menor km</option>
           </select>
+
+          <div className="flex bg-muted rounded-lg p-1 ml-auto gap-1">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              title="Vista Cuadrícula"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-2 rounded-md transition-all ${viewMode === 'table' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              title="Vista Tabla"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('gallery')}
+              className={`p-2 rounded-md transition-all ${viewMode === 'gallery' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              title="Vista Galería"
+            >
+              <ImageIcon className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -317,18 +344,101 @@ export function CarImport({ role }: CarImportProps) {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {sortedCars.map((car) => (
-            <CarCard
-              key={car.id}
-              car={car}
-              onDelete={() => deleteCar(car.id)}
-              onEdit={() => handleEdit(car)}
-              onShare={() => handleShareClick(car)}
-              currentUserId={user?.id}
-            />
-          ))}
-        </div>
+        <>
+          {viewMode === 'grid' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {sortedCars.map((car) => (
+                <CarCard
+                  key={car.id}
+                  car={car}
+                  onDelete={() => deleteCar(car.id)}
+                  onEdit={() => handleEdit(car)}
+                  onShare={() => handleShareClick(car)}
+                  currentUserId={user?.id}
+                />
+              ))}
+            </div>
+          )}
+
+          {viewMode === 'table' && (
+            <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
+                    <tr>
+                      <th className="p-4">Coche</th>
+                      <th className="p-4">Precio</th>
+                      <th className="p-4">Km</th>
+                      <th className="p-4">Año</th>
+                      <th className="p-4">Ubicación</th>
+                      <th className="p-4 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {sortedCars.map(car => (
+                      <tr key={car.id} className="hover:bg-muted/50 transition-colors">
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-md bg-muted overflow-hidden relative flex-shrink-0">
+                              {car.image_url ? (
+                                <img src={car.image_url} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                  <ImageIcon className="w-5 h-5" />
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-medium text-foreground">{car.brand} {car.model}</div>
+                              <div className="text-xs text-muted-foreground">{car.vehicleType}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 font-medium">{car.price.toLocaleString()} {car.currency}</td>
+                        <td className="p-4">{car.mileage.toLocaleString()} km</td>
+                        <td className="p-4">{car.year}</td>
+                        <td className="p-4 text-muted-foreground">{car.origin || "-"}</td>
+                        <td className="p-4 text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(car)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => deleteCar(car.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {viewMode === 'gallery' && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {sortedCars.map(car => (
+                <div key={car.id} className="group relative aspect-square bg-muted rounded-lg overflow-hidden cursor-pointer shadow-sm hover:shadow-md transition-all" onClick={() => handleEdit(car)}>
+                  {car.image_url ? (
+                    <img src={car.image_url} alt={car.model} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-muted">
+                      <ImageIcon className="w-10 h-10 opacity-50" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+                    <p className="text-white font-bold truncate text-sm">{car.brand} {car.model}</p>
+                    <div className="flex justify-between items-center mt-1">
+                      <p className="text-white/90 text-xs font-medium">{car.price.toLocaleString()} {car.currency}</p>
+                      <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded backdrop-blur-sm">{car.year}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Modal */}
