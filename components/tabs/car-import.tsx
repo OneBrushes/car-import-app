@@ -144,6 +144,7 @@ export function CarImport({ role }: CarImportProps) {
 
         // Multimedia y notas
         image_url: newCar.images && newCar.images.length > 0 ? newCar.images[0] : null,
+        images: newCar.images || [],
         defects: newCar.defects || null,
         notes: newCar.notes || null,
         tags: newCar.tags || [],
