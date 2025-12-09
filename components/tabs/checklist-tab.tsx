@@ -268,11 +268,12 @@ export function ChecklistTab() {
 
                                         return (
                                             <div key={idx} className="space-y-2 pb-4 border-b last:border-0 last:pb-0">
-                                                <div className="flex items-start space-x-2">
+                                                <div className="flex items-start space-x-3">
                                                     <Checkbox
                                                         id={itemKey}
                                                         checked={isChecked}
                                                         onCheckedChange={(checked) => handleCheck(itemKey, checked as boolean)}
+                                                        className="w-5 h-5 mt-0.5 border-2"
                                                     />
                                                     <div className="grid gap-1.5 leading-none w-full">
                                                         <label

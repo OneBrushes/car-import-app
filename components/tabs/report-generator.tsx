@@ -990,6 +990,7 @@ export function ReportGenerator() {
                                                     {section.type === 'image-block' && <ImageIcon className="w-4 h-4" />}
                                                     {section.type === 'pricing' && <FileText className="w-4 h-4" />}
                                                     {section.type === 'comparison' && <TrendingDown className="w-4 h-4" />}
+                                                    {section.type === 'inspection' && <Settings className="w-4 h-4" />}
                                                 </div>
                                                 <input
                                                     value={section.title}
