@@ -820,7 +820,7 @@ export function ReportGenerator() {
                     })}
 
                     {/* Footer - Siempre al final de la página */}
-                    <div className="absolute bottom-0 left-0 right-0 border-t-2 border-slate-200 bg-white px-[15mm] py-6">
+                    <div className="absolute bottom-0 left-[15mm] right-[15mm] border-t-2 border-slate-200 bg-white py-6">
                         <div className={`${showFooterContact ? 'grid grid-cols-2 gap-8' : 'text-center'}`}>
                             <div>
                                 <h4 className="font-bold text-slate-900 text-xl mb-1">NorDrive</h4>
