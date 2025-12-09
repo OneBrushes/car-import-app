@@ -819,33 +819,37 @@ export function ReportGenerator() {
                         )
                     })}
 
-                    {/* Footer - Solo en la última página */}
-                    <div className="report-page flex flex-col justify-end">
-                        <div className="border-t-2 border-slate-200 bg-white py-6">
-                            <div className={`${showFooterContact ? 'grid grid-cols-2 gap-8' : ''} mb-4`}>
-                                <div className={!showFooterContact ? 'text-center' : ''}>
-                                    <h4 className="font-bold text-slate-900 text-xl mb-1">NorDrive</h4>
-                                    <p className="text-sm text-slate-600">Importación profesional de vehículos</p>
+                    {/* Footer - Al final del contenido */}
+                    <div className="mt-16 border-t-2 border-slate-200 bg-white py-6">
+                        <div className={`${showFooterContact ? 'grid grid-cols-3 gap-8' : 'grid grid-cols-3 gap-8'} mb-4`}>
+                            {/* Columna 1: Contacto (izquierda) */}
+                            {showFooterContact ? (
+                                <div>
+                                    <h5 className="font-semibold text-slate-700 text-sm mb-2">Contacto</h5>
+                                    <p className="text-xs text-slate-600 mb-1">📧 {footerEmail}</p>
+                                    <p className="text-xs text-slate-600 mb-1">📱 {footerPhone}</p>
+                                    <p className="text-xs text-slate-600">🌐 {footerWeb}</p>
                                 </div>
-                                {showFooterContact && (
-                                    <div className="text-right">
-                                        <h5 className="font-semibold text-slate-700 text-sm mb-2">Contacto</h5>
-                                        <p className="text-xs text-slate-600 mb-1">📧 {footerEmail}</p>
-                                        <p className="text-xs text-slate-600 mb-1">📱 {footerPhone}</p>
-                                        <p className="text-xs text-slate-600">🌐 {footerWeb}</p>
-                                    </div>
-                                )}
+                            ) : (
+                                <div></div>
+                            )}
+
+                            {/* Columna 2: NorDrive (centro) */}
+                            <div className="text-center">
+                                <h4 className="font-bold text-slate-900 text-xl mb-1">NorDrive</h4>
+                                <p className="text-sm text-slate-600">Importación profesional de vehículos</p>
                             </div>
-                            <div className="border-t border-slate-200 pt-3">
-                                <div className={`${showFooterContact ? 'flex justify-between items-center' : 'text-center'}`}>
-                                    <p className="text-xs text-slate-400">
-                                        © {new Date().getFullYear()} NorDrive
-                                    </p>
-                                    <p className="text-xs text-slate-400">
-                                        Documento informativo no vinculante - Los precios pueden variar
-                                    </p>
-                                </div>
+
+                            {/* Columna 3: Disclaimer (derecha) */}
+                            <div className="text-right">
+                                <p className="text-xs text-slate-400 mb-2">Documento informativo no vinculante</p>
+                                <p className="text-xs text-slate-400">Los precios pueden variar según condiciones del mercado</p>
                             </div>
+                        </div>
+                        <div className="border-t border-slate-200 pt-3 text-center">
+                            <p className="text-xs text-slate-400">
+                                © {new Date().getFullYear()} NorDrive - Todos los derechos reservados
+                            </p>
                         </div>
                     </div>
                 </div>
