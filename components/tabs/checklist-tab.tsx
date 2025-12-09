@@ -163,38 +163,22 @@ export function ChecklistTab() {
 
         setSaving(true)
         try {
-            // Upsert logic
-            const { data: existing } = await supabase
+            // Usar upsert para manejar crear/actualizar automáticamente
+            // Requiere que car_id tenga restricción UNIQUE en la DB
+            const { error } = await supabase
                 .from('car_checklists')
-                .select('id')
-                .eq('car_id', selectedCarId)
-                .single()
+                .upsert({
+                    car_id: selectedCarId,
+                    data: checklistData,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'car_id' })
 
-            if (existing) {
-                const { error } = await supabase
-                    .from('car_checklists')
-                    .update({
-                        data: checklistData,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('car_id', selectedCarId)
-
-                if (error) throw error
-            } else {
-                const { error } = await supabase
-                    .from('car_checklists')
-                    .insert({
-                        car_id: selectedCarId,
-                        data: checklistData
-                    })
-
-                if (error) throw error
-            }
+            if (error) throw error
 
             toast.success("Checklist guardado correctamente")
         } catch (error) {
             console.error("Error saving checklist:", error)
-            toast.error("Error al guardar checklist")
+            toast.error("Error al guardar checklist. Asegúrate de ejecutar el script fix_checklist.sql")
         } finally {
             setSaving(false)
         }
