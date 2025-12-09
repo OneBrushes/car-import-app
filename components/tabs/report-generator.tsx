@@ -768,8 +768,8 @@ export function ReportGenerator() {
                                 {/* Inspection Checklist */}
                                 {section.type === 'inspection' && checklistData && (
                                     <div className="avoid-break">
-                                        <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-4">Inspección Técnica</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-3">Inspección Técnica</h3>
+                                        <div className="grid grid-cols-2 gap-4">
                                             {Object.entries(CHECKLIST_SECTIONS).map(([key, sec]: any) => {
                                                 const items = sec.items.map((item: string, idx: number) => {
                                                     const itemKey = `${key}-${idx}`
@@ -783,22 +783,22 @@ export function ReportGenerator() {
                                                 if (items.length === 0) return null
 
                                                 return (
-                                                    <div key={key} className="mb-4 break-inside-avoid">
-                                                        <h4 className="font-semibold text-blue-600 mb-2 text-sm">{sec.title}</h4>
-                                                        <ul className="space-y-2">
+                                                    <div key={key} className="mb-3 break-inside-avoid">
+                                                        <h4 className="font-semibold text-blue-600 mb-1.5 text-xs">{sec.title}</h4>
+                                                        <ul className="space-y-1">
                                                             {items.map((i: any, idx: number) => (
-                                                                <li key={idx} className="text-sm flex flex-col">
-                                                                    <div className="flex items-start gap-2">
-                                                                        <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                                                                        <span className="text-slate-700">{i.item}</span>
+                                                                <li key={idx} className="text-xs flex flex-col">
+                                                                    <div className="flex items-start gap-1.5">
+                                                                        <Check className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />
+                                                                        <span className="text-slate-700 leading-tight">{i.item}</span>
                                                                     </div>
                                                                     {i.note && (
-                                                                        <p className="text-xs text-slate-500 ml-6 italic mt-0.5 bg-yellow-50 px-2 py-1 rounded">
+                                                                        <p className="text-[10px] text-slate-500 ml-4 italic mt-0.5 bg-yellow-50 px-1.5 py-0.5 rounded">
                                                                             {i.note}
                                                                         </p>
                                                                     )}
                                                                     {!i.note && (
-                                                                        <p className="text-xs text-green-600 ml-6 mt-0.5">✓ Todo bien</p>
+                                                                        <p className="text-[10px] text-green-600 ml-4 mt-0.5">✓ OK</p>
                                                                     )}
                                                                 </li>
                                                             ))}
