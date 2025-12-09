@@ -273,7 +273,7 @@ export function ChecklistTab() {
                                                         id={itemKey}
                                                         checked={isChecked}
                                                         onCheckedChange={(checked) => handleCheck(itemKey, checked as boolean)}
-                                                        className="w-5 h-5 mt-0.5 border-2"
+                                                        className="w-6 h-6 mt-0.5 border-2 border-primary data-[state=checked]:bg-primary data-[state=checked]:border-primary bg-white"
                                                     />
                                                     <div className="grid gap-1.5 leading-none w-full">
                                                         <label
