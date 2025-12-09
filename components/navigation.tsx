@@ -1,6 +1,6 @@
 "use client"
 
-import { Car, MapPin, Scale, Archive, Home, Menu, X, FileText, TrendingUp } from "lucide-react"
+import { Car, MapPin, Scale, Archive, Home, Menu, X, FileText, TrendingUp, CheckSquare } from "lucide-react"
 import { useState } from "react"
 
 interface NavigationProps {
@@ -20,6 +20,7 @@ export function Navigation({ activeTab, onTabChange, role }: NavigationProps) {
     { id: "management", label: "Comprados", icon: Archive, roles: ['gestor', 'importador', 'admin'] },
     { id: "profitable", label: "Rentables", icon: TrendingUp, roles: ['usuario', 'gestor', 'importador', 'admin'] },
     { id: "report", label: "Informe", icon: FileText, roles: ['importador', 'admin'] },
+    { id: "checklist", label: "Checklist", icon: CheckSquare, roles: ['importador', 'admin'] },
   ]
 
   const tabs = allTabs.filter(tab => !role || tab.roles.includes(role))

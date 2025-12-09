@@ -352,7 +352,7 @@ export function ReportGenerator() {
 
                             {selectedCar.images?.[0] && (
                                 <div className="w-full aspect-video bg-slate-100 rounded-xl overflow-hidden border-2 border-slate-200 shadow-lg">
-                                    <img src={selectedCar.images[0]} alt="Portada" className="w-full h-full object-cover" />
+                                    <img src={selectedCar.images[0]} alt="Portada" className="w-full h-full object-cover" crossOrigin="anonymous" />
                                 </div>
                             )}
                         </div>
@@ -602,7 +602,7 @@ export function ReportGenerator() {
                                         <div className="grid grid-cols-2 gap-4">
                                             {selectedCar.images.slice(1, 7).map((img, idx) => (
                                                 <div key={idx} className="aspect-[4/3] bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
-                                                    <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover" />
+                                                    <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover" crossOrigin="anonymous" />
                                                 </div>
                                             ))}
                                         </div>

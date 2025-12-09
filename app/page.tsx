@@ -9,6 +9,7 @@ import { CarsManagement } from "@/components/tabs/cars-management"
 import { ReportGenerator } from "@/components/tabs/report-generator"
 import { AdminPanel } from "@/components/tabs/admin-panel"
 import { ProfitableCars } from "@/components/tabs/profitable-cars"
+import { ChecklistTab } from "@/components/tabs/checklist-tab"
 import { Dashboard } from "@/components/dashboard"
 import { Navigation } from "@/components/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -28,7 +29,7 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "profitable" | "admin"
+type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "profitable" | "admin" | "checklist"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
@@ -185,6 +186,7 @@ export default function Home() {
             {activeTab === "management" && (role === 'gestor' || role === 'importador' || role === 'admin') && <CarsManagement />}
             {activeTab === "report" && (role === 'importador' || role === 'admin') && <ReportGenerator />}
             {activeTab === "profitable" && <ProfitableCars role={role || 'usuario'} />}
+            {activeTab === "checklist" && (role === 'importador' || role === 'admin') && <ChecklistTab />}
             {activeTab === "admin" && role === 'admin' && <AdminPanel />}
           </div>
         </div>
