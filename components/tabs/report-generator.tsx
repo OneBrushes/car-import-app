@@ -226,8 +226,8 @@ export function ReportGenerator() {
                     fuel: car.fuel_type || "Gasolina", // Add to DB if missing
                     fuelType: car.fuel_type || "Gasolina",
                     transmission: car.transmission || "Manual", // Add to DB
-                    images: car.image_url ? [car.image_url] : [], // Handle multiple images if array
-                    equipment: [], // Add to DB
+                    images: car.images || (car.image_url ? [car.image_url] : []), // Usar array de imágenes si existe
+                    equipment: car.equipment || [], // Add to DB
                     url: "",
                     color: car.color || "",
                     location: car.location || "",
@@ -481,9 +481,9 @@ export function ReportGenerator() {
                                 {selectedCar.year}{selectedCar.month ? `/${selectedCar.month}` : ''}
                             </p>
 
-                            {selectedCar.images?.[0] && (
+                            {(imageBlobs[0] || selectedCar.images?.[0]) && (
                                 <div className="w-full aspect-video bg-slate-100 rounded-xl overflow-hidden border-2 border-slate-200 shadow-lg">
-                                    <img src={selectedCar.images[0]} alt="Portada" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                                    <img src={imageBlobs[0] || selectedCar.images[0]} alt="Portada" className="w-full h-full object-cover" crossOrigin="anonymous" />
                                 </div>
                             )}
                         </div>
@@ -727,11 +727,11 @@ export function ReportGenerator() {
                                 )}
 
                                 {/* Gallery */}
-                                {section.type === 'gallery' && selectedCar.images?.length > 1 && (
+                                {section.type === 'gallery' && (imageBlobs.length > 1 || selectedCar.images?.length > 1) && (
                                     <div className="avoid-break">
                                         <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-4">Galería</h3>
                                         <div className="grid grid-cols-2 gap-4">
-                                            {selectedCar.images.slice(1, 7).map((img, idx) => (
+                                            {(imageBlobs.length > 0 ? imageBlobs : selectedCar.images).slice(1, 7).map((img, idx) => (
                                                 <div key={idx} className="aspect-[4/3] bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
                                                     <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover" crossOrigin="anonymous" />
                                                 </div>
