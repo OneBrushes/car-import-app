@@ -8,7 +8,71 @@ import {
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 
-// --- Interfaces ---
+// ... Imports
+
+const CHECKLIST_SECTIONS = {
+    exterior: {
+        title: "Exterior",
+        items: [
+            "Estado de la pintura (arañazos, golpes)",
+            "Lunas y espejos",
+            "Llantas y neumáticos (profundidad, marca)",
+            "Luces y faros (funcionamiento, roturas)",
+            "Ajuste de puertas y capó"
+        ]
+    },
+    interior: {
+        title: "Interior",
+        items: [
+            "Tapicería y asientos",
+            "Volante y palanca de cambios",
+            "Botones y mandos",
+            "Aire acondicionado / Climatizador",
+            "Cuadro de instrumentos (testigos)"
+        ]
+    },
+    motor: {
+        title: "Motor y Mecánica",
+        items: [
+            "Nivel de aceite",
+            "Nivel de refrigerante",
+            "Fugas visibles",
+            "Ruidos extraños al arrancar",
+            "Estado de correas (visual)"
+        ]
+    },
+    prueba: {
+        title: "Prueba Dinámica",
+        items: [
+            "Arranque en frío",
+            "Frenada",
+            "Dirección (holguras, ruidos)",
+            "Cambio de marchas (suavidad)",
+            "Suspensión (ruidos)"
+        ]
+    },
+    documentacion: {
+        title: "Documentación",
+        items: [
+            "Permiso de circulación",
+            "Ficha técnica",
+            "Libro de mantenimiento",
+            "Número de llaves",
+            "COC (Certificado de Conformidad)"
+        ]
+    },
+    herramientas: {
+        title: "Herramientas / Diagnóstico",
+        items: [
+            "Espesómetro (Pintura original)",
+            "Lectura OBD (Códigos de error)"
+        ]
+    }
+}
+
+// ... Imports
+
+// ... CHECKLIST_SECTIONS (ya está ahí)
 
 interface Car {
     id: string
@@ -47,9 +111,10 @@ interface SpainCar {
     equipmentLevel?: string
 }
 
-type SectionType = 'header' | 'car-summary' | 'gallery' | 'features' | 'text-block' | 'image-block' | 'pricing' | 'comparison'
+type SectionType = 'header' | 'car-summary' | 'gallery' | 'features' | 'text-block' | 'image-block' | 'pricing' | 'comparison' | 'inspection'
 
 interface ReportSection {
+    // ...
     id: string
     type: SectionType
     title: string
@@ -75,8 +140,49 @@ export function ReportGenerator() {
     const [negotiationDiscount, setNegotiationDiscount] = useState<number>(0)
     const [importedCarEquipmentLevel, setImportedCarEquipmentLevel] = useState<string>("")
     const [sections, setSections] = useState<ReportSection[]>([])
+    const [checklistData, setChecklistData] = useState<any>(null)
+    const [imageBlobs, setImageBlobs] = useState<string[]>([])
 
     const reportRef = useRef<HTMLDivElement>(null)
+
+    // Load Checklist and Images when car changes
+    useEffect(() => {
+        if (selectedCarId) {
+            const fetchChecklist = async () => {
+                const { data } = await supabase
+                    .from('car_checklists')
+                    .select('data')
+                    .eq('car_id', selectedCarId)
+                    .single()
+                setChecklistData(data?.data || null)
+            }
+            fetchChecklist()
+
+            const car = cars.find(c => c.id === selectedCarId)
+            if (car && car.images?.length > 0) {
+                const loadImages = async () => {
+                    const promises = car.images.map(async (url) => {
+                        try {
+                            const response = await fetch(url)
+                            const blob = await response.blob()
+                            return URL.createObjectURL(blob)
+                        } catch (e) {
+                            console.error("Error loading image blob:", e)
+                            return url
+                        }
+                    })
+                    const blobs = await Promise.all(promises)
+                    setImageBlobs(blobs)
+                }
+                loadImages()
+            } else {
+                setImageBlobs([])
+            }
+        } else {
+            setChecklistData(null)
+            setImageBlobs([])
+        }
+    }, [selectedCarId, cars])
 
     // Load Cars from Supabase
     useEffect(() => {
@@ -89,6 +195,22 @@ export function ReportGenerator() {
                     .order('created_at', { ascending: false })
 
                 if (importedError) throw importedError
+
+                // ... (resto del formateo de coches)
+
+                // Si hay coche seleccionado, cargar su checklist
+                if (selectedCarId) {
+                    const { data: checkData } = await supabase
+                        .from('car_checklists')
+                        .select('data')
+                        .eq('car_id', selectedCarId)
+                        .single()
+
+                    if (checkData) setChecklistData(checkData.data)
+                    else setChecklistData(null)
+                }
+
+                // ... (resto del código)
 
                 const formattedCars: Car[] = (importedData || []).map((car: any) => ({
                     id: car.id,
@@ -180,11 +302,20 @@ export function ReportGenerator() {
                 })
             }
 
+            if (checklistData) {
+                baseSections.push({
+                    id: 'inspection',
+                    type: 'inspection',
+                    title: 'Inspección Técnica',
+                    isVisible: true
+                })
+            }
+
             setSections(baseSections)
         } else {
             setSections([])
         }
-    }, [selectedCarId, selectedSpainCarId])
+    }, [selectedCarId, selectedSpainCarId, checklistData])
 
     // --- Actions ---
 

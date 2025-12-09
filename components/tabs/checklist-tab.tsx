@@ -61,6 +61,13 @@ const CHECKLIST_SECTIONS = {
             "Número de llaves",
             "COC (Certificado de Conformidad)"
         ]
+    },
+    herramientas: {
+        title: "Herramientas / Diagnóstico",
+        items: [
+            "Espesómetro (Pintura original)",
+            "Lectura OBD (Códigos de error)"
+        ]
     }
 }
 
@@ -194,9 +201,21 @@ export function ChecklistTab() {
     }
 
     const calculateProgress = () => {
-        const totalItems = Object.values(CHECKLIST_SECTIONS).reduce((acc, section) => acc + section.items.length, 0)
-        const checkedItems = Object.values(checklistData).filter(item => item?.checked).length
-        return Math.round((checkedItems / totalItems) * 100)
+        let total = 0
+        let checked = 0
+
+        Object.entries(CHECKLIST_SECTIONS).forEach(([key, section]) => {
+            section.items.forEach((_, idx) => {
+                total++
+                const itemKey = `${key}-${idx}`
+                if (checklistData[itemKey]?.checked) {
+                    checked++
+                }
+            })
+        })
+
+        if (total === 0) return 0
+        return Math.round((checked / total) * 100)
     }
 
     if (loading && cars.length === 0) {
