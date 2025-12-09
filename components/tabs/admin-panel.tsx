@@ -158,22 +158,30 @@ export function AdminPanel() {
 
             // 2. Fallback: Iterar sobre archivos (Lento)
             let totalBytes = 0
-            const { data: allCars } = await supabase.from('imported_cars').select('image_url')
+            let allImageUrls: string[] = []
+            const { data: allCars } = await supabase.from('imported_cars').select('image_url, images')
 
             if (allCars) {
+                // Recopilar todas las URLs de imágenes (tanto image_url como images array)
+                allCars.forEach(car => {
+                    if (car.image_url) allImageUrls.push(car.image_url)
+                    if (car.images && Array.isArray(car.images)) {
+                        allImageUrls.push(...car.images)
+                    }
+                })
+
                 // Limit concurrency to avoid browser limits
                 const chunks = [];
                 const chunkSize = 5;
-                const carsWithImages = allCars.filter(c => c.image_url);
 
-                for (let i = 0; i < carsWithImages.length; i += chunkSize) {
-                    chunks.push(carsWithImages.slice(i, i + chunkSize));
+                for (let i = 0; i < allImageUrls.length; i += chunkSize) {
+                    chunks.push(allImageUrls.slice(i, i + chunkSize));
                 }
 
                 for (const chunk of chunks) {
-                    const promises = chunk.map(async (c) => {
+                    const promises = chunk.map(async (url) => {
                         try {
-                            const res = await fetch(c.image_url!, { method: 'HEAD' })
+                            const res = await fetch(url, { method: 'HEAD' })
                             const size = res.headers.get('content-length')
                             return size ? parseInt(size) : 0
                         } catch {
@@ -187,7 +195,7 @@ export function AdminPanel() {
 
             const mb = totalBytes / (1024 * 1024)
             setRealStorageMB(mb)
-            toast.success(`Almacenamiento real calculado: ${mb.toFixed(2)} MB`)
+            toast.success(`Almacenamiento real calculado: ${mb.toFixed(2)} MB (${allImageUrls.length} imágenes)`)
         } catch (error) {
             console.error(error)
             toast.error("Error calculando almacenamiento real")

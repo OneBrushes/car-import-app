@@ -813,19 +813,30 @@ export function ReportGenerator() {
                         )
                     })}
 
-                    {/* Footer */}
-                    <div className="mt-auto pt-12 avoid-break -mx-[15mm]">
-                        <div className="flex justify-between items-end border-t border-slate-200 pt-4 px-[15mm]">
+                    {/* Footer - Al final de todo el contenido */}
+                    <div className="mt-16 pt-8 border-t-2 border-slate-200 avoid-break -mx-[15mm] px-[15mm]">
+                        <div className="grid grid-cols-3 gap-8 mb-6">
                             <div>
-                                <h4 className="font-bold text-slate-900 text-lg">NorDrive</h4>
-                                <p className="text-sm text-slate-500">Importación profesional de vehículos</p>
+                                <h4 className="font-bold text-slate-900 text-xl mb-2">NorDrive</h4>
+                                <p className="text-sm text-slate-600 mb-3">Importación profesional de vehículos</p>
+                                <p className="text-xs text-slate-500">Especialistas en importación desde Europa</p>
+                            </div>
+                            <div>
+                                <h5 className="font-semibold text-slate-700 text-sm mb-2">Contacto</h5>
+                                <p className="text-xs text-slate-600 mb-1">📧 info@nordrive.es</p>
+                                <p className="text-xs text-slate-600 mb-1">📱 +34 XXX XXX XXX</p>
+                                <p className="text-xs text-slate-600">🌐 www.nordrive.es</p>
                             </div>
                             <div className="text-right">
-                                <p className="text-xs text-slate-400 mb-1">Documento informativo no vinculante</p>
-                                <p className="text-xs font-medium text-slate-600">
+                                <p className="text-xs text-slate-400 mb-2">Documento informativo no vinculante</p>
+                                <p className="text-xs text-slate-400 mb-2">Los precios pueden variar según condiciones del mercado</p>
+                                <p className="text-sm font-semibold text-slate-700">
                                     {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
                                 </p>
                             </div>
+                        </div>
+                        <div className="border-t border-slate-200 pt-4 text-center">
+                            <p className="text-xs text-slate-400">© {new Date().getFullYear()} NorDrive - Todos los derechos reservados</p>
                         </div>
                     </div>
                 </div>
