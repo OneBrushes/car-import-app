@@ -143,6 +143,12 @@ export function ReportGenerator() {
     const [checklistData, setChecklistData] = useState<any>(null)
     const [imageBlobs, setImageBlobs] = useState<string[]>([])
 
+    // Footer customization
+    const [showFooterContact, setShowFooterContact] = useState(false)
+    const [footerEmail, setFooterEmail] = useState("info@nordrive.es")
+    const [footerPhone, setFooterPhone] = useState("+34 XXX XXX XXX")
+    const [footerWeb, setFooterWeb] = useState("www.nordrive.es")
+
     const reportRef = useRef<HTMLDivElement>(null)
 
     // Load Checklist and Images when car changes
@@ -516,7 +522,7 @@ export function ReportGenerator() {
                         if (section.type === 'gallery' && (!selectedCar.images || selectedCar.images.length <= 1)) return null;
 
                         return (
-                            <div key={section.id} className="report-page avoid-break">
+                            <div key={section.id} className="report-page avoid-break relative min-h-[297mm] pb-32">
                                 {/* Header Section */}
                                 {section.type === 'header' && (
                                     <div>
@@ -813,30 +819,26 @@ export function ReportGenerator() {
                         )
                     })}
 
-                    {/* Footer - Al final de todo el contenido */}
-                    <div className="mt-16 pt-8 border-t-2 border-slate-200 avoid-break -mx-[15mm] px-[15mm]">
-                        <div className="grid grid-cols-3 gap-8 mb-6">
+                    {/* Footer - Siempre al final de la página */}
+                    <div className="absolute bottom-0 left-0 right-0 border-t-2 border-slate-200 bg-white px-[15mm] py-6">
+                        <div className={`${showFooterContact ? 'grid grid-cols-2 gap-8' : 'text-center'}`}>
                             <div>
-                                <h4 className="font-bold text-slate-900 text-xl mb-2">NorDrive</h4>
-                                <p className="text-sm text-slate-600 mb-3">Importación profesional de vehículos</p>
-                                <p className="text-xs text-slate-500">Especialistas en importación desde Europa</p>
+                                <h4 className="font-bold text-slate-900 text-xl mb-1">NorDrive</h4>
+                                <p className="text-sm text-slate-600">Importación profesional de vehículos</p>
                             </div>
-                            <div>
-                                <h5 className="font-semibold text-slate-700 text-sm mb-2">Contacto</h5>
-                                <p className="text-xs text-slate-600 mb-1">📧 info@nordrive.es</p>
-                                <p className="text-xs text-slate-600 mb-1">📱 +34 XXX XXX XXX</p>
-                                <p className="text-xs text-slate-600">🌐 www.nordrive.es</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-slate-400 mb-2">Documento informativo no vinculante</p>
-                                <p className="text-xs text-slate-400 mb-2">Los precios pueden variar según condiciones del mercado</p>
-                                <p className="text-sm font-semibold text-slate-700">
-                                    {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                </p>
-                            </div>
+                            {showFooterContact && (
+                                <div className="text-right">
+                                    <h5 className="font-semibold text-slate-700 text-sm mb-2">Contacto</h5>
+                                    <p className="text-xs text-slate-600 mb-1">📧 {footerEmail}</p>
+                                    <p className="text-xs text-slate-600 mb-1">📱 {footerPhone}</p>
+                                    <p className="text-xs text-slate-600">🌐 {footerWeb}</p>
+                                </div>
+                            )}
                         </div>
-                        <div className="border-t border-slate-200 pt-4 text-center">
-                            <p className="text-xs text-slate-400">© {new Date().getFullYear()} NorDrive - Todos los derechos reservados</p>
+                        <div className="border-t border-slate-200 mt-4 pt-3 text-center">
+                            <p className="text-xs text-slate-400">
+                                © {new Date().getFullYear()} NorDrive - Documento informativo no vinculante
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -940,6 +942,47 @@ export function ReportGenerator() {
                                 <option value="Alto">Alto</option>
                             </select>
                             <p className="text-xs text-muted-foreground mt-1">Nivel de equipamiento del coche importado</p>
+                        </div>
+
+                        <div className="pt-4 border-t border-border">
+                            <p className="text-sm font-medium mb-3">Personalizar Footer</p>
+                            <div className="space-y-3">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={showFooterContact}
+                                        onChange={(e) => setShowFooterContact(e.target.checked)}
+                                        className="w-4 h-4"
+                                    />
+                                    <span className="text-sm">Mostrar información de contacto</span>
+                                </label>
+
+                                {showFooterContact && (
+                                    <>
+                                        <input
+                                            type="email"
+                                            value={footerEmail}
+                                            onChange={(e) => setFooterEmail(e.target.value)}
+                                            placeholder="Email"
+                                            className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={footerPhone}
+                                            onChange={(e) => setFooterPhone(e.target.value)}
+                                            placeholder="Teléfono"
+                                            className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={footerWeb}
+                                            onChange={(e) => setFooterWeb(e.target.value)}
+                                            placeholder="Sitio web"
+                                            className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                                        />
+                                    </>
+                                )}
+                            </div>
                         </div>
 
                         <div className="pt-4 border-t border-border">
