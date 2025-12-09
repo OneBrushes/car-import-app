@@ -522,7 +522,7 @@ export function ReportGenerator() {
                         if (section.type === 'gallery' && (!selectedCar.images || selectedCar.images.length <= 1)) return null;
 
                         return (
-                            <div key={section.id} className="report-page avoid-break relative min-h-[297mm] pb-32">
+                            <div key={section.id} className="report-page avoid-break">
                                 {/* Header Section */}
                                 {section.type === 'header' && (
                                     <div>
@@ -790,21 +790,21 @@ export function ReportGenerator() {
 
                                                 return (
                                                     <div key={key} className="mb-3 break-inside-avoid">
-                                                        <h4 className="font-semibold text-blue-600 mb-1.5 text-xs">{sec.title}</h4>
-                                                        <ul className="space-y-1">
+                                                        <h4 className="font-semibold text-blue-600 mb-2 text-sm">{sec.title}</h4>
+                                                        <ul className="space-y-1.5">
                                                             {items.map((i: any, idx: number) => (
-                                                                <li key={idx} className="text-xs flex flex-col">
-                                                                    <div className="flex items-start gap-1.5">
-                                                                        <Check className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />
+                                                                <li key={idx} className="text-sm flex flex-col">
+                                                                    <div className="flex items-start gap-2">
+                                                                        <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
                                                                         <span className="text-slate-700 leading-tight">{i.item}</span>
                                                                     </div>
                                                                     {i.note && (
-                                                                        <p className="text-[10px] text-slate-500 ml-4 italic mt-0.5 bg-yellow-50 px-1.5 py-0.5 rounded">
+                                                                        <p className="text-xs text-slate-500 ml-6 italic mt-0.5 bg-yellow-50 px-2 py-0.5 rounded">
                                                                             {i.note}
                                                                         </p>
                                                                     )}
                                                                     {!i.note && (
-                                                                        <p className="text-[10px] text-green-600 ml-4 mt-0.5">✓ OK</p>
+                                                                        <p className="text-xs text-green-600 ml-6 mt-0.5">✓ OK</p>
                                                                     )}
                                                                 </li>
                                                             ))}
@@ -819,26 +819,33 @@ export function ReportGenerator() {
                         )
                     })}
 
-                    {/* Footer - Siempre al final de la página */}
-                    <div className="absolute bottom-0 left-[15mm] right-[15mm] border-t-2 border-slate-200 bg-white py-6">
-                        <div className={`${showFooterContact ? 'grid grid-cols-2 gap-8' : 'text-center'}`}>
-                            <div>
-                                <h4 className="font-bold text-slate-900 text-xl mb-1">NorDrive</h4>
-                                <p className="text-sm text-slate-600">Importación profesional de vehículos</p>
-                            </div>
-                            {showFooterContact && (
-                                <div className="text-right">
-                                    <h5 className="font-semibold text-slate-700 text-sm mb-2">Contacto</h5>
-                                    <p className="text-xs text-slate-600 mb-1">📧 {footerEmail}</p>
-                                    <p className="text-xs text-slate-600 mb-1">📱 {footerPhone}</p>
-                                    <p className="text-xs text-slate-600">🌐 {footerWeb}</p>
+                    {/* Footer - Solo en la última página */}
+                    <div className="report-page flex flex-col justify-end">
+                        <div className="border-t-2 border-slate-200 bg-white py-6">
+                            <div className={`${showFooterContact ? 'grid grid-cols-2 gap-8' : ''} mb-4`}>
+                                <div className={!showFooterContact ? 'text-center' : ''}>
+                                    <h4 className="font-bold text-slate-900 text-xl mb-1">NorDrive</h4>
+                                    <p className="text-sm text-slate-600">Importación profesional de vehículos</p>
                                 </div>
-                            )}
-                        </div>
-                        <div className="border-t border-slate-200 mt-4 pt-3 text-center">
-                            <p className="text-xs text-slate-400">
-                                © {new Date().getFullYear()} NorDrive - Documento informativo no vinculante
-                            </p>
+                                {showFooterContact && (
+                                    <div className="text-right">
+                                        <h5 className="font-semibold text-slate-700 text-sm mb-2">Contacto</h5>
+                                        <p className="text-xs text-slate-600 mb-1">📧 {footerEmail}</p>
+                                        <p className="text-xs text-slate-600 mb-1">📱 {footerPhone}</p>
+                                        <p className="text-xs text-slate-600">🌐 {footerWeb}</p>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="border-t border-slate-200 pt-3">
+                                <div className={`${showFooterContact ? 'flex justify-between items-center' : 'text-center'}`}>
+                                    <p className="text-xs text-slate-400">
+                                        © {new Date().getFullYear()} NorDrive
+                                    </p>
+                                    <p className="text-xs text-slate-400">
+                                        Documento informativo no vinculante - Los precios pueden variar
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
