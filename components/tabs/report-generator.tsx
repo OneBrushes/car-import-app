@@ -764,6 +764,51 @@ export function ReportGenerator() {
                                         )}
                                     </div>
                                 )}
+
+                                {/* Inspection Checklist */}
+                                {section.type === 'inspection' && checklistData && (
+                                    <div className="avoid-break">
+                                        <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-4">Inspección Técnica</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            {Object.entries(CHECKLIST_SECTIONS).map(([key, sec]: any) => {
+                                                const items = sec.items.map((item: string, idx: number) => {
+                                                    const itemKey = `${key}-${idx}`
+                                                    const data = checklistData[itemKey]
+                                                    if (data?.checked) {
+                                                        return { item, note: data.note }
+                                                    }
+                                                    return null
+                                                }).filter(Boolean)
+
+                                                if (items.length === 0) return null
+
+                                                return (
+                                                    <div key={key} className="mb-4 break-inside-avoid">
+                                                        <h4 className="font-semibold text-blue-600 mb-2 text-sm">{sec.title}</h4>
+                                                        <ul className="space-y-2">
+                                                            {items.map((i: any, idx: number) => (
+                                                                <li key={idx} className="text-sm flex flex-col">
+                                                                    <div className="flex items-start gap-2">
+                                                                        <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                                                                        <span className="text-slate-700">{i.item}</span>
+                                                                    </div>
+                                                                    {i.note && (
+                                                                        <p className="text-xs text-slate-500 ml-6 italic mt-0.5 bg-yellow-50 px-2 py-1 rounded">
+                                                                            {i.note}
+                                                                        </p>
+                                                                    )}
+                                                                    {!i.note && (
+                                                                        <p className="text-xs text-green-600 ml-6 mt-0.5">✓ Todo bien</p>
+                                                                    )}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )
                     })}

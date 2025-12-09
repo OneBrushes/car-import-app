@@ -142,8 +142,8 @@ export function ChecklistTab() {
         setChecklistData(prev => ({
             ...prev,
             [item]: {
-                ...prev[item],
-                checked
+                checked,
+                note: prev[item]?.note || ""
             }
         }))
     }
@@ -152,7 +152,7 @@ export function ChecklistTab() {
         setChecklistData(prev => ({
             ...prev,
             [item]: {
-                ...prev[item],
+                checked: prev[item]?.checked || false,
                 note
             }
         }))

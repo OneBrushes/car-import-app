@@ -517,19 +517,14 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
                         ))}
                       </select>
                     </div>
-                    <select
+                    <input
+                      type="text"
                       name="motorType"
+                      placeholder="Tipo de Motor (ej: V6, I4, Híbrido...)"
                       value={formData.motorType}
                       onChange={handleChange}
                       className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                    >
-                      <option value="">Tipo de Motor</option>
-                      {motorTypes.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     <input
                       type="text"
                       name="displacement"
