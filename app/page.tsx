@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { motion, AnimatePresence } from "framer-motion"
 import { CarImport } from "@/components/tabs/car-import"
 import { CarsSpain } from "@/components/tabs/cars-spain"
 import { ComparativeAnalysis } from "@/components/tabs/comparative-analysis"
@@ -12,6 +13,7 @@ import { ProfitableCars } from "@/components/tabs/profitable-cars"
 import { ChecklistTab } from "@/components/tabs/checklist-tab"
 import { Dashboard } from "@/components/dashboard"
 import { Navigation } from "@/components/navigation"
+import { DonationsTab } from "@/components/tabs/donations-tab"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ExportImportTools } from "@/components/export-import-tools"
 import { useAuth } from "@/components/auth-provider"
@@ -29,7 +31,7 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "profitable" | "admin" | "checklist"
+type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
@@ -37,6 +39,7 @@ export default function Home() {
   const [mounted, setMounted] = useState(false)
   const [role, setRole] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [donationsEnabled, setDonationsEnabled] = useState(false)
   const { user, loading, signOut } = useAuth()
   const router = useRouter()
 
@@ -71,6 +74,16 @@ export default function Home() {
             setRole(data.role)
             setAvatarUrl(data.avatar_url)
           }
+        })
+
+      // Cargar configuración global (donaciones)
+      supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'donations_enabled')
+        .single()
+        .then(({ data }) => {
+          if (data) setDonationsEnabled(data.value)
         })
     }
   }, [user, loading, router])
@@ -167,27 +180,38 @@ export default function Home() {
 
       {/* Navigation - Desktop */}
       <div className="hidden md:block border-b sticky top-16 z-30 bg-background">
-        <Navigation activeTab={activeTab} onTabChange={setActiveTab} role={role} />
+        <Navigation activeTab={activeTab} onTabChange={setActiveTab} role={role} donationsVisible={donationsEnabled} />
       </div>
 
       {/* Navigation - Mobile */}
       <div className="md:hidden border-b sticky top-16 z-30 bg-background px-4 py-2">
-        <Navigation activeTab={activeTab} onTabChange={setActiveTab} role={role} />
+        <Navigation activeTab={activeTab} onTabChange={setActiveTab} role={role} donationsVisible={donationsEnabled} />
       </div>
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-[1920px] mx-auto w-full">
           <div className="p-4 sm:p-6 lg:p-8">
-            {activeTab === "dashboard" && <Dashboard />}
-            {activeTab === "import" && <CarImport role={role} />}
-            {activeTab === "spain" && <CarsSpain role={role} />}
-            {activeTab === "comparison" && <ComparativeAnalysis />}
-            {activeTab === "management" && (role === 'gestor' || role === 'importador' || role === 'admin') && <CarsManagement />}
-            {activeTab === "report" && (role === 'importador' || role === 'admin') && <ReportGenerator />}
-            {activeTab === "profitable" && <ProfitableCars role={role || 'usuario'} />}
-            {activeTab === "checklist" && (role === 'importador' || role === 'admin') && <ChecklistTab />}
-            {activeTab === "admin" && role === 'admin' && <AdminPanel />}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                {activeTab === "dashboard" && <Dashboard />}
+                {activeTab === "import" && <CarImport role={role} />}
+                {activeTab === "spain" && <CarsSpain role={role} />}
+                {activeTab === "comparison" && <ComparativeAnalysis />}
+                {activeTab === "management" && (role === 'gestor' || role === 'importador' || role === 'admin') && <CarsManagement />}
+                {activeTab === "report" && (role === 'importador' || role === 'admin') && <ReportGenerator />}
+                {activeTab === "profitable" && <ProfitableCars role={role || 'usuario'} />}
+                {activeTab === "checklist" && (role === 'importador' || role === 'admin') && <ChecklistTab />}
+                {activeTab === "donations" && <DonationsTab />}
+                {activeTab === "admin" && role === 'admin' && <AdminPanel />}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </main>

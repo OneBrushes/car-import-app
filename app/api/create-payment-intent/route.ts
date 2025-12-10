@@ -1,0 +1,46 @@
+
+import { NextResponse } from 'next/server'
+import Stripe from 'stripe'
+
+// Inicializar Stripe
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    // Usar la última versión o una fija si la conoces
+})
+
+export async function POST(req: Request) {
+    try {
+        const body = await req.json()
+        const { amount } = body
+
+        if (!amount || amount < 1) { // Mínimo 1 euro/dólar
+            return NextResponse.json(
+                { error: 'Amount is required and must be at least 1' },
+                { status: 400 }
+            )
+        }
+
+        // Stripe espera el monto en céntimos (ej: 10.00€ = 1000)
+        const amountInCents = Math.round(amount * 100)
+
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: amountInCents,
+            currency: 'eur',
+            automatic_payment_methods: {
+                enabled: true,
+            },
+            metadata: {
+                integration_check: 'accept_a_payment',
+            },
+        })
+
+        return NextResponse.json({
+            clientSecret: paymentIntent.client_secret,
+        })
+    } catch (error: any) {
+        console.error('Error creating payment intent:', error)
+        return NextResponse.json(
+            { error: error.message },
+            { status: 500 }
+        )
+    }
+}

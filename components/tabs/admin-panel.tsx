@@ -44,6 +44,7 @@ export function AdminPanel() {
 
     // Security State
     const [registrationsEnabled, setRegistrationsEnabled] = useState(true)
+    const [donationsEnabled, setDonationsEnabled] = useState(false)
     const [blockedEmails, setBlockedEmails] = useState<string[]>([])
     const [newBlockedEmail, setNewBlockedEmail] = useState("")
 
@@ -62,6 +63,16 @@ export function AdminPanel() {
 
         if (data) {
             setRegistrationsEnabled(data.value)
+        }
+
+        const { data: donationsData } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'donations_enabled')
+            .single()
+
+        if (donationsData) {
+            setDonationsEnabled(donationsData.value)
         }
 
         const savedBlocked = localStorage.getItem('blockedEmails')
@@ -286,6 +297,24 @@ export function AdminPanel() {
         }
     }
 
+    const toggleDonations = async () => {
+        const newValue = !donationsEnabled
+        setDonationsEnabled(newValue)
+
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({ key: 'donations_enabled', value: newValue })
+
+            if (error) throw error
+            toast.success(`Donaciones ${newValue ? 'visibles' : 'ocultas'}`)
+        } catch (error) {
+            console.error(error)
+            toast.error("Error al guardar configuración")
+            setDonationsEnabled(!newValue)
+        }
+    }
+
     const addBlockedEmail = () => {
         if (!newBlockedEmail || blockedEmails.includes(newBlockedEmail)) return
         const newEmails = [...blockedEmails, newBlockedEmail]
@@ -402,6 +431,7 @@ export function AdminPanel() {
                     <TabsTrigger value="users" className="flex-1 min-w-[120px]">Gestión Usuarios</TabsTrigger>
                     <TabsTrigger value="storage" className="flex-1 min-w-[120px]">Almacenamiento & DB</TabsTrigger>
                     <TabsTrigger value="security" className="flex-1 min-w-[120px]">Seguridad</TabsTrigger>
+                    <TabsTrigger value="settings" className="flex-1 min-w-[120px]">Configuración</TabsTrigger>
                     <TabsTrigger value="logs" className="flex-1 min-w-[120px]">Logs Sistema</TabsTrigger>
                 </TabsList>
 
@@ -641,6 +671,34 @@ export function AdminPanel() {
                     </div>
                 </TabsContent>
 
+
+
+                {/* --- SETTINGS TAB --- */}
+                <TabsContent value="settings">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Configuración General</CardTitle>
+                            <CardDescription>Opciones globales de la aplicación.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border">
+                                <div className="space-y-1">
+                                    <h4 className="font-semibold text-slate-900">Pestaña de Donaciones</h4>
+                                    <p className="text-sm text-slate-500">
+                                        Muestra u oculta la pestaña de "Donaciones" en el menú de navegación para todos los usuarios.
+                                    </p>
+                                </div>
+                                <div
+                                    onClick={toggleDonations}
+                                    className={`w-14 h-7 rounded-full p-1 cursor-pointer transition-colors ${donationsEnabled ? 'bg-green-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform ${donationsEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
                 {/* --- LOGS TAB --- */}
                 <TabsContent value="logs">
                     <Card>
@@ -687,6 +745,6 @@ export function AdminPanel() {
                     </Card>
                 </TabsContent>
             </Tabs>
-        </div>
+        </div >
     )
 }
