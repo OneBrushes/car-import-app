@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
-import { Heart, CreditCard, Loader2, CheckCircle, Smartphone } from 'lucide-react'
+import { Heart, CreditCard, Loader2, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
@@ -24,7 +24,6 @@ export function DonationsTab() {
     const [clientSecret, setClientSecret] = useState<string>('')
     const [loading, setLoading] = useState(false)
     const [paymentSuccess, setPaymentSuccess] = useState(false)
-    // For subscriptions
     const [email, setEmail] = useState('')
     const [name, setName] = useState('')
 
@@ -73,11 +72,11 @@ export function DonationsTab() {
     if (paymentSuccess) {
         return (
             <div className="flex flex-col items-center justify-center p-12 text-center animate-in fade-in zoom-in duration-500">
-                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
-                    <CheckCircle className="w-12 h-12 text-green-600" />
+                <div className="w-24 h-24 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6">
+                    <CheckCircle className="w-12 h-12 text-green-600 dark:text-green-400" />
                 </div>
-                <h2 className="text-3xl font-bold text-slate-900 mb-4">¡Gracias por tu apoyo!</h2>
-                <p className="text-lg text-slate-600 max-w-md">
+                <h2 className="text-3xl font-bold mb-4">¡Gracias por tu apoyo!</h2>
+                <p className="text-lg text-muted-foreground max-w-md">
                     Tu contribución ayuda a mantener y mejorar esta aplicación. Eres increíble.
                 </p>
                 <Button
@@ -96,40 +95,40 @@ export function DonationsTab() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-6">
+        <div className="max-w-4xl mx-auto p-4 sm:p-6">
             <div className="text-center mb-10">
-                <h2 className="text-3xl font-bold text-slate-900 flex items-center justify-center gap-3">
+                <h2 className="text-3xl font-bold flex items-center justify-center gap-3">
                     <Heart className="w-8 h-8 text-red-500 fill-red-500 animate-pulse" />
                     Apoya el Proyecto
                 </h2>
-                <p className="text-slate-500 mt-2 max-w-xl mx-auto">
+                <p className="text-muted-foreground mt-2 max-w-xl mx-auto">
                     Si esta herramienta te es útil, considera hacer una pequeña donación para ayudar con los costes del servidor y el desarrollo continuo.
                 </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-8 items-start">
-                <Card className="border-2 border-slate-100 shadow-xl">
+            <div className="grid md:grid-cols-2 gap-6 md:gap-8 items-start">
+                <Card className="border-2 shadow-xl">
                     <CardHeader>
                         <CardTitle>Selecciona cantidad</CardTitle>
                         <CardDescription>Elige cuánto quieres aportar hoy</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <div className="flex items-center justify-between bg-secondary/50 p-3 rounded-lg border">
                             <Label htmlFor="monthly-mode" className="flex flex-col cursor-pointer">
-                                <span className="font-medium text-slate-900">Suscripción Mensual</span>
-                                <span className="text-xs text-slate-500">Apoyo recurrente</span>
+                                <span className="font-medium">Suscripción Mensual</span>
+                                <span className="text-xs text-muted-foreground">Apoyo recurrente</span>
                             </Label>
                             <Switch
                                 id="monthly-mode"
                                 checked={isMonthly}
                                 onCheckedChange={(checked) => {
                                     setIsMonthly(checked)
-                                    setClientSecret('') // Reset on mode change
+                                    setClientSecret('')
                                 }}
                             />
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-3 gap-2 sm:gap-3">
                             {AMOUNTS.map((amount) => (
                                 <button
                                     key={amount}
@@ -137,12 +136,10 @@ export function DonationsTab() {
                                         setSelectedAmount(amount)
                                         setClientSecret('')
                                     }}
-                                    className={`
-                                        py-3 px-2 rounded-xl border-2 font-bold text-sm transition-all duration-200
-                                        ${selectedAmount === amount
-                                            ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm scale-105'
-                                            : 'border-slate-100 bg-white text-slate-600 hover:border-blue-200 hover:bg-slate-50'}
-                                    `}
+                                    className={`py-3 px-2 rounded-xl border-2 font-bold text-sm transition-all duration-200 ${selectedAmount === amount
+                                            ? 'border-primary bg-primary/10 text-primary shadow-sm scale-105'
+                                            : 'border-border bg-card hover:border-primary/50 hover:bg-secondary'
+                                        }`}
                                 >
                                     {amount}€
                                 </button>
@@ -152,12 +149,10 @@ export function DonationsTab() {
                                     setSelectedAmount('custom')
                                     setClientSecret('')
                                 }}
-                                className={`
-                                    py-3 px-2 rounded-xl border-2 font-bold text-sm transition-all duration-200
-                                    ${selectedAmount === 'custom'
-                                        ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm scale-105'
-                                        : 'border-slate-100 bg-white text-slate-600 hover:border-blue-200 hover:bg-slate-50'}
-                                `}
+                                className={`py-3 px-2 rounded-xl border-2 font-bold text-sm transition-all duration-200 ${selectedAmount === 'custom'
+                                        ? 'border-primary bg-primary/10 text-primary shadow-sm scale-105'
+                                        : 'border-border bg-card hover:border-primary/50 hover:bg-secondary'
+                                    }`}
                             >
                                 Otro
                             </button>
@@ -215,7 +210,7 @@ export function DonationsTab() {
 
                         {!clientSecret && (
                             <Button
-                                className="w-full h-12 text-lg mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/20"
+                                className="w-full h-12 text-lg mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg"
                                 onClick={handleInitiatePayment}
                                 disabled={loading || getFinalAmount() < 1 || (isMonthly && !email)}
                             >
@@ -236,10 +231,10 @@ export function DonationsTab() {
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
                             >
-                                <Card className="border-2 border-blue-100 shadow-2xl bg-white overflow-hidden">
-                                    <div className="bg-slate-50 p-4 border-b border-slate-100 flex justify-between items-center">
-                                        <div className="font-semibold text-slate-700">Completar pago</div>
-                                        <div className="text-xs font-mono bg-white px-2 py-1 rounded border">Seguro con Stripe</div>
+                                <Card className="border-2 border-primary/20 shadow-2xl overflow-hidden">
+                                    <div className="bg-secondary/50 p-4 border-b flex justify-between items-center">
+                                        <div className="font-semibold">Completar pago</div>
+                                        <div className="text-xs font-mono bg-background px-2 py-1 rounded border">Seguro con Stripe</div>
                                     </div>
                                     <CardContent className="p-6">
                                         <Elements stripe={stripePromise} options={{
@@ -248,14 +243,14 @@ export function DonationsTab() {
                                             locale: 'es'
                                         }}>
                                             <header className="mb-6 text-center">
-                                                <div className="text-3xl font-bold text-slate-900">{getFinalAmount()}€</div>
-                                                <div className="text-sm text-slate-500">{isMonthly ? 'cada mes' : 'pago único'}</div>
+                                                <div className="text-3xl font-bold">{getFinalAmount()}€</div>
+                                                <div className="text-sm text-muted-foreground">{isMonthly ? 'cada mes' : 'pago único'}</div>
                                             </header>
                                             <CheckoutForm onSuccess={() => setPaymentSuccess(true)} />
                                         </Elements>
                                         <Button
                                             variant="ghost"
-                                            className="w-full mt-4 text-slate-400 hover:text-slate-600"
+                                            className="w-full mt-4"
                                             onClick={() => setClientSecret('')}
                                         >
                                             Cancelar / Cambiar cantidad
@@ -268,7 +263,7 @@ export function DonationsTab() {
                                 key="placeholder"
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 p-8 text-center"
+                                className="h-full min-h-[400px] flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed rounded-xl bg-secondary/20 p-8 text-center"
                             >
                                 <CreditCard className="w-16 h-16 mb-4 opacity-20" />
                                 <p className="text-lg font-medium">Selecciona una cantidad para continuar</p>
@@ -298,7 +293,6 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
         const { error, paymentIntent } = await stripe.confirmPayment({
             elements,
             confirmParams: {
-                // Return URL is required usually, but with redirect: 'if_required' we can avoid full redirect sometimes
                 return_url: window.location.origin,
             },
             redirect: 'if_required'
@@ -310,9 +304,7 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
             setMessage('¡Pago realizado con éxito!')
             onSuccess()
         } else {
-            // For some payment methods (like iDEAL) it might redirect.
-            // If we are here without error and without success immediate, it might be processing
-            onSuccess() // Optimistic success or check status
+            onSuccess()
         }
 
         setIsProcessing(false)
@@ -323,14 +315,14 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
             <PaymentElement />
 
             {message && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">
+                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm border border-red-100 dark:border-red-800">
                     {message}
                 </div>
             )}
 
             <Button
                 disabled={isProcessing || !stripe || !elements}
-                className="w-full h-12 text-lg font-semibold bg-slate-900 hover:bg-slate-800 text-white"
+                className="w-full h-12 text-lg font-semibold bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900"
             >
                 {isProcessing ? <Loader2 className="animate-spin" /> : 'Pagar ahora'}
             </Button>
