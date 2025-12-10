@@ -192,8 +192,8 @@ export default function LoginPage() {
             <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in duration-500">
                 {/* Logo / Brand */}
                 <div className="flex flex-col items-center mb-8 text-center">
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-900/50 mb-4 transform rotate-3 hover:rotate-0 transition-all duration-300">
-                        <Car className="w-8 h-8 text-white" />
+                    <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-900/50 mb-4 p-2">
+                        <img src="/NorDrive.png" alt="NorDrive Logo" className="w-full h-full object-contain" />
                     </div>
                     <h1 className="text-3xl font-bold text-white tracking-tight">NorDrive Manager</h1>
                     <p className="text-slate-400 mt-2 text-sm">Gestión profesional de importación de vehículos</p>
