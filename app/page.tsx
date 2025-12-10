@@ -16,7 +16,6 @@ import { Navigation } from "@/components/navigation"
 import { DonationsTab } from "@/components/tabs/donations-tab"
 import { OnlineUsers } from "@/components/online-users"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { ExportImportTools } from "@/components/export-import-tools"
 import { useAuth } from "@/components/auth-provider"
 import { Loader2, LogOut, User as UserIcon, Shield } from "lucide-react"
 import {
@@ -158,7 +157,6 @@ export default function Home() {
             )}
 
             <OnlineUsers />
-            <ExportImportTools />
             <ThemeToggle isDark={isDark} onToggle={handleToggleTheme} />
 
             <DropdownMenu>

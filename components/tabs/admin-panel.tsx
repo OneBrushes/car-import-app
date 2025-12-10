@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import { Loader2, Shield, Users, Trash2, Database, Lock, Ban, Info, HardDrive, RefreshCw } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { ExportImportTools } from "@/components/export-import-tools"
 
 interface Profile {
     id: string
@@ -104,6 +105,46 @@ export function AdminPanel() {
 
         const savedBlocked = localStorage.getItem('blockedEmails')
         if (savedBlocked) setBlockedEmails(JSON.parse(savedBlocked))
+
+        // Get real storage size from Supabase Storage API
+        getRealStorageSize()
+    }
+
+    const getRealStorageSize = async () => {
+        try {
+            const { data, error } = await supabase.storage.from('car-images').list()
+            if (error) throw error
+
+            let totalBytes = 0
+
+            // Recursively get all files
+            const getAllFiles = async (path = '') => {
+                const { data: files } = await supabase.storage.from('car-images').list(path)
+                if (!files) return
+
+                for (const file of files) {
+                    if (file.id) {
+                        // It's a file
+                        const { data: fileData } = await supabase.storage
+                            .from('car-images')
+                            .download(path ? `${path}/${file.name}` : file.name)
+
+                        if (fileData) {
+                            totalBytes += fileData.size
+                        }
+                    } else {
+                        // It's a folder, recurse
+                        await getAllFiles(path ? `${path}/${file.name}` : file.name)
+                    }
+                }
+            }
+
+            await getAllFiles()
+            const mb = totalBytes / (1024 * 1024)
+            setRealStorageMB(mb)
+        } catch (error) {
+            console.error('Error getting real storage size:', error)
+        }
     }
 
     const fetchData = async () => {
@@ -390,6 +431,11 @@ export function AdminPanel() {
 
     return (
         <div className="space-y-6 animate-in">
+            {/* Export/Import Tools */}
+            <div className="flex justify-end">
+                <ExportImportTools />
+            </div>
+
             <div className="grid gap-4 md:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
