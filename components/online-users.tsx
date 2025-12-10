@@ -51,23 +51,26 @@ export function OnlineUsers() {
         presenceChannel
             .on('presence', { event: 'sync' }, () => {
                 const state = presenceChannel.presenceState()
-                const users: OnlineUser[] = []
+                const usersMap = new Map<string, OnlineUser>()
 
                 Object.keys(state).forEach((key) => {
                     const presences = state[key] as any[]
                     presences.forEach((presence) => {
                         if (presence.user_id && presence.email) {
-                            users.push({
-                                id: presence.user_id,
-                                email: presence.email,
-                                avatar_url: presence.avatar_url,
-                                presence_ref: presence.presence_ref,
-                            })
+                            // Only add if not already in map (avoid duplicates from multiple connections)
+                            if (!usersMap.has(presence.user_id)) {
+                                usersMap.set(presence.user_id, {
+                                    id: presence.user_id,
+                                    email: presence.email,
+                                    avatar_url: presence.avatar_url,
+                                    presence_ref: presence.presence_ref,
+                                })
+                            }
                         }
                     })
                 })
 
-                setOnlineUsers(users)
+                setOnlineUsers(Array.from(usersMap.values()))
             })
             .subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
@@ -133,7 +136,7 @@ export function OnlineUsers() {
                     <div className="space-y-2 max-h-[300px] overflow-y-auto">
                         {onlineUsers.map((onlineUser) => (
                             <div
-                                key={onlineUser.presence_ref}
+                                key={onlineUser.id}
                                 className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 transition-colors"
                             >
                                 <div className="relative">
