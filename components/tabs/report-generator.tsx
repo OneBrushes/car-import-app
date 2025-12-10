@@ -820,7 +820,7 @@ export function ReportGenerator() {
                     })}
 
                     {/* Footer - Al final del contenido */}
-                    <div className="mt-12 pt-6 border-t-2 border-slate-200 bg-white">
+                    <div className="mt-12 pt-6 border-t-2 border-slate-200 bg-white -mx-[15mm] px-[15mm] pb-6">
                         {showFooterContact ? (
                             // 3 columnas con contacto
                             <div className="grid grid-cols-3 gap-8 mb-4">
@@ -861,7 +861,7 @@ export function ReportGenerator() {
                             </div>
                         )}
 
-                        <div className="border-t border-slate-200 pt-3 pb-6 text-center">
+                        <div className="border-t border-slate-200 pt-3 text-center">
                             <p className="text-xs text-slate-400">
                                 © {new Date().getFullYear()} NorDrive - Todos los derechos reservados
                             </p>
