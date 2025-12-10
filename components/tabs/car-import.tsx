@@ -57,12 +57,37 @@ export function CarImport({ role }: CarImportProps) {
 
   // Cargar datos desde Supabase
   useEffect(() => {
-    if (user) fetchCars()
+    if (user) {
+      fetchCars()
+
+      // Subscribe to realtime changes in imported_cars
+      const channel = supabase
+        .channel('imported_cars_user_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'imported_cars'
+          },
+          () => {
+            // Refetch cars when any change occurs
+            fetchCars()
+          }
+        )
+        .subscribe()
+
+      return () => {
+        channel.unsubscribe()
+      }
+    }
   }, [user])
 
   const fetchCars = async () => {
     try {
       setLoading(true)
+
+      // Get all cars from database
       const { data, error } = await supabase
         .from('imported_cars')
         .select('*')
@@ -70,7 +95,13 @@ export function CarImport({ role }: CarImportProps) {
 
       if (error) throw error
 
-      const formattedCars: Car[] = data.map((car: any) => ({
+      // Filter cars: show only user's cars OR cars shared with user
+      const filteredData = data.filter((car: any) =>
+        car.user_id === user?.id ||
+        (car.shared_with && car.shared_with.includes(user?.id))
+      )
+
+      const formattedCars: Car[] = filteredData.map((car: any) => ({
         ...car, // Pasar todos los campos de la BD (snake_case) para que AddCarModal los pueda leer
         id: car.id,
         user_id: car.user_id,

@@ -78,13 +78,20 @@ export default function Home() {
 
       // Cargar configuración global (donaciones)
       const loadDonationsConfig = async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('app_settings')
           .select('value')
           .eq('key', 'donations_enabled')
           .single()
 
-        if (data) setDonationsEnabled(data.value)
+        console.log('Donations config:', { data, error })
+
+        if (data) {
+          setDonationsEnabled(data.value)
+        } else {
+          // Si no existe, por defecto false
+          setDonationsEnabled(false)
+        }
       }
 
       loadDonationsConfig()
@@ -134,8 +141,8 @@ export default function Home() {
       <header className="sticky top-0 z-40 glass border-b">
         <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <span className="text-lg font-bold text-primary">🚗</span>
+            <div className="w-10 h-10 rounded-lg bg-white dark:bg-white flex items-center justify-center p-1.5">
+              <img src="/logo.svg" alt="NorDrive Logo" className="w-full h-full object-contain" />
             </div>
             <div className="hidden sm:block">
               <h1 className="text-lg font-semibold">NorDrive</h1>
