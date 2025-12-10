@@ -21,11 +21,22 @@ interface OnlineUser {
 
 export function OnlineUsers() {
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([])
+    const [role, setRole] = useState<string | null>(null)
     const { user } = useAuth()
     const [channel, setChannel] = useState<any>(null)
 
     useEffect(() => {
         if (!user) return
+
+        // Get user role
+        supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single()
+            .then(({ data }) => {
+                if (data) setRole(data.role)
+            })
 
         // Create a channel for presence
         const presenceChannel = supabase.channel('online-users', {
@@ -89,16 +100,27 @@ export function OnlineUsers() {
 
     if (!user || onlineUsers.length === 0) return null
 
+    // For usuario and gestor roles, only show the badge without popover
+    const canViewList = role === 'admin' || role === 'importador'
+
+    const badgeContent = (
+        <button className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors">
+            <Users className="w-4 h-4 text-muted-foreground" />
+            <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                {onlineUsers.length}
+            </Badge>
+            <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+        </button>
+    )
+
+    if (!canViewList) {
+        return badgeContent
+    }
+
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <button className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors">
-                    <Users className="w-4 h-4 text-muted-foreground" />
-                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                        {onlineUsers.length}
-                    </Badge>
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                </button>
+                {badgeContent}
             </PopoverTrigger>
             <PopoverContent className="w-72 p-3" align="end">
                 <div className="space-y-3">

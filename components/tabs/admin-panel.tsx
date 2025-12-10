@@ -51,6 +51,33 @@ export function AdminPanel() {
     useEffect(() => {
         fetchData()
         loadSettings()
+
+        // Subscribe to realtime changes in imported_cars for storage updates
+        const carsChannel = supabase
+            .channel('imported_cars_changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'imported_cars'
+                },
+                () => {
+                    // Refetch car counts when cars are added/deleted
+                    supabase.from('imported_cars').select('user_id').then(({ data }) => {
+                        const counts: Record<string, number> = {}
+                        data?.forEach((car: any) => {
+                            counts[car.user_id] = (counts[car.user_id] || 0) + 1
+                        })
+                        setCarsCount(counts)
+                    })
+                }
+            )
+            .subscribe()
+
+        return () => {
+            carsChannel.unsubscribe()
+        }
     }, [])
 
     const loadSettings = async () => {

@@ -78,14 +78,40 @@ export default function Home() {
         })
 
       // Cargar configuración global (donaciones)
-      supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'donations_enabled')
-        .single()
-        .then(({ data }) => {
-          if (data) setDonationsEnabled(data.value)
-        })
+      const loadDonationsConfig = async () => {
+        const { data } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'donations_enabled')
+          .single()
+
+        if (data) setDonationsEnabled(data.value)
+      }
+
+      loadDonationsConfig()
+
+      // Subscribe to realtime changes in app_settings
+      const channel = supabase
+        .channel('app_settings_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'app_settings',
+            filter: 'key=eq.donations_enabled'
+          },
+          (payload) => {
+            if (payload.new && 'value' in payload.new) {
+              setDonationsEnabled(payload.new.value)
+            }
+          }
+        )
+        .subscribe()
+
+      return () => {
+        channel.unsubscribe()
+      }
     }
   }, [user, loading, router])
 
