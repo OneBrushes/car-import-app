@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
 import { Badge } from "@/components/ui/badge"
 import { Users, Eye } from "lucide-react"
+import { convertCurrency, getCurrencySymbol } from "@/lib/currency"
 
 interface AddCarModalProps {
   isOpen: boolean
@@ -42,6 +43,8 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
   const [isSharedCar, setIsSharedCar] = useState(false)
   const [ownerName, setOwnerName] = useState<string>("")
   const [activeMobileTab, setActiveMobileTab] = useState("photos")
+  const [convertedPrice, setConvertedPrice] = useState<number | null>(null)
+  const [isConverting, setIsConverting] = useState(false)
   const [formData, setFormData] = useState({
     // Información Básica
     brand: "",
@@ -210,6 +213,46 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     checkIfShared()
   }, [initialData, user])
 
+  // Convert currency in real-time
+  useEffect(() => {
+    const convertPrice = async () => {
+      const price = parseFloat(formData.price)
+
+      if (!price || isNaN(price)) {
+        setConvertedPrice(null)
+        return
+      }
+
+      // Si ya está en EUR, no convertir
+      if (formData.currency === '€') {
+        setConvertedPrice(price)
+        return
+      }
+
+      setIsConverting(true)
+      try {
+        // Mapear símbolos a códigos de moneda
+        const currencyMap: { [key: string]: string } = {
+          '€': 'EUR',
+          '$': 'USD',
+          '£': 'GBP',
+          'CHF': 'CHF'
+        }
+
+        const fromCurrency = currencyMap[formData.currency] || 'EUR'
+        const converted = await convertCurrency(price, fromCurrency, 'EUR')
+        setConvertedPrice(converted)
+      } catch (error) {
+        console.error('Error converting currency:', error)
+        setConvertedPrice(null)
+      } finally {
+        setIsConverting(false)
+      }
+    }
+
+    convertPrice()
+  }, [formData.price, formData.currency])
+
   const handleChange = (e: any) => {
     const { name, value } = e.target
     setFormData((prev) => ({
@@ -297,13 +340,19 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Usar el precio convertido si no está en EUR, sino el precio original
+    const priceInEUR = formData.currency !== '€' && convertedPrice
+      ? convertedPrice
+      : Number.parseFloat(formData.price)
+
     onSubmit({
       ...formData,
-      price: Number.parseFloat(formData.price),
+      price: priceInEUR, // Siempre guardar en EUR
       mileage: Number.parseInt(formData.mileage),
       cv: Number.parseInt(formData.cv),
       totalExpenses: calculateTotalExpenses(),
-      finalPrice: calculateFinalPrice(),
+      finalPrice: priceInEUR + calculateTotalExpenses(),
     })
     // Only reset if not editing (or maybe just close)
     if (!initialData) {
@@ -729,16 +778,49 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs text-muted-foreground mb-1 block">Precio Base</label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            name="price"
-                            placeholder="0"
-                            value={formData.price}
-                            onChange={handleChange}
-                            className="w-full pl-8 pr-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                          />
-                          <span className="absolute left-3 top-2 text-muted-foreground">€</span>
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <div className="relative flex-1">
+                              <input
+                                type="number"
+                                name="price"
+                                placeholder="0"
+                                value={formData.price}
+                                onChange={handleChange}
+                                step="0.01"
+                                className="w-full pl-8 pr-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                              />
+                              <span className="absolute left-3 top-2 text-muted-foreground">{formData.currency}</span>
+                            </div>
+                            <select
+                              name="currency"
+                              value={formData.currency}
+                              onChange={handleChange}
+                              className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                            >
+                              {currencies.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {/* Conversion indicator */}
+                          {formData.price && formData.currency !== '€' && (
+                            <div className="text-xs text-muted-foreground bg-blue-500/10 border border-blue-500/20 rounded-lg p-2">
+                              {isConverting ? (
+                                <span className="flex items-center gap-2">
+                                  <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                  Convirtiendo...
+                                </span>
+                              ) : convertedPrice ? (
+                                <span className="flex items-center justify-between">
+                                  <span>≈ {convertedPrice.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</span>
+                                  <span className="text-[10px] opacity-70">Tasa en tiempo real</span>
+                                </span>
+                              ) : null}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div>
@@ -945,8 +1027,8 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
             onClick={() => document.getElementById('car-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))}
             disabled={isSharedCar}
             className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${isSharedCar
-                ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                : 'bg-primary text-primary-foreground hover:bg-primary/90'
+              ? 'bg-muted text-muted-foreground cursor-not-allowed'
+              : 'bg-primary text-primary-foreground hover:bg-primary/90'
               }`}
             title={isSharedCar ? 'No puedes editar coches compartidos' : ''}
           >
