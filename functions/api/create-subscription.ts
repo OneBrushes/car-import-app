@@ -74,19 +74,35 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
             expand: ['latest_invoice.payment_intent'],
         })
 
-        // 4. Devolver el clientSecret del PaymentIntent asociado a la primera factura
-        const latestInvoice: any = subscription.latest_invoice
-        const paymentIntent: any = latestInvoice?.payment_intent
+        // 4. Obtener el PaymentIntent de la primera factura
+        let clientSecret: string | null = null
 
-        if (!paymentIntent || !paymentIntent.client_secret) {
-            console.error('Subscription data:', JSON.stringify(subscription, null, 2))
+        // Intentar obtener de la expansión primero
+        const latestInvoice: any = subscription.latest_invoice
+        if (latestInvoice && typeof latestInvoice === 'object') {
+            const paymentIntent: any = latestInvoice.payment_intent
+            if (paymentIntent && typeof paymentIntent === 'object' && paymentIntent.client_secret) {
+                clientSecret = paymentIntent.client_secret
+            } else if (typeof latestInvoice.payment_intent === 'string') {
+                // Si payment_intent es solo un ID, obtenerlo manualmente
+                const pi = await stripe.paymentIntents.retrieve(latestInvoice.payment_intent)
+                clientSecret = pi.client_secret
+            }
+        }
+
+        if (!clientSecret) {
+            console.error('Subscription structure:', JSON.stringify({
+                subscription_id: subscription.id,
+                latest_invoice_type: typeof subscription.latest_invoice,
+                latest_invoice: subscription.latest_invoice
+            }, null, 2))
             throw new Error('No se pudo obtener el client_secret de la suscripción')
         }
 
         return new Response(
             JSON.stringify({
                 subscriptionId: subscription.id,
-                clientSecret: paymentIntent.client_secret,
+                clientSecret: clientSecret,
             }),
             {
                 status: 200,
