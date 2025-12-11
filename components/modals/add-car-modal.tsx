@@ -5,6 +5,10 @@ import { useState, useEffect } from "react"
 import { X, Plus, Trash2, ChevronUp, ChevronDown, ImageIcon, FileText, Gauge, ClipboardCheck, Euro, Settings, Tag } from "lucide-react"
 import { toast } from "sonner"
 import { ImageUpload } from "../image-upload"
+import { useAuth } from "@/components/auth-provider"
+import { supabase } from "@/lib/supabase"
+import { Badge } from "@/components/ui/badge"
+import { Users, Eye } from "lucide-react"
 
 interface AddCarModalProps {
   isOpen: boolean
@@ -34,6 +38,9 @@ const colors = ["Blanco", "Negro", "Gris", "Plata", "Azul", "Rojo", "Verde", "Ma
 const doorsOptions = ["2", "3", "4", "5", "6", "7"]
 
 export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarModalProps) {
+  const { user } = useAuth()
+  const [isSharedCar, setIsSharedCar] = useState(false)
+  const [ownerName, setOwnerName] = useState<string>("")
   const [activeMobileTab, setActiveMobileTab] = useState("photos")
   const [formData, setFormData] = useState({
     // Información Básica
@@ -171,6 +178,37 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
       })
     }
   }, [initialData])
+
+  // Detect if car is shared and get owner name
+  useEffect(() => {
+    const checkIfShared = async () => {
+      if (initialData && user) {
+        // Check if this car is shared with current user (not owned by them)
+        const isShared = initialData.user_id !== user.id &&
+          initialData.shared_with?.includes(user.id)
+
+        setIsSharedCar(isShared)
+
+        if (isShared && initialData.user_id) {
+          // Fetch owner name
+          const { data } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, email')
+            .eq('id', initialData.user_id)
+            .single()
+
+          if (data) {
+            const name = data.first_name && data.last_name
+              ? `${data.first_name} ${data.last_name}`
+              : data.email
+            setOwnerName(name)
+          }
+        }
+      }
+    }
+
+    checkIfShared()
+  }, [initialData, user])
 
   const handleChange = (e: any) => {
     const { name, value } = e.target
@@ -343,6 +381,26 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
             <X className="w-6 h-6" />
           </button>
         </div>
+
+        {/* Read-Only Banner for Shared Cars */}
+        {isSharedCar && (
+          <div className="bg-blue-500/10 border-b border-blue-500/20 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-500/20 rounded-lg">
+                <Eye className="w-5 h-5 text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-blue-400 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Coche compartido - Solo lectura
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Este coche ha sido compartido contigo por <span className="font-medium text-foreground">{ownerName}</span>. Puedes ver toda la información pero no editarla.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Mobile Tabs Navigation */}
         <div className="lg:hidden flex overflow-x-auto border-b border-border bg-muted/5 p-2 gap-2 no-scrollbar">
@@ -885,9 +943,21 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
           </button>
           <button
             onClick={() => document.getElementById('car-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+            disabled={isSharedCar}
+            className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${isSharedCar
+                ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90'
+              }`}
+            title={isSharedCar ? 'No puedes editar coches compartidos' : ''}
           >
-            {initialData ? "Guardar Cambios" : "Añadir Coche"}
+            {isSharedCar ? (
+              <span className="flex items-center gap-2">
+                <Eye className="w-4 h-4" />
+                Solo lectura
+              </span>
+            ) : (
+              initialData ? "Guardar Cambios" : "Añadir Coche"
+            )}
           </button>
         </div>
       </div>

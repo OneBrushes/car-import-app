@@ -23,9 +23,13 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCa
 
   return (
     <div
-      onClick={() => isOwner ? onEdit(car) : null}
-      className={`bg-card border rounded-lg overflow-hidden transition-all group relative ${isOwner ? 'cursor-pointer hover:border-primary/30' : 'cursor-default border-blue-500/30 bg-blue-500/5'
-        } ${isSharedByMe ? 'border-blue-500/50' : 'border-border'}`}
+      onClick={() => onEdit(car)} // Permitir ver tanto propios como compartidos
+      className={`bg-card border rounded-lg overflow-hidden transition-all group relative cursor-pointer ${isSharedWithMe
+          ? 'hover:border-blue-500/50 border-blue-500/30 bg-blue-500/5'
+          : isSharedByMe
+            ? 'hover:border-primary/30 border-blue-500/50'
+            : 'hover:border-primary/30 border-border'
+        }`}
     >
       {/* Badges de Estado */}
       <div className="absolute top-2 right-2 z-10 flex flex-col gap-1">
