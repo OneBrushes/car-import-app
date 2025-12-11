@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ArrowLeft, Loader2, Shield, Camera, Upload } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
-import { compressImage } from "@/lib/image-compression"
+import { compressProfileImage } from "@/lib/image-compression"
 import { Badge } from "@/components/ui/badge"
 
 export default function ProfilePage() {
@@ -67,7 +67,7 @@ export default function ProfilePage() {
 
         try {
             // 1. Comprimir imagen
-            const compressedFile = await compressImage(file)
+            const compressedFile = await compressProfileImage(file)
 
             // 1.5. Borrar avatar anterior si existe para no acumular basura
             const { data: oldFiles } = await supabase.storage.from('avatars').list('', { search: user?.id })

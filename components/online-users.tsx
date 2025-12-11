@@ -15,6 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 interface OnlineUser {
     id: string
     email: string
+    first_name?: string
+    last_name?: string
     avatar_url?: string
     presence_ref: string
 }
@@ -62,6 +64,8 @@ export function OnlineUsers() {
                                 usersMap.set(presence.user_id, {
                                     id: presence.user_id,
                                     email: presence.email,
+                                    first_name: presence.first_name,
+                                    last_name: presence.last_name,
                                     avatar_url: presence.avatar_url,
                                     presence_ref: presence.presence_ref,
                                 })
@@ -77,7 +81,7 @@ export function OnlineUsers() {
                     // Get user profile data
                     const { data: profile } = await supabase
                         .from('profiles')
-                        .select('email, avatar_url')
+                        .select('email, avatar_url, first_name, last_name')
                         .eq('id', user.id)
                         .single()
 
@@ -85,6 +89,8 @@ export function OnlineUsers() {
                     await presenceChannel.track({
                         user_id: user.id,
                         email: profile?.email || user.email,
+                        first_name: profile?.first_name || user.user_metadata?.first_name,
+                        last_name: profile?.last_name || user.user_metadata?.last_name,
                         avatar_url: profile?.avatar_url,
                         online_at: new Date().toISOString(),
                     })
@@ -149,7 +155,11 @@ export function OnlineUsers() {
                                     <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{onlineUser.email}</p>
+                                    <p className="text-sm font-medium truncate">
+                                        {onlineUser.first_name && onlineUser.last_name
+                                            ? `${onlineUser.first_name} ${onlineUser.last_name.charAt(0)}.`
+                                            : onlineUser.email}
+                                    </p>
                                     {onlineUser.id === user.id && (
                                         <p className="text-xs text-muted-foreground">Tú</p>
                                     )}
