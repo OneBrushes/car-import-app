@@ -57,12 +57,26 @@ export function DonationsTab() {
                 body: JSON.stringify(body),
             })
 
-            const data = await res.json()
+            // Verificar si la respuesta es OK
+            if (!res.ok) {
+                const errorText = await res.text()
+                console.error('API Error:', res.status, errorText)
+                throw new Error(`Error del servidor (${res.status}): ${errorText || 'Sin respuesta'}`)
+            }
+
+            // Verificar que hay contenido antes de parsear JSON
+            const text = await res.text()
+            if (!text) {
+                throw new Error('La API no devolvió ninguna respuesta')
+            }
+
+            const data = JSON.parse(text)
 
             if (data.error) throw new Error(data.error)
 
             setClientSecret(data.clientSecret)
         } catch (error: any) {
+            console.error('Payment error:', error)
             toast.error(error.message || 'Error al iniciar pago')
         } finally {
             setLoading(false)
@@ -137,8 +151,8 @@ export function DonationsTab() {
                                         setClientSecret('')
                                     }}
                                     className={`py-3 px-2 rounded-xl border-2 font-bold text-sm transition-all duration-200 ${selectedAmount === amount
-                                            ? 'border-primary bg-primary/10 text-primary shadow-sm scale-105'
-                                            : 'border-border bg-card hover:border-primary/50 hover:bg-secondary'
+                                        ? 'border-primary bg-primary/10 text-primary shadow-sm scale-105'
+                                        : 'border-border bg-card hover:border-primary/50 hover:bg-secondary'
                                         }`}
                                 >
                                     {amount}€
@@ -150,8 +164,8 @@ export function DonationsTab() {
                                     setClientSecret('')
                                 }}
                                 className={`py-3 px-2 rounded-xl border-2 font-bold text-sm transition-all duration-200 ${selectedAmount === 'custom'
-                                        ? 'border-primary bg-primary/10 text-primary shadow-sm scale-105'
-                                        : 'border-border bg-card hover:border-primary/50 hover:bg-secondary'
+                                    ? 'border-primary bg-primary/10 text-primary shadow-sm scale-105'
+                                    : 'border-border bg-card hover:border-primary/50 hover:bg-secondary'
                                     }`}
                             >
                                 Otro

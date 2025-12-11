@@ -23,12 +23,14 @@ Ve a tu proyecto en Cloudflare Pages → **Settings** → **Builds & deployments
 
 **Environment variables** (Production):
 ```
-NODE_VERSION = 18
+NODE_VERSION = 20
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = pk_live_tu_clave_aqui
 STRIPE_SECRET_KEY = sk_live_tu_clave_secreta_aqui
 NEXT_PUBLIC_SUPABASE_URL = https://jqwxhqzpwdxgvlxfbvkp.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY = tu_clave_supabase
 ```
+
+⚠️ **IMPORTANTE**: Next.js 16 requiere Node.js 20 o superior
 
 ### 2. Añadir compatibilidad con Next.js 16
 
