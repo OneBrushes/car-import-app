@@ -76,7 +76,7 @@ BEGIN
                     'car_shared',
                     '🚗 Coche compartido contigo',
                     owner_name || ' ha compartido ' || car_name || ' contigo',
-                    '/car/' || NEW.id, -- Link al coche
+                    '/', -- Link a la página principal donde verá el coche
                     jsonb_build_object(
                         'car_id', NEW.id,
                         'owner_id', NEW.user_id,

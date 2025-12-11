@@ -1,9 +1,11 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { ExternalLink, Trash2, Share2, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ImageCarousel } from "@/components/ui/image-carousel"
+import { supabase } from "@/lib/supabase"
 
 interface CarCardProps {
   car: any
@@ -14,6 +16,7 @@ interface CarCardProps {
 }
 
 export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCardProps) {
+  const [ownerName, setOwnerName] = useState<string>("")
   const finalPrice = (car.price || 0) + (car.totalExpenses || 0)
   const images = car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : [])
 
@@ -21,14 +24,36 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCa
   const isSharedWithMe = !isOwner && currentUserId && car.shared_with?.includes(currentUserId)
   const isSharedByMe = isOwner && car.shared_with && car.shared_with.length > 0
 
+  // Fetch owner name if car is shared with me
+  useEffect(() => {
+    const fetchOwnerName = async () => {
+      if (isSharedWithMe && car.user_id) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('first_name, last_name, email')
+          .eq('id', car.user_id)
+          .single()
+
+        if (data) {
+          const name = data.first_name && data.last_name
+            ? `${data.first_name} ${data.last_name.charAt(0)}.`
+            : data.email
+          setOwnerName(name)
+        }
+      }
+    }
+
+    fetchOwnerName()
+  }, [isSharedWithMe, car.user_id])
+
   return (
     <div
       onClick={() => onEdit(car)} // Permitir ver tanto propios como compartidos
       className={`bg-card border rounded-lg overflow-hidden transition-all group relative cursor-pointer ${isSharedWithMe
-          ? 'hover:border-blue-500/50 border-blue-500/30 bg-blue-500/5'
-          : isSharedByMe
-            ? 'hover:border-primary/30 border-blue-500/50'
-            : 'hover:border-primary/30 border-border'
+        ? 'hover:border-blue-500/50 border-blue-500/30 bg-blue-500/5'
+        : isSharedByMe
+          ? 'hover:border-primary/30 border-blue-500/50'
+          : 'hover:border-primary/30 border-border'
         }`}
     >
       {/* Badges de Estado */}
@@ -123,7 +148,7 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCa
         {/* Info Compartido */}
         {isSharedWithMe && (
           <p className="text-xs text-center text-muted-foreground">
-            Solo lectura (Compartido por propietario)
+            Solo lectura • Compartido por {ownerName || "..."}
           </p>
         )}
       </div>

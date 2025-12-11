@@ -28,6 +28,9 @@ export default function ProfilePage() {
     const [newEmail, setNewEmail] = useState("")
     const [newPassword, setNewPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
+    const [profileFirstName, setProfileFirstName] = useState("")
+    const [profileLastName, setProfileLastName] = useState("")
+    const [isUpdatingName, setIsUpdatingName] = useState(false)
 
     useEffect(() => {
         if (!loading && !user) {
@@ -41,13 +44,15 @@ export default function ProfilePage() {
             try {
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('role, avatar_url')
+                    .select('role, avatar_url, first_name, last_name')
                     .eq('id', user.id)
                     .single()
 
                 if (data) {
                     setRole(data.role)
                     setAvatarUrl(data.avatar_url)
+                    setProfileFirstName(data.first_name || "")
+                    setProfileLastName(data.last_name || "")
                 }
             } catch (error) {
                 console.error('Error fetching profile:', error)
@@ -118,6 +123,39 @@ export default function ProfilePage() {
             setNewEmail("")
         } catch (error: any) {
             toast.error(error.message)
+        }
+    }
+
+    const handleUpdateName = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsUpdatingName(true)
+        try {
+            // Update profiles table
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update({
+                    first_name: profileFirstName,
+                    last_name: profileLastName
+                })
+                .eq('id', user?.id)
+
+            if (profileError) throw profileError
+
+            // Update auth.users raw_user_meta_data
+            const { error: authError } = await supabase.auth.updateUser({
+                data: {
+                    first_name: profileFirstName,
+                    last_name: profileLastName
+                }
+            })
+
+            if (authError) throw authError
+
+            toast.success("Nombre actualizado correctamente")
+        } catch (error: any) {
+            toast.error(error.message)
+        } finally {
+            setIsUpdatingName(false)
         }
     }
 
@@ -207,22 +245,51 @@ export default function ProfilePage() {
                     </TabsList>
 
                     <TabsContent value="general">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Información Personal</CardTitle>
-                                <CardDescription>Gestiona tu información básica.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="grid gap-2">
-                                    <Label>Email Actual</Label>
-                                    <Input value={user.email} disabled />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Rol</Label>
-                                    <Input value={role} disabled className="capitalize" />
-                                </div>
-                            </CardContent>
-                        </Card>
+                        <div className="grid gap-6">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Información Personal</CardTitle>
+                                    <CardDescription>Actualiza tu nombre y apellido.</CardDescription>
+                                </CardHeader>
+                                <form onSubmit={handleUpdateName}>
+                                    <CardContent className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid gap-2">
+                                                <Label>Nombre</Label>
+                                                <Input
+                                                    value={profileFirstName}
+                                                    onChange={(e) => setProfileFirstName(e.target.value)}
+                                                    placeholder="Tu nombre"
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label>Apellido</Label>
+                                                <Input
+                                                    value={profileLastName}
+                                                    onChange={(e) => setProfileLastName(e.target.value)}
+                                                    placeholder="Tu apellido"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label>Email Actual</Label>
+                                            <Input value={user.email} disabled />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label>Rol</Label>
+                                            <Input value={role} disabled className="capitalize" />
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter>
+                                        <Button type="submit" disabled={isUpdatingName}>
+                                            {isUpdatingName ? "Actualizando..." : "Actualizar Nombre"}
+                                        </Button>
+                                    </CardFooter>
+                                </form>
+                            </Card>
+                        </div>
                     </TabsContent>
 
                     <TabsContent value="security">
