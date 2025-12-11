@@ -75,13 +75,18 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
         })
 
         // 4. Devolver el clientSecret del PaymentIntent asociado a la primera factura
-        // @ts-ignore
-        const clientSecret = subscription.latest_invoice.payment_intent.client_secret
+        const latestInvoice: any = subscription.latest_invoice
+        const paymentIntent: any = latestInvoice?.payment_intent
+
+        if (!paymentIntent || !paymentIntent.client_secret) {
+            console.error('Subscription data:', JSON.stringify(subscription, null, 2))
+            throw new Error('No se pudo obtener el client_secret de la suscripción')
+        }
 
         return new Response(
             JSON.stringify({
                 subscriptionId: subscription.id,
-                clientSecret: clientSecret,
+                clientSecret: paymentIntent.client_secret,
             }),
             {
                 status: 200,

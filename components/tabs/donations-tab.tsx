@@ -338,7 +338,16 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
                 disabled={isProcessing || !stripe || !elements}
                 className="w-full h-12 text-lg font-semibold bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900"
             >
-                {isProcessing ? <Loader2 className="animate-spin" /> : 'Pagar ahora'}
+                {isProcessing ? (
+                    <>
+                        <Loader2 className="animate-spin mr-2" />
+                        Procesando...
+                    </>
+                ) : !stripe || !elements ? (
+                    'Cargando...'
+                ) : (
+                    'Pagar ahora'
+                )}
             </Button>
         </form>
     )
