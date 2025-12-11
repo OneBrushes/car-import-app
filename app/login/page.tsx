@@ -15,6 +15,7 @@ export default function LoginPage() {
     const [firstName, setFirstName] = useState("")
     const [lastName, setLastName] = useState("")
     const [loading, setLoading] = useState(false)
+    const [isSubmitting, setIsSubmitting] = useState(false)
     const [isSignUp, setIsSignUp] = useState(false)
     const [registrationsEnabled, setRegistrationsEnabled] = useState(true)
     const [isAnimating, setIsAnimating] = useState(false)
@@ -47,6 +48,14 @@ export default function LoginPage() {
 
     const handleResetPassword = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        // Evitar múltiples envíos
+        if (isSubmitting) {
+            toast.info("Por favor, espera un momento antes de intentar de nuevo")
+            return
+        }
+
+        setIsSubmitting(true)
         setLoading(true)
         try {
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -59,11 +68,21 @@ export default function LoginPage() {
             toast.error(error.message)
         } finally {
             setLoading(false)
+            // Cooldown de 3 segundos
+            setTimeout(() => setIsSubmitting(false), 3000)
         }
     }
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        // Evitar múltiples envíos
+        if (isSubmitting) {
+            toast.info("Por favor, espera un momento antes de intentar de nuevo")
+            return
+        }
+
+        setIsSubmitting(true)
         setLoading(true)
 
         try {
@@ -138,6 +157,8 @@ export default function LoginPage() {
             toast.error(error.message || "Ha ocurrido un error")
         } finally {
             setLoading(false)
+            // Cooldown de 3 segundos antes de permitir otro envío
+            setTimeout(() => setIsSubmitting(false), 3000)
         }
     }
 
