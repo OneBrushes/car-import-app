@@ -12,8 +12,10 @@ export async function POST(req: Request) {
             )
         }
 
-        // Inicializar Stripe dentro del handler
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+        // Inicializar Stripe dentro del handler con versión de API
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+            apiVersion: '2025-11-17.clover',
+        })
 
         const body = await req.json()
         const { amount } = body

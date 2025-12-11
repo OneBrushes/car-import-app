@@ -6,10 +6,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: 'export',
-  analytics: {
-    disabled: true,
-  },
+  // Removido 'output: export' para habilitar API routes
+  // Cloudflare Pages necesita las API routes para Stripe
 }
 
 export default nextConfig
