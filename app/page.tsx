@@ -122,6 +122,20 @@ export default function Home() {
     }
   }, [user, loading, router])
 
+  // Listen for tab change events from notifications
+  useEffect(() => {
+    const handleTabChange = (event: CustomEvent) => {
+      const { tab } = event.detail
+      setActiveTab(tab as TabType)
+    }
+
+    window.addEventListener('changeTab', handleTabChange as EventListener)
+
+    return () => {
+      window.removeEventListener('changeTab', handleTabChange as EventListener)
+    }
+  }, [])
+
   if (!mounted || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">

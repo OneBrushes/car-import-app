@@ -153,9 +153,14 @@ export function NotificationsCenter() {
             await markAsRead(notification.id)
         }
 
-        // Navegar si tiene link
-        if (notification.link) {
-            setIsOpen(false)
+        setIsOpen(false)
+
+        // Si es una notificación de coche compartido, cambiar al tab de importación
+        if (notification.type === 'car_shared') {
+            // Disparar evento personalizado para cambiar el tab
+            window.dispatchEvent(new CustomEvent('changeTab', { detail: { tab: 'import' } }))
+        } else if (notification.link) {
+            // Navegar si tiene link
             router.push(notification.link)
         }
     }
