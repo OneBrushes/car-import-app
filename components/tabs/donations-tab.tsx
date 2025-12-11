@@ -48,7 +48,9 @@ export function DonationsTab() {
 
         setLoading(true)
         try {
-            const endpoint = isMonthly ? '/api/create-subscription' : '/api/create-payment-intent'
+            const endpoint = isMonthly
+                ? 'https://stripe-subscription.onebrushes.workers.dev/'
+                : 'https://stripe-payment-intent.onebrushes.workers.dev/'
             const body = isMonthly ? { amount, email, name } : { amount }
 
             const res = await fetch(endpoint, {
