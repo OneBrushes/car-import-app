@@ -13,6 +13,13 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 // Initialize Stripe
+console.log('Donations config:', {
+    data: {
+        publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ? 'Set ✅' : 'Missing ❌',
+        keyPrefix: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.substring(0, 7)
+    },
+    error: null
+})
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 const AMOUNTS = [1, 2, 5, 10, 20, 50]
