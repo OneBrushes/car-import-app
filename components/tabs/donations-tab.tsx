@@ -51,6 +51,8 @@ export function DonationsTab() {
             const endpoint = isMonthly
                 ? 'https://stripe-subscription.onebrushes.workers.dev/'
                 : 'https://stripe-payment-intent.onebrushes.workers.dev/'
+
+            console.log('🚀 Using Cloudflare Worker:', endpoint)
             const body = isMonthly ? { amount, email, name } : { amount }
 
             const res = await fetch(endpoint, {
