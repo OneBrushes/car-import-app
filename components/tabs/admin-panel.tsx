@@ -689,8 +689,8 @@ export function AdminPanel() {
                                 <CardTitle>Control de Acceso</CardTitle>
                                 <CardDescription>Gestiona quién puede registrarse en la plataforma.</CardDescription>
                             </CardHeader>
-                            <CardContent className="flex items-center justify-between">
-                                <div className="space-y-1">
+                            <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="space-y-1 flex-1">
                                     <h4 className="font-medium">Permitir Nuevos Registros</h4>
                                     <p className="text-sm text-muted-foreground">
                                         Si se desactiva, nadie nuevo podrá crear una cuenta.
@@ -698,7 +698,7 @@ export function AdminPanel() {
                                 </div>
                                 <div
                                     onClick={toggleRegistrations}
-                                    className={`w-14 h-7 rounded-full p-1 cursor-pointer transition-colors ${registrationsEnabled ? 'bg-primary' : 'bg-secondary'}`}
+                                    className={`w-14 h-7 rounded-full p-1 cursor-pointer transition-colors flex-shrink-0 ${registrationsEnabled ? 'bg-primary' : 'bg-secondary'}`}
                                 >
                                     <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${registrationsEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
                                 </div>
@@ -711,7 +711,7 @@ export function AdminPanel() {
                                 <CardDescription>Bloquea direcciones de correo específicas para impedir su acceso o registro.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                     <input
                                         type="email"
                                         placeholder="ejemplo@correo.com"
@@ -719,7 +719,7 @@ export function AdminPanel() {
                                         onChange={(e) => setNewBlockedEmail(e.target.value)}
                                         className="flex-1 px-3 py-2 rounded-lg bg-input border border-border"
                                     />
-                                    <Button onClick={addBlockedEmail}>
+                                    <Button onClick={addBlockedEmail} className="w-full sm:w-auto">
                                         <Ban className="w-4 h-4 mr-2" /> Bloquear
                                     </Button>
                                 </div>
@@ -730,7 +730,7 @@ export function AdminPanel() {
                                     ) : (
                                         blockedEmails.map((email) => (
                                             <div key={email} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg border border-border">
-                                                <span className="font-medium text-sm">{email}</span>
+                                                <span className="font-medium text-sm truncate flex-1 mr-2">{email}</span>
                                                 <Button variant="ghost" size="sm" onClick={() => removeBlockedEmail(email)}>
                                                     <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
                                                 </Button>
