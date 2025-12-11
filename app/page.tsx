@@ -15,6 +15,7 @@ import { Dashboard } from "@/components/dashboard"
 import { Navigation } from "@/components/navigation"
 import { DonationsTab } from "@/components/tabs/donations-tab"
 import { OnlineUsers } from "@/components/online-users"
+import { NotificationsCenter } from "@/components/notifications-center"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useAuth } from "@/components/auth-provider"
 import { Loader2, LogOut, User as UserIcon, Shield } from "lucide-react"
@@ -164,6 +165,7 @@ export default function Home() {
             )}
 
             <OnlineUsers />
+            <NotificationsCenter />
             <ThemeToggle isDark={isDark} onToggle={handleToggleTheme} />
 
             <DropdownMenu>
