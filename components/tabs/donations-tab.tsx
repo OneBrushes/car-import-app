@@ -366,18 +366,49 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
 
             <Button
                 disabled={isProcessing || !stripe || !elements}
-                className="w-full h-12 text-lg font-semibold bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900"
+                className={`
+                    w-full h-14 text-lg font-bold relative overflow-hidden
+                    transition-all duration-300 transform
+                    ${!stripe || !elements
+                        ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 text-white shadow-lg hover:shadow-2xl hover:shadow-green-500/50 dark:hover:shadow-green-400/30 hover:scale-[1.02] active:scale-[0.98]'
+                    }
+                    disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
+                `}
             >
-                {isProcessing ? (
-                    <>
-                        <Loader2 className="animate-spin mr-2" />
-                        Procesando...
-                    </>
-                ) : !stripe || !elements ? (
-                    'Cargando...'
-                ) : (
-                    'Pagar ahora'
+                {/* Efecto de brillo animado cuando está activo */}
+                {stripe && elements && !isProcessing && (
+                    <motion.div
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                        animate={{
+                            x: ['-100%', '100%'],
+                        }}
+                        transition={{
+                            duration: 3,
+                            repeat: Infinity,
+                            ease: 'linear',
+                        }}
+                    />
                 )}
+
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                    {isProcessing ? (
+                        <>
+                            <Loader2 className="animate-spin" size={20} />
+                            Procesando pago...
+                        </>
+                    ) : !stripe || !elements ? (
+                        <>
+                            <Loader2 className="animate-spin" size={20} />
+                            Cargando formulario...
+                        </>
+                    ) : (
+                        <>
+                            <CreditCard size={20} />
+                            Pagar ahora
+                        </>
+                    )}
+                </span>
             </Button>
         </form>
     )
