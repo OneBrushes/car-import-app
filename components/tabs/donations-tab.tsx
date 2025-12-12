@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { supabase } from '@/lib/supabase'
 
 // Initialize Stripe
 // Fallback a clave hardcoded si las env vars no están disponibles (Cloudflare Pages issue)
@@ -28,6 +29,23 @@ export function DonationsTab() {
     const [paymentSuccess, setPaymentSuccess] = useState(false)
     const [email, setEmail] = useState('')
     const [name, setName] = useState('')
+    const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false)
+
+    // Load subscriptions setting
+    useEffect(() => {
+        const loadSettings = async () => {
+            const { data } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'subscriptions_enabled')
+                .single()
+
+            if (data) {
+                setSubscriptionsEnabled(data.value)
+            }
+        }
+        loadSettings()
+    }, [])
 
     const getFinalAmount = () => {
         if (selectedAmount === 'custom') {
@@ -133,20 +151,22 @@ export function DonationsTab() {
                         <CardDescription>Elige cuánto quieres aportar hoy</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        <div className="flex items-center justify-between bg-secondary/50 p-3 rounded-lg border">
-                            <Label htmlFor="monthly-mode" className="flex flex-col cursor-pointer">
-                                <span className="font-medium">Suscripción Mensual</span>
-                                <span className="text-xs text-muted-foreground">Apoyo recurrente</span>
-                            </Label>
-                            <Switch
-                                id="monthly-mode"
-                                checked={isMonthly}
-                                onCheckedChange={(checked) => {
-                                    setIsMonthly(checked)
-                                    setClientSecret('')
-                                }}
-                            />
-                        </div>
+                        {subscriptionsEnabled && (
+                            <div className="flex items-center justify-between bg-secondary/50 p-3 rounded-lg border">
+                                <Label htmlFor="monthly-mode" className="flex flex-col cursor-pointer">
+                                    <span className="font-medium">Suscripción Mensual</span>
+                                    <span className="text-xs text-muted-foreground">Apoyo recurrente</span>
+                                </Label>
+                                <Switch
+                                    id="monthly-mode"
+                                    checked={isMonthly}
+                                    onCheckedChange={(checked) => {
+                                        setIsMonthly(checked)
+                                        setClientSecret('')
+                                    }}
+                                />
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-3 gap-2 sm:gap-3">
                             {AMOUNTS.map((amount) => (

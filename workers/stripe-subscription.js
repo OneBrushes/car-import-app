@@ -81,7 +81,7 @@ export default {
             })
             const price = await priceResponse.json()
 
-            // 3. Crear suscripción
+            // 3. Crear suscripción con payment intent
             const subscriptionResponse = await fetch('https://api.stripe.com/v1/subscriptions', {
                 method: 'POST',
                 headers: {
@@ -93,16 +93,37 @@ export default {
                     'items[0][price]': price.id,
                     payment_behavior: 'default_incomplete',
                     'payment_settings[save_default_payment_method]': 'on_subscription',
+                    'payment_settings[payment_method_types][]': 'card',
                     'expand[]': 'latest_invoice.payment_intent',
                 }),
             })
             const subscription = await subscriptionResponse.json()
 
             // 4. Obtener client_secret
-            const clientSecret = subscription.latest_invoice?.payment_intent?.client_secret
+            let clientSecret = null
+
+            // Intentar obtener de la expansión
+            if (subscription.latest_invoice && typeof subscription.latest_invoice === 'object') {
+                const invoice = subscription.latest_invoice
+                if (invoice.payment_intent && typeof invoice.payment_intent === 'object') {
+                    clientSecret = invoice.payment_intent.client_secret
+                } else if (typeof invoice.payment_intent === 'string') {
+                    // Si payment_intent es solo un ID, obtenerlo manualmente
+                    const piResponse = await fetch(
+                        `https://api.stripe.com/v1/payment_intents/${invoice.payment_intent}`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+                            },
+                        }
+                    )
+                    const paymentIntent = await piResponse.json()
+                    clientSecret = paymentIntent.client_secret
+                }
+            }
 
             if (!clientSecret) {
-                console.error('Subscription structure:', subscription)
+                console.error('Subscription structure:', JSON.stringify(subscription))
                 return new Response(
                     JSON.stringify({ error: 'No se pudo obtener el client_secret' }),
                     { status: 500, headers: corsHeaders }

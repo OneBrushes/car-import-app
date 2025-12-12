@@ -46,6 +46,7 @@ export function AdminPanel() {
     // Security State
     const [registrationsEnabled, setRegistrationsEnabled] = useState(true)
     const [donationsEnabled, setDonationsEnabled] = useState(false)
+    const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false)
     const [blockedEmails, setBlockedEmails] = useState<string[]>([])
     const [newBlockedEmail, setNewBlockedEmail] = useState("")
 
@@ -93,14 +94,25 @@ export function AdminPanel() {
             setRegistrationsEnabled(data.value)
         }
 
-        const { data: donationsData } = await supabase
+        const { data: donationsData, error: donationsError } = await supabase
             .from('app_settings')
             .select('value')
             .eq('key', 'donations_enabled')
             .single()
 
-        if (donationsData) {
+        if (!donationsError && donationsData) {
             setDonationsEnabled(donationsData.value)
+        }
+
+        // Load subscriptions setting
+        const { data: subscriptionsData, error: subscriptionsError } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'subscriptions_enabled')
+            .single()
+
+        if (!subscriptionsError && subscriptionsData) {
+            setSubscriptionsEnabled(subscriptionsData.value)
         }
 
         const savedBlocked = localStorage.getItem('blockedEmails')
@@ -375,11 +387,28 @@ export function AdminPanel() {
                 .upsert({ key: 'donations_enabled', value: newValue })
 
             if (error) throw error
-            toast.success(`Donaciones ${newValue ? 'visibles' : 'ocultas'}`)
+            toast.success(`Donaciones ${newValue ? 'activadas' : 'desactivadas'}`)
         } catch (error) {
             console.error(error)
             toast.error("Error al guardar configuración")
             setDonationsEnabled(!newValue)
+        }
+    }
+
+    const toggleSubscriptions = async () => {
+        const newValue = !subscriptionsEnabled
+        setSubscriptionsEnabled(newValue)
+
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({ key: 'subscriptions_enabled', value: newValue })
+
+            if (error) throw error
+            toast.success(`Suscripciones ${newValue ? 'activadas' : 'desactivadas'}`)
+        } catch (error) {
+            toast.error('Error al actualizar configuración')
+            setSubscriptionsEnabled(!newValue)
         }
     }
 
@@ -759,6 +788,21 @@ export function AdminPanel() {
                                         className={`w-14 h-7 rounded-full p-1 cursor-pointer transition-colors flex-shrink-0 ${donationsEnabled ? 'bg-green-500 dark:bg-green-600' : 'bg-secondary'}`}
                                     >
                                         <div className={`bg-white dark:bg-slate-200 w-5 h-5 rounded-full shadow-md transform transition-transform ${donationsEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-secondary/30 rounded-lg border">
+                                    <div className="space-y-1 flex-1">
+                                        <h4 className="font-semibold">Suscripciones Mensuales</h4>
+                                        <p className="text-sm text-muted-foreground">
+                                            Habilita o deshabilita las suscripciones mensuales en la pestaña de donaciones.
+                                        </p>
+                                    </div>
+                                    <div
+                                        onClick={toggleSubscriptions}
+                                        className={`w-14 h-7 rounded-full p-1 cursor-pointer transition-colors flex-shrink-0 ${subscriptionsEnabled ? 'bg-green-500 dark:bg-green-600' : 'bg-secondary'}`}
+                                    >
+                                        <div className={`bg-white dark:bg-slate-200 w-5 h-5 rounded-full shadow-md transform transition-transform ${subscriptionsEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
                                     </div>
                                 </div>
                             </CardContent>
