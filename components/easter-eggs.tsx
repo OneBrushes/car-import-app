@@ -16,27 +16,36 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
     const [sessionStartTime] = useState(Date.now())
     const [sessionTime, setSessionTime] = useState(0)
     const [totalTimeSpent, setTotalTimeSpent] = useState(0)
+    const [initialTotalTime, setInitialTotalTime] = useState(0)
 
     useEffect(() => {
-        // Load total time from localStorage
+        // Load total time from localStorage only once
         const savedTime = localStorage.getItem('totalTimeSpent')
-        if (savedTime) {
-            setTotalTimeSpent(parseInt(savedTime))
-        }
+        const initialTime = savedTime ? parseInt(savedTime) : 0
+        setInitialTotalTime(initialTime)
+        setTotalTimeSpent(initialTime)
+    }, [])
 
+    useEffect(() => {
         // Update session time every second
         const interval = setInterval(() => {
             const currentSessionTime = Math.floor((Date.now() - sessionStartTime) / 1000)
             setSessionTime(currentSessionTime)
 
-            // Update total time
-            const newTotalTime = (savedTime ? parseInt(savedTime) : 0) + currentSessionTime
-            setTotalTimeSpent(newTotalTime)
-            localStorage.setItem('totalTimeSpent', newTotalTime.toString())
+            // Update total time display (initial + current session)
+            setTotalTimeSpent(initialTotalTime + currentSessionTime)
         }, 1000)
 
         return () => clearInterval(interval)
-    }, [sessionStartTime])
+    }, [sessionStartTime, initialTotalTime])
+
+    useEffect(() => {
+        // Save total time when component unmounts
+        return () => {
+            const finalTotalTime = initialTotalTime + Math.floor((Date.now() - sessionStartTime) / 1000)
+            localStorage.setItem('totalTimeSpent', finalTotalTime.toString())
+        }
+    }, [initialTotalTime, sessionStartTime])
 
     useEffect(() => {
         // Reset click count after 2 seconds of inactivity
