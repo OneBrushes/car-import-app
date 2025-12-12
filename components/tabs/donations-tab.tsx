@@ -115,6 +115,7 @@ export function DonationsTab() {
     // Efecto de confeti cuando se completa el pago
     useEffect(() => {
         if (paymentSuccess) {
+            console.log('🎉 Disparando confeti!')
             // Explosión inicial de confeti
             const count = 200
             const defaults = {
