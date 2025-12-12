@@ -449,6 +449,7 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
     const elements = useElements()
     const [message, setMessage] = useState<string | null>(null)
     const [isProcessing, setIsProcessing] = useState(false)
+    const [hasError, setHasError] = useState(false)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -456,6 +457,8 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
         if (!stripe || !elements) return
 
         setIsProcessing(true)
+        setHasError(false)
+        setMessage(null)
 
         const { error, paymentIntent } = await stripe.confirmPayment({
             elements,
@@ -467,6 +470,12 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
 
         if (error) {
             setMessage(error.message || 'Error desconocido')
+            setHasError(true)
+
+            // Volver al estado normal después de 3 segundos
+            setTimeout(() => {
+                setHasError(false)
+            }, 3000)
         } else if (paymentIntent && paymentIntent.status === 'succeeded') {
             setMessage('¡Pago realizado con éxito!')
             onSuccess()
@@ -491,10 +500,12 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
                 disabled={isProcessing || !stripe || !elements}
                 className={`
                     w-full h-14 text-lg font-bold relative overflow-hidden
-                    transition-all duration-300 transform
+                    transition-all duration-700 transform
                     ${!stripe || !elements
                         ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 text-white shadow-lg hover:shadow-2xl hover:shadow-green-500/50 dark:hover:shadow-green-400/30 hover:scale-[1.02] active:scale-[0.98]'
+                        : hasError
+                            ? 'bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white shadow-lg shadow-red-500/50 dark:shadow-red-400/30'
+                            : 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 text-white shadow-lg hover:shadow-2xl hover:shadow-green-500/50 dark:hover:shadow-green-400/30 hover:scale-[1.02] active:scale-[0.98]'
                     }
                     disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
                 `}
