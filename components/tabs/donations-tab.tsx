@@ -42,6 +42,10 @@ export function DonationsTab() {
 
             if (data) {
                 setSubscriptionsEnabled(data.value)
+                // Si las suscripciones están desactivadas, forzar modo pago único
+                if (!data.value && isMonthly) {
+                    setIsMonthly(false)
+                }
             }
         }
         loadSettings()
