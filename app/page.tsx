@@ -17,6 +17,7 @@ import { DonationsTab } from "@/components/tabs/donations-tab"
 import { OnlineUsers } from "@/components/online-users"
 import { NotificationsCenter } from "@/components/notifications-center"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { EasterEggs } from "@/components/easter-eggs"
 import { useAuth } from "@/components/auth-provider"
 import { Loader2, LogOut, User as UserIcon, Shield } from "lucide-react"
 import {
@@ -156,9 +157,7 @@ export default function Home() {
       <header className="sticky top-0 z-40 glass border-b">
         <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-white dark:bg-white flex items-center justify-center p-1">
-              <img src="/NorDrive.png" alt="NorDrive Logo" className="w-full h-full object-contain" />
-            </div>
+            <EasterEggs onLogoClick={() => { }} />
             <div className="hidden sm:block">
               <h1 className="text-lg font-semibold">NorDrive</h1>
               <p className="text-xs text-muted-foreground">Gestión de importación</p>
