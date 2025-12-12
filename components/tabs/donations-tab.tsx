@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { supabase } from '@/lib/supabase'
+import confetti from 'canvas-confetti'
 
 // Initialize Stripe
 // Fallback a clave hardcoded si las env vars no están disponibles (Cloudflare Pages issue)
@@ -111,28 +112,107 @@ export function DonationsTab() {
         }
     }
 
+    // Efecto de confeti cuando se completa el pago
+    useEffect(() => {
+        if (paymentSuccess) {
+            // Confeti desde abajo hacia arriba
+            const duration = 3000
+            const animationEnd = Date.now() + duration
+            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 }
+
+            function randomInRange(min: number, max: number) {
+                return Math.random() * (max - min) + min
+            }
+
+            const interval: any = setInterval(function () {
+                const timeLeft = animationEnd - Date.now()
+
+                if (timeLeft <= 0) {
+                    return clearInterval(interval)
+                }
+
+                const particleCount = 50 * (timeLeft / duration)
+
+                // Desde la izquierda
+                confetti({
+                    ...defaults,
+                    particleCount,
+                    origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+                })
+                // Desde la derecha
+                confetti({
+                    ...defaults,
+                    particleCount,
+                    origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+                })
+            }, 250)
+
+            return () => clearInterval(interval)
+        }
+    }, [paymentSuccess])
+
     if (paymentSuccess) {
         return (
-            <div className="flex flex-col items-center justify-center p-12 text-center animate-in fade-in zoom-in duration-500">
-                <div className="w-24 h-24 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6">
-                    <CheckCircle className="w-12 h-12 text-green-600 dark:text-green-400" />
-                </div>
-                <h2 className="text-3xl font-bold mb-4">¡Gracias por tu apoyo!</h2>
-                <p className="text-lg text-muted-foreground max-w-md">
-                    Tu contribución ayuda a mantener y mejorar esta aplicación. Eres increíble.
-                </p>
-                <Button
-                    variant="outline"
-                    className="mt-8"
-                    onClick={() => {
-                        setPaymentSuccess(false)
-                        setClientSecret('')
-                        setSelectedAmount(5)
-                    }}
+            <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, type: "spring" }}
+                className="flex flex-col items-center justify-center p-12 text-center"
+            >
+                <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                    className="w-32 h-32 bg-gradient-to-br from-green-400 to-emerald-600 dark:from-green-500 dark:to-emerald-700 rounded-full flex items-center justify-center mb-8 shadow-2xl shadow-green-500/50"
                 >
-                    Hacer otra donación
-                </Button>
-            </div>
+                    <CheckCircle className="w-16 h-16 text-white" strokeWidth={3} />
+                </motion.div>
+
+                <motion.h2
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-4xl font-bold mb-4 bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent"
+                >
+                    ¡Pago completado!
+                </motion.h2>
+
+                <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="text-lg text-muted-foreground max-w-md mb-2"
+                >
+                    Tu contribución ayuda a mantener y mejorar esta aplicación.
+                </motion.p>
+
+                <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-2xl font-semibold text-green-600 dark:text-green-400 mb-8"
+                >
+                    ¡Eres increíble! 🎉
+                </motion.p>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6 }}
+                >
+                    <Button
+                        onClick={() => {
+                            setPaymentSuccess(false)
+                            setClientSecret('')
+                            setSelectedAmount(5)
+                        }}
+                        className="bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 text-white shadow-lg hover:shadow-xl hover:shadow-green-500/30 transition-all duration-300 hover:scale-105 active:scale-95 px-8 py-6 text-lg font-semibold"
+                    >
+                        <Heart className="mr-2" size={20} />
+                        Hacer otra donación
+                    </Button>
+                </motion.div>
+            </motion.div>
         )
     }
 
