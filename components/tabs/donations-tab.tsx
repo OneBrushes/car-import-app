@@ -13,15 +13,8 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 // Initialize Stripe
-// TEMPORAL: Hardcoded key porque Cloudflare Pages no pasa las env vars al build
-const STRIPE_KEY = 'pk_live_51SdCDoFiFstf6ApyHUUfKq31jgKbhTjNhWk9wKNm3E2A5glDuHg8bXJ12hq0Fd82X6saIpojvkdTToMjxMZBJo4l00U0RipTKJ'
-console.log('Donations config:', {
-    data: {
-        publishableKey: STRIPE_KEY ? 'Set ✅' : 'Missing ❌',
-        keyPrefix: STRIPE_KEY.substring(0, 7)
-    },
-    error: null
-})
+// Fallback a clave hardcoded si las env vars no están disponibles (Cloudflare Pages issue)
+const STRIPE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_live_51SdCDoFiFstf6ApyHUUfKq31jgKbhTjNhWk9wKNm3E2A5glDuHg8bXJ12hq0Fd82X6saIpojvkdTToMjxMZBJo4l00U0RipTKJ'
 const stripePromise = loadStripe(STRIPE_KEY)
 
 const AMOUNTS = [1, 2, 5, 10, 20, 50]
