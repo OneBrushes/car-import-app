@@ -13,6 +13,17 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
     const [showStats, setShowStats] = useState(false)
     const [showCar, setShowCar] = useState(false)
     const [lastClickTime, setLastClickTime] = useState(0)
+    const [sessionStartTime] = useState(Date.now())
+    const [sessionTime, setSessionTime] = useState(0)
+
+    useEffect(() => {
+        // Update session time every second
+        const interval = setInterval(() => {
+            setSessionTime(Math.floor((Date.now() - sessionStartTime) / 1000))
+        }, 1000)
+
+        return () => clearInterval(interval)
+    }, [sessionStartTime])
 
     useEffect(() => {
         // Reset click count after 2 seconds of inactivity
@@ -32,19 +43,25 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
         setLastClickTime(now)
         onLogoClick()
 
-        // 3 clicks = stats
+        // 3 clicks = stats (but don't reset counter)
         if (newCount === 3) {
             setShowStats(true)
             setTimeout(() => setShowStats(false), 5000)
-            setClickCount(0)
+            // Don't reset here, let it continue to 5
         }
 
         // 5 clicks = car animation
         if (newCount === 5) {
             setShowCar(true)
             setTimeout(() => setShowCar(false), 3000)
-            setClickCount(0)
+            setClickCount(0) // Reset after car animation
         }
+    }
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60)
+        const secs = seconds % 60
+        return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
     }
 
     return (
@@ -68,7 +85,7 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
                         <div className="space-y-2 text-sm">
                             <p>🚗 <strong>Estadísticas secretas:</strong></p>
                             <p>• Clicks totales: {Math.floor(Math.random() * 1000) + 100}</p>
-                            <p>• Tiempo en la app: {Math.floor(Math.random() * 60) + 10} min</p>
+                            <p>• Tiempo en la app: {formatTime(sessionTime)}</p>
                             <p>• Nivel de curiosidad: ⭐⭐⭐⭐⭐</p>
                         </div>
                         <p className="mt-3 text-xs opacity-80">Haz 5 clicks para más sorpresas...</p>
