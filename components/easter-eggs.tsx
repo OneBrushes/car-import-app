@@ -15,11 +15,24 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
     const [lastClickTime, setLastClickTime] = useState(0)
     const [sessionStartTime] = useState(Date.now())
     const [sessionTime, setSessionTime] = useState(0)
+    const [totalTimeSpent, setTotalTimeSpent] = useState(0)
 
     useEffect(() => {
+        // Load total time from localStorage
+        const savedTime = localStorage.getItem('totalTimeSpent')
+        if (savedTime) {
+            setTotalTimeSpent(parseInt(savedTime))
+        }
+
         // Update session time every second
         const interval = setInterval(() => {
-            setSessionTime(Math.floor((Date.now() - sessionStartTime) / 1000))
+            const currentSessionTime = Math.floor((Date.now() - sessionStartTime) / 1000)
+            setSessionTime(currentSessionTime)
+
+            // Update total time
+            const newTotalTime = (savedTime ? parseInt(savedTime) : 0) + currentSessionTime
+            setTotalTimeSpent(newTotalTime)
+            localStorage.setItem('totalTimeSpent', newTotalTime.toString())
         }, 1000)
 
         return () => clearInterval(interval)
@@ -59,14 +72,18 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
     }
 
     const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60)
+        const hours = Math.floor(seconds / 3600)
+        const mins = Math.floor((seconds % 3600) / 60)
         const secs = seconds % 60
-        return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+
+        if (hours > 0) return `${hours}h ${mins}m`
+        if (mins > 0) return `${mins}m ${secs}s`
+        return `${secs}s`
     }
 
     return (
         <>
-            <div onClick={handleClick} className="cursor-pointer">
+            <div onClick={handleClick}>
                 <div className="w-10 h-10 rounded-lg bg-white dark:bg-white flex items-center justify-center p-1">
                     <img src="/NorDrive.png" alt="NorDrive Logo" className="w-full h-full object-contain" />
                 </div>
@@ -84,8 +101,8 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
                         <h3 className="text-xl font-bold mb-3">🎉 ¡Easter Egg Encontrado!</h3>
                         <div className="space-y-2 text-sm">
                             <p>🚗 <strong>Estadísticas secretas:</strong></p>
-                            <p>• Clicks totales: {Math.floor(Math.random() * 1000) + 100}</p>
-                            <p>• Tiempo en la app: {formatTime(sessionTime)}</p>
+                            <p>• Tiempo total en la app: {formatTime(totalTimeSpent)}</p>
+                            <p>• Sesión actual: {formatTime(sessionTime)}</p>
                             <p>• Nivel de curiosidad: ⭐⭐⭐⭐⭐</p>
                         </div>
                         <p className="mt-3 text-xs opacity-80">Haz 5 clicks para más sorpresas...</p>
@@ -97,6 +114,13 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
             <AnimatePresence>
                 {showCar && (
                     <>
+                        {/* Prevent horizontal scroll */}
+                        <style jsx global>{`
+                            body {
+                                overflow-x: hidden !important;
+                            }
+                        `}</style>
+
                         {/* Car emoji */}
                         <motion.div
                             initial={{ x: '-10%', y: '50vh' }}
@@ -114,9 +138,10 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
                                     ease: 'easeInOut'
                                 }
                             }}
-                            className="fixed z-50 text-6xl pointer-events-none"
+                            className="fixed z-50 text-6xl pointer-events-none select-none"
+                            style={{ willChange: 'transform' }}
                         >
-                            🚗💨
+                            🚗
                         </motion.div>
 
                         {/* Message */}
