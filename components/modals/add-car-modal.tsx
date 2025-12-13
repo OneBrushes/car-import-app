@@ -256,6 +256,72 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     convertPrice()
   }, [formData.price, formData.currency])
 
+  // Auto-save to localStorage (only for new cars, not edits)
+  useEffect(() => {
+    if (!initialData && isOpen) {
+      // Save draft every time formData changes
+      const draftKey = 'car-draft-autosave'
+      localStorage.setItem(draftKey, JSON.stringify({
+        formData,
+        timestamp: Date.now()
+      }))
+    }
+  }, [formData, initialData, isOpen])
+
+  // Restore draft on mount (only for new cars)
+  useEffect(() => {
+    if (!initialData && isOpen) {
+      const draftKey = 'car-draft-autosave'
+      const saved = localStorage.getItem(draftKey)
+
+      if (saved) {
+        try {
+          const { formData: savedData, timestamp } = JSON.parse(saved)
+          const hourAgo = Date.now() - (60 * 60 * 1000)
+
+          // Only restore if less than 1 hour old
+          if (timestamp > hourAgo) {
+            const shouldRestore = confirm('¿Quieres recuperar el borrador guardado?')
+            if (shouldRestore) {
+              setFormData(savedData)
+              toast.success('Borrador recuperado')
+            } else {
+              localStorage.removeItem(draftKey)
+            }
+          } else {
+            // Remove old draft
+            localStorage.removeItem(draftKey)
+          }
+        } catch (error) {
+          console.error('Error restoring draft:', error)
+          localStorage.removeItem(draftKey)
+        }
+      }
+    }
+  }, [initialData, isOpen])
+
+  const handleClose = () => {
+    // Don't ask if editing (initialData exists)
+    if (initialData) {
+      onClose()
+      return
+    }
+
+    // Check if there's unsaved data
+    const hasData = formData.brand || formData.model || formData.price
+
+    if (hasData) {
+      const shouldClose = confirm('¿Cerrar sin guardar? El borrador se guardará automáticamente.')
+      if (shouldClose) {
+        onClose()
+      }
+    } else {
+      // No data, just close and clean
+      localStorage.removeItem('car-draft-autosave')
+      onClose()
+    }
+  }
+
   const handleChange = (e: any) => {
     const { name, value } = e.target
     setFormData((prev) => ({
@@ -357,6 +423,10 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
       totalExpenses: calculateTotalExpenses(),
       finalPrice: priceInEUR + calculateTotalExpenses(),
     })
+
+    // Clear draft from localStorage after successful submit
+    localStorage.removeItem('car-draft-autosave')
+
     // Only reset if not editing (or maybe just close)
     if (!initialData) {
       setFormData({
@@ -430,7 +500,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-background rounded-t-lg">
           <h2 className="text-xl font-bold">{initialData ? "Editar Coche" : "Añadir Coche"}</h2>
-          <button onClick={onClose} className="p-1 hover:bg-secondary rounded-lg transition-colors">
+          <button onClick={handleClose} className="p-1 hover:bg-secondary rounded-lg transition-colors">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -1042,7 +1112,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
         <div className="p-4 border-t border-border bg-background rounded-b-lg flex justify-end gap-3">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             Cancelar
