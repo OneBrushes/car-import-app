@@ -75,6 +75,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     inspectionStatus: "aprobada",
     inspectionExpiry: "",
     inspectionPdf: "",
+    itv_link: "",
 
     // Precio
     price: "",
@@ -131,6 +132,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
         inspectionName: initialData.inspection_name || initialData.inspectionName || "",
         inspectionStatus: initialData.inspection_status || initialData.inspectionStatus || "aprobada",
         inspectionExpiry: initialData.inspection_expiry || initialData.inspectionExpiry || "",
+        itv_link: initialData.itv_link || "",
         transferCost: initialData.transfer_cost?.toString() || initialData.transferCost || "",
         defects: initialData.defects || "",
         notes: initialData.notes || "",
@@ -166,6 +168,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
         inspectionStatus: "aprobada",
         inspectionExpiry: "",
         inspectionPdf: "",
+        itv_link: "",
         price: "",
         currency: "€",
         transferCost: "",
@@ -381,6 +384,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
         inspectionStatus: "aprobada",
         inspectionExpiry: "",
         inspectionPdf: "",
+        itv_link: "",
         price: "",
         currency: "€",
         transferCost: "",
@@ -754,6 +758,26 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
                       onChange={handleChange}
                       className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                     />
+                    <div className="sm:col-span-2">
+                      <input
+                        type="url"
+                        name="itv_link"
+                        placeholder="Enlace ITV (https://...)"
+                        value={formData.itv_link}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      />
+                      {formData.itv_link && (
+                        <a
+                          href={formData.itv_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline mt-1 inline-block"
+                        >
+                          🔗 Abrir enlace ITV
+                        </a>
+                      )}
+                    </div>
                     <textarea
                       name="defects"
                       placeholder="Defectos o daños conocidos..."

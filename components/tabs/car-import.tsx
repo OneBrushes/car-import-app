@@ -28,6 +28,7 @@ interface Car {
   origin?: string
   totalExpenses?: number
   url?: string
+  itv_link?: string
   steering?: string
   expenses?: any[]
   vehicleType?: string
@@ -121,6 +122,7 @@ export function CarImport({ role }: CarImportProps) {
         origin: car.origin || "Importado",
         totalExpenses: Number(car.total_cost) - Number(car.price),
         url: car.url || "",
+        itv_link: car.itv_link || "",
         steering: car.steering,
         // Asegurar que expenses se pasa
         expenses: car.expenses || []
@@ -174,6 +176,7 @@ export function CarImport({ role }: CarImportProps) {
         inspection_name: newCar.inspectionName || null,
         inspection_status: newCar.inspectionStatus || null,
         inspection_expiry: newCar.inspectionExpiry || null,
+        itv_link: newCar.itv_link || null,
 
         // Costes
         transfer_cost: newCar.transferCost ? Number(newCar.transferCost) : null,

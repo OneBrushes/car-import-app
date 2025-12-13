@@ -16,7 +16,7 @@ import confetti from 'canvas-confetti'
 
 // Initialize Stripe
 // Fallback a clave hardcoded si las env vars no están disponibles (Cloudflare Pages issue)
-const STRIPE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_live_51SdCDoFiFstf6ApyHUUfKq31jgKbhTjNhWk9wKNm3E2A5glDuHg8bXJ12hq0Fd82X6saIpojvkdTToMjxMZBJo4l00U0RipTKJ'
+const STRIPE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 const stripePromise = loadStripe(STRIPE_KEY)
 
 const AMOUNTS = [1, 2, 5, 10, 20, 50]

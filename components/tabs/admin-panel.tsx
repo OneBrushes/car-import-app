@@ -551,6 +551,7 @@ export function AdminPanel() {
                                             <TableHead>Email</TableHead>
                                             <TableHead>Rol</TableHead>
                                             <TableHead>Registro</TableHead>
+                                            <TableHead>Última Conexión</TableHead>
                                             <TableHead>Acciones</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -579,6 +580,16 @@ export function AdminPanel() {
                                                     </Select>
                                                 </TableCell>
                                                 <TableCell className="whitespace-nowrap">{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                                                <TableCell className="whitespace-nowrap">
+                                                    {user.last_sign_in_at ? (
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm">{new Date(user.last_sign_in_at).toLocaleDateString()}</span>
+                                                            <span className="text-xs text-muted-foreground">{new Date(user.last_sign_in_at).toLocaleTimeString()}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground">Nunca</span>
+                                                    )}
+                                                </TableCell>
                                                 <TableCell>
                                                     <Button
                                                         variant={user.role === 'banned' ? "outline" : "secondary"}
