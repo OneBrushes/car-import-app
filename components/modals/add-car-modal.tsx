@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Users, Eye } from "lucide-react"
 import { convertCurrency, getCurrencySymbol } from "@/lib/currency"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { usePageVisibility } from "@/hooks/use-page-visibility"
 
 interface AddCarModalProps {
   isOpen: boolean
@@ -274,6 +275,24 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
       }))
     }
   }, [formData, initialData, isOpen])
+
+  // Force save when page becomes hidden (changing tabs/windows)
+  usePageVisibility((isVisible) => {
+    if (!isVisible && !initialData && isOpen) {
+      // Force save immediately when hiding page
+      const draftKey = 'car-draft-autosave'
+      const hasRealData = formData.brand || formData.model || formData.price ||
+        formData.mileage || formData.cv
+
+      if (hasRealData) {
+        localStorage.setItem(draftKey, JSON.stringify({
+          formData,
+          timestamp: Date.now()
+        }))
+        console.log('Draft saved before page hidden')
+      }
+    }
+  })
 
   // Restore draft on mount (only for new cars)
   useEffect(() => {
