@@ -108,6 +108,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
   const [showRestoreDialog, setShowRestoreDialog] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [pendingDraft, setPendingDraft] = useState<any>(null)
+  const [draftChecked, setDraftChecked] = useState(false)
 
 
   // Load initial data if provided
@@ -294,9 +295,14 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     }
   })
 
-  // Restore draft on mount (only for new cars)
+  // Restore draft on mount (only for new cars) - FIXED to work every time modal opens
   useEffect(() => {
-    if (!initialData && isOpen) {
+    // Reset draft check when modal opens
+    if (isOpen && !initialData) {
+      setDraftChecked(false)
+    }
+
+    if (!initialData && isOpen && !draftChecked) {
       const draftKey = 'car-draft-autosave'
       const saved = localStorage.getItem(draftKey)
 
@@ -313,17 +319,22 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
           if (timestamp > hourAgo && hasRealData) {
             setPendingDraft(savedData)
             setShowRestoreDialog(true)
+            setDraftChecked(true)
           } else {
             // Remove old or empty draft
             localStorage.removeItem(draftKey)
+            setDraftChecked(true)
           }
         } catch (error) {
           console.error('Error restoring draft:', error)
           localStorage.removeItem(draftKey)
+          setDraftChecked(true)
         }
+      } else {
+        setDraftChecked(true)
       }
     }
-  }, [initialData, isOpen])
+  }, [initialData, isOpen, draftChecked])
 
   const handleRestoreDraft = () => {
     if (pendingDraft) {
