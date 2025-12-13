@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase"
 import { Badge } from "@/components/ui/badge"
 import { Users, Eye } from "lucide-react"
 import { convertCurrency, getCurrencySymbol } from "@/lib/currency"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 
 interface AddCarModalProps {
   isOpen: boolean
@@ -101,6 +102,12 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
   const [activeSection, setActiveSection] = useState("basic")
   const [newExpense, setNewExpense] = useState({ type: expenseTypes[0], amount: "" })
   const [expandedSection, setExpandedSection] = useState<string | null>("basic")
+
+  // Dialog states
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false)
+  const [showCloseDialog, setShowCloseDialog] = useState(false)
+  const [pendingDraft, setPendingDraft] = useState<any>(null)
+
 
   // Load initial data if provided
   // Load initial data if provided
@@ -279,17 +286,16 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
           const { formData: savedData, timestamp } = JSON.parse(saved)
           const hourAgo = Date.now() - (60 * 60 * 1000)
 
-          // Only restore if less than 1 hour old
-          if (timestamp > hourAgo) {
-            const shouldRestore = confirm('¿Quieres recuperar el borrador guardado?')
-            if (shouldRestore) {
-              setFormData(savedData)
-              toast.success('Borrador recuperado')
-            } else {
-              localStorage.removeItem(draftKey)
-            }
+          // Check if draft has actual data
+          const hasRealData = savedData.brand || savedData.model || savedData.price ||
+            savedData.mileage || savedData.cv || savedData.year !== new Date().getFullYear()
+
+          // Only restore if less than 1 hour old AND has real data
+          if (timestamp > hourAgo && hasRealData) {
+            setPendingDraft(savedData)
+            setShowRestoreDialog(true)
           } else {
-            // Remove old draft
+            // Remove old or empty draft
             localStorage.removeItem(draftKey)
           }
         } catch (error) {
@@ -300,6 +306,22 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     }
   }, [initialData, isOpen])
 
+  const handleRestoreDraft = () => {
+    if (pendingDraft) {
+      setFormData(pendingDraft)
+      toast.success('Borrador recuperado')
+    }
+    setShowRestoreDialog(false)
+    setPendingDraft(null)
+  }
+
+  const handleDiscardDraft = () => {
+    localStorage.removeItem('car-draft-autosave')
+    setShowRestoreDialog(false)
+    setPendingDraft(null)
+  }
+
+
   const handleClose = () => {
     // Don't ask if editing (initialData exists)
     if (initialData) {
@@ -307,19 +329,27 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
       return
     }
 
-    // Check if there's unsaved data
-    const hasData = formData.brand || formData.model || formData.price
+    // Check if there's unsaved data (more comprehensive check)
+    const hasData = formData.brand || formData.model || formData.price ||
+      formData.mileage || formData.cv || formData.year !== new Date().getFullYear() ||
+      formData.images.length > 0 || formData.expenses.length > 0
 
     if (hasData) {
-      const shouldClose = confirm('¿Cerrar sin guardar? El borrador se guardará automáticamente.')
-      if (shouldClose) {
-        onClose()
-      }
+      setShowCloseDialog(true)
     } else {
       // No data, just close and clean
       localStorage.removeItem('car-draft-autosave')
       onClose()
     }
+  }
+
+  const handleConfirmClose = () => {
+    setShowCloseDialog(false)
+    onClose()
+  }
+
+  const handleCancelClose = () => {
+    setShowCloseDialog(false)
   }
 
   const handleChange = (e: any) => {
@@ -1137,6 +1167,30 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
           </button>
         </div>
       </div>
+
+      {/* Restore Draft Dialog */}
+      <ConfirmDialog
+        isOpen={showRestoreDialog}
+        title="Borrador encontrado"
+        message="Tienes un borrador guardado. ¿Quieres recuperarlo?"
+        confirmText="Recuperar"
+        cancelText="Descartar"
+        onConfirm={handleRestoreDraft}
+        onCancel={handleDiscardDraft}
+        type="info"
+      />
+
+      {/* Close Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showCloseDialog}
+        title="¿Cerrar sin guardar?"
+        message="El borrador se guardará automáticamente y podrás recuperarlo más tarde."
+        confirmText="Cerrar"
+        cancelText="Seguir editando"
+        onConfirm={handleConfirmClose}
+        onCancel={handleCancelClose}
+        type="warning"
+      />
     </div>
   )
 }
