@@ -18,6 +18,7 @@ import { OnlineUsers } from "@/components/online-users"
 import { NotificationsCenter } from "@/components/notifications-center"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { EasterEggs } from "@/components/easter-eggs"
+import { ConnectionStatus } from "@/components/connection-status"
 import { useAuth } from "@/components/auth-provider"
 import { Loader2, LogOut, User as UserIcon, Shield } from "lucide-react"
 import {
@@ -153,6 +154,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Connection Status Indicator */}
+      <ConnectionStatus />
+
       {/* Header */}
       <header className="sticky top-0 z-40 glass border-b">
         <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
