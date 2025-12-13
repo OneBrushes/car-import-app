@@ -769,7 +769,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
                       />
                       {formData.itv_link && (
                         <a
-                          href={formData.itv_link}
+                          href={formData.itv_link.startsWith('http') ? formData.itv_link : `https://${formData.itv_link}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline mt-1 inline-block"

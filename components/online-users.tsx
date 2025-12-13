@@ -94,6 +94,9 @@ export function OnlineUsers() {
                         avatar_url: profile?.avatar_url,
                         online_at: new Date().toISOString(),
                     })
+
+                    // Update last_sign_in_at in profiles
+                    await supabase.rpc('update_user_last_seen')
                 }
             })
 
