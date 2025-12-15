@@ -86,9 +86,31 @@ https://[tu-usuario].github.io/car-import-app/
 |---------|-----------------|--------------|
 | **Hosting** | Cloudflare CDN | GitHub CDN |
 | **Functions** | Sí (integradas) | No (usar Workers externos) |
-| **URL** | `car-import.pages.dev` | `[usuario].github.io/car-import-app` |
+| **URL** | `car-import.pages.dev` | `onebrushes.github.io/car-import-app` |
 | **Build** | Automático | GitHub Actions |
 | **Timeout** | Menos probable | Menos probable (mejor DNS) |
+| **basePath** | No necesario | `/car-import-app` |
+
+---
+
+## 🔄 **Compatibilidad con Cloudflare Pages**
+
+**¡Buenas noticias!** La app sigue funcionando en Cloudflare Pages.
+
+El `next.config.mjs` detecta automáticamente dónde se está desplegando:
+- **Cloudflare Pages**: Sin `basePath` (dominio propio)
+- **GitHub Pages**: Con `basePath: '/car-import-app'` (subdirectorio)
+
+### Para seguir usando Cloudflare Pages:
+
+1. **No hagas nada especial** - Ya está configurado
+2. Cloudflare detecta automáticamente que `GITHUB_PAGES !== 'true'`
+3. Usa el dominio normal: `car-import.pages.dev`
+
+### Puedes tener AMBOS activos:
+
+- **Cloudflare Pages**: `https://car-import.pages.dev` (principal)
+- **GitHub Pages**: `https://onebrushes.github.io/car-import-app/` (backup)
 
 ---
 
