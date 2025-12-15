@@ -94,7 +94,11 @@ export function EasterEggs({ onLogoClick }: EasterEggsProps) {
         <>
             <div onClick={handleClick}>
                 <div className="w-10 h-10 rounded-lg bg-white dark:bg-white flex items-center justify-center p-1">
-                    <img src="/NorDrive.png" alt="NorDrive Logo" className="w-full h-full object-contain" />
+                    <img
+                        src={`${process.env.__NEXT_ROUTER_BASEPATH || ''}/NorDrive.png`}
+                        alt="NorDrive Logo"
+                        className="w-full h-full object-contain"
+                    />
                 </div>
             </div>
 
