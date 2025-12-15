@@ -64,12 +64,18 @@ export function ShareSpainCarModal({ isOpen, onClose, carId, currentSharedWith, 
         try {
             const newSharedWith = [...currentSharedWith, selectedUser]
 
+            console.log('Sharing car:', carId)
+            console.log('Current shared_with:', currentSharedWith)
+            console.log('New shared_with:', newSharedWith)
+
             const { error } = await supabase
                 .from('spain_cars')
                 .update({ shared_with: newSharedWith })
                 .eq('id', carId)
 
             if (error) throw error
+
+            console.log('Car shared successfully!')
 
             // Obtener datos del coche y del propietario
             const { data: carData } = await supabase
@@ -109,8 +115,15 @@ export function ShareSpainCarModal({ isOpen, onClose, carId, currentSharedWith, 
             }
 
             toast.success("Coche compartido correctamente")
-            onShare()
             setSelectedUser("")
+
+            // Recargar datos y cerrar modal
+            onShare()
+
+            // Cerrar modal después de un pequeño delay para que el usuario vea el toast
+            setTimeout(() => {
+                onClose()
+            }, 500)
         } catch (error: any) {
             console.error(error)
             toast.error("Error al compartir el coche")
