@@ -50,6 +50,10 @@ export function AdminPanel() {
     const [blockedEmails, setBlockedEmails] = useState<string[]>([])
     const [newBlockedEmail, setNewBlockedEmail] = useState("")
 
+    // Bandwidth State (Supabase doesn't provide API, so this is informational)
+    const BANDWIDTH_LIMIT_GB = 5 // Free tier limit
+    const [estimatedBandwidthGB, setEstimatedBandwidthGB] = useState<number>(0)
+
     useEffect(() => {
         fetchData()
         loadSettings()
@@ -465,7 +469,7 @@ export function AdminPanel() {
                 <ExportImportTools />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Usuarios</CardTitle>
@@ -483,10 +487,9 @@ export function AdminPanel() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">
-                            {storageUsageMB.toFixed(1)} MB
-                            {realStorageMB === null && <span className="text-xs text-muted-foreground ml-1">(Est.)</span>}
+                            {storageUsageMB.toFixed(2)} MB
                         </div>
-                        <p className="text-xs text-muted-foreground">de {STORAGE_LIMIT_MB} MB (Fotos)</p>
+                        <p className="text-xs text-muted-foreground">de {STORAGE_LIMIT_MB} MB (Imágenes)</p>
                         <div className="h-1.5 w-full bg-secondary mt-2 rounded-full overflow-hidden">
                             <div
                                 className={`h-full ${storagePercentage > 90 ? 'bg-destructive' : 'bg-blue-500'}`}
@@ -510,6 +513,24 @@ export function AdminPanel() {
                                 style={{ width: `${Math.min(dbPercentage, 100)}%` }}
                             />
                         </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Bandwidth</CardTitle>
+                        <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{estimatedBandwidthGB.toFixed(2)} GB</div>
+                        <p className="text-xs text-muted-foreground">de {BANDWIDTH_LIMIT_GB} GB/mes</p>
+                        <div className="h-1.5 w-full bg-secondary mt-2 rounded-full overflow-hidden">
+                            <div
+                                className={`h-full ${(estimatedBandwidthGB / BANDWIDTH_LIMIT_GB * 100) > 90 ? 'bg-destructive' : 'bg-purple-500'}`}
+                                style={{ width: `${Math.min((estimatedBandwidthGB / BANDWIDTH_LIMIT_GB * 100), 100)}%` }}
+                            />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-1">⚠️ Estimado (Supabase)</p>
                     </CardContent>
                 </Card>
 
