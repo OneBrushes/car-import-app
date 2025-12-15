@@ -114,8 +114,8 @@ export function CarsManagement() {
             brand: importedCar.brand,
             model: importedCar.model,
             year: importedCar.year,
-            price: importedCar.price,
-            expenses: importedCar.total_cost - importedCar.price // Aproximación de gastos
+            price: 0, // Empezar en 0, el usuario añadirá el precio real
+            expenses: 0 // Empezar en 0, el usuario añadirá los gastos
           }
         }
       }
