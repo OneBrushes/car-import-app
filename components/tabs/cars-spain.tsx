@@ -43,7 +43,6 @@ export function CarsSpain({ role }: CarsSpainProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState("price")
     const [editingCar, setEditingCar] = useState<SpainCar | null>(null)
-    const [sharedCarIds, setSharedCarIds] = useState<Set<string>>(new Set())
 
     // Cargar datos desde Supabase
     useEffect(() => {
@@ -67,15 +66,6 @@ export function CarsSpain({ role }: CarsSpainProps) {
                 car.user_id === user?.id ||
                 (car.shared_with && car.shared_with.includes(user?.id))
             )
-
-            // Obtener IDs de coches compartidos (propios que he compartido)
-            const { data: myShares } = await supabase
-                .from('spain_car_shares')
-                .select('car_id')
-                .eq('owner_id', user?.id)
-
-            const sharedIds = new Set((myShares || []).map((s: any) => s.car_id))
-            setSharedCarIds(sharedIds)
 
             const formattedCars: SpainCar[] = filteredData.map((car: any) => ({
                 id: car.id,
@@ -282,7 +272,7 @@ export function CarsSpain({ role }: CarsSpainProps) {
                             onDelete={() => deleteCar(car.id)}
                             onEdit={() => handleEdit(car)}
                             onShare={() => handleShare(car)}
-                            isShared={sharedCarIds.has(car.id)}
+                            isShared={car.shared_with && car.shared_with.length > 0}
                             isOwner={car.user_id === user?.id}
                         />
                     ))}
@@ -303,7 +293,8 @@ export function CarsSpain({ role }: CarsSpainProps) {
                     isOpen={shareModalOpen}
                     onClose={handleCloseShareModal}
                     carId={sharingCar.id}
-                    carName={`${sharingCar.brand} ${sharingCar.model}`}
+                    currentSharedWith={(sharingCar as any).shared_with || []}
+                    onShare={fetchCars}
                 />
             )}
         </div>

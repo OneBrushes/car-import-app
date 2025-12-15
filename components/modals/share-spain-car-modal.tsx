@@ -1,200 +1,174 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { X, Users, Loader2, Trash2 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
-import { useAuth } from "@/components/auth-provider"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Loader2, Share2, UserMinus, UserPlus } from "lucide-react"
 import { toast } from "sonner"
+import { supabase } from "@/lib/supabase"
 
 interface ShareSpainCarModalProps {
     isOpen: boolean
     onClose: () => void
     carId: string
-    carName: string
+    currentSharedWith: string[]
+    onShare: () => void
 }
 
-interface User {
-    id: string
-    email: string
-    first_name?: string
-    last_name?: string
-}
-
-interface SharedUser extends User {
-    shared_at: string
-}
-
-export function ShareSpainCarModal({ isOpen, onClose, carId, carName }: ShareSpainCarModalProps) {
-    const { user } = useAuth()
-    const [users, setUsers] = useState<User[]>([])
-    const [sharedUsers, setSharedUsers] = useState<SharedUser[]>([])
-    const [selectedUserId, setSelectedUserId] = useState("")
+export function ShareSpainCarModal({ isOpen, onClose, carId, currentSharedWith, onShare }: ShareSpainCarModalProps) {
+    const [allUsers, setAllUsers] = useState<any[]>([])
+    const [sharedUsers, setSharedUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
-    const [loadingShares, setLoadingShares] = useState(true)
+    const [selectedUser, setSelectedUser] = useState<string>("")
 
+    // Cargar usuarios cuando se abre el modal
     useEffect(() => {
-        if (isOpen) {
-            fetchUsers()
-            fetchSharedUsers()
+        const loadUsers = async () => {
+            if (!isOpen) return
+
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, email, first_name, last_name')
+                    .order('first_name', { ascending: true, nullsFirst: false })
+
+                if (!error && data) {
+                    const shared = data.filter(u => currentSharedWith.includes(u.id))
+                    const available = data.filter(u =>
+                        u.id !== user?.id && !currentSharedWith.includes(u.id)
+                    )
+
+                    setSharedUsers(shared)
+                    setAllUsers(available)
+                }
+            } catch (error) {
+                console.error(error)
+            }
         }
-    }, [isOpen, carId])
 
-    const fetchUsers = async () => {
-        try {
-            const { data, error } = await supabase
-                .from("profiles")
-                .select("id, email, first_name, last_name")
-                .neq("id", user?.id || "")
-
-            if (error) throw error
-            setUsers(data || [])
-        } catch (error) {
-            console.error("Error fetching users:", error)
-        }
-    }
-
-    const fetchSharedUsers = async () => {
-        setLoadingShares(true)
-        try {
-            const { data, error } = await supabase
-                .from("spain_car_shares")
-                .select(`
-          shared_with_id,
-          created_at,
-          profiles:shared_with_id (
-            id,
-            email,
-            first_name,
-            last_name
-          )
-        `)
-                .eq("car_id", carId)
-
-            if (error) throw error
-
-            const formatted = (data || []).map((share: any) => ({
-                id: share.profiles.id,
-                email: share.profiles.email,
-                first_name: share.profiles.first_name,
-                last_name: share.profiles.last_name,
-                shared_at: share.created_at,
-            }))
-
-            setSharedUsers(formatted)
-        } catch (error) {
-            console.error("Error fetching shared users:", error)
-        } finally {
-            setLoadingShares(false)
-        }
-    }
+        loadUsers()
+        setSelectedUser("")
+    }, [isOpen, currentSharedWith])
 
     const handleShare = async () => {
-        if (!selectedUserId) {
+        if (!selectedUser) {
             toast.error("Selecciona un usuario")
             return
         }
 
         setLoading(true)
+
         try {
-            // Insertar compartido
-            const { error: shareError } = await supabase.from("spain_car_shares").insert({
-                car_id: carId,
-                owner_id: user?.id,
-                shared_with_id: selectedUserId,
-            })
+            const newSharedWith = [...currentSharedWith, selectedUser]
 
-            if (shareError) throw shareError
+            const { error } = await supabase
+                .from('spain_cars')
+                .update({ shared_with: newSharedWith })
+                .eq('id', carId)
 
-            // Obtener nombre del propietario
+            if (error) throw error
+
+            // Obtener datos del coche y del propietario
+            const { data: carData } = await supabase
+                .from('spain_cars')
+                .select('brand, model, year, user_id')
+                .eq('id', carId)
+                .single()
+
+            const { data: { user: currentUser } } = await supabase.auth.getUser()
+
             const { data: ownerData } = await supabase
-                .from("profiles")
-                .select("first_name, last_name, email")
-                .eq("id", user?.id)
+                .from('profiles')
+                .select('first_name, last_name, email')
+                .eq('id', currentUser?.id)
                 .single()
 
             const ownerName = ownerData?.first_name && ownerData?.last_name
                 ? `${ownerData.first_name} ${ownerData.last_name}`
-                : ownerData?.email || "Un usuario"
+                : ownerData?.email || 'Alguien'
 
-            // Enviar notificación
-            await supabase.from("notifications").insert({
-                user_id: selectedUserId,
-                type: "spain_car_shared",
-                title: "Coche de España compartido",
-                message: `${ownerName} ha compartido contigo el coche: ${carName}`,
-                data: { car_id: carId, owner_id: user?.id },
-            })
+            // Crear notificación para el usuario con quien se compartió
+            if (carData) {
+                await supabase
+                    .from('notifications')
+                    .insert({
+                        user_id: selectedUser,
+                        type: 'spain_car_shared',
+                        title: 'Coche de España compartido contigo',
+                        message: `${ownerName} ha compartido contigo el coche: ${carData.brand} ${carData.model} (${carData.year})`,
+                        metadata: {
+                            car_id: carId,
+                            owner_id: currentUser?.id,
+                            car_brand: carData.brand,
+                            car_model: carData.model
+                        }
+                    })
+            }
 
             toast.success("Coche compartido correctamente")
-            setSelectedUserId("")
-            fetchSharedUsers()
+            onShare()
+            setSelectedUser("")
         } catch (error: any) {
-            if (error.code === "23505") {
-                toast.error("Ya has compartido este coche con este usuario")
-            } else {
-                toast.error("Error al compartir coche")
-            }
+            console.error(error)
+            toast.error("Error al compartir el coche")
         } finally {
             setLoading(false)
         }
     }
 
     const handleUnshare = async (userId: string) => {
+        setLoading(true)
+
         try {
+            const newSharedWith = currentSharedWith.filter(id => id !== userId)
+
             const { error } = await supabase
-                .from("spain_car_shares")
-                .delete()
-                .eq("car_id", carId)
-                .eq("shared_with_id", userId)
+                .from('spain_cars')
+                .update({ shared_with: newSharedWith })
+                .eq('id', carId)
 
             if (error) throw error
 
-            toast.success("Compartido eliminado")
-            fetchSharedUsers()
+            toast.success("Acceso eliminado")
+            onShare()
         } catch (error) {
-            toast.error("Error al eliminar compartido")
+            console.error(error)
+            toast.error("Error al eliminar acceso")
+        } finally {
+            setLoading(false)
         }
     }
 
-    if (!isOpen) return null
-
-    const availableUsers = users.filter(
-        (u) => !sharedUsers.some((su) => su.id === u.id)
-    )
-
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-background rounded-lg w-full max-w-md shadow-xl border border-border">
-                {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-border">
-                    <div className="flex items-center gap-2">
-                        <Users className="w-5 h-5 text-primary" />
-                        <h2 className="text-lg font-bold">Compartir Coche</h2>
-                    </div>
-                    <button onClick={onClose} className="p-1 hover:bg-secondary rounded-lg transition-colors">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Share2 className="w-5 h-5" />
+                        Compartir Coche de España
+                    </DialogTitle>
+                    <DialogDescription>
+                        Comparte este coche con otros usuarios para que puedan verlo y compararlo.
+                    </DialogDescription>
+                </DialogHeader>
 
-                {/* Content */}
-                <div className="p-4 space-y-4">
-                    <div>
-                        <p className="text-sm text-muted-foreground mb-2">Coche:</p>
-                        <p className="font-semibold">{carName}</p>
-                    </div>
-
+                <div className="space-y-4 py-4">
                     {/* Compartir con nuevo usuario */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Compartir con:</label>
+                        <Label htmlFor="user-select">Compartir con:</Label>
                         <div className="flex gap-2">
                             <select
-                                value={selectedUserId}
-                                onChange={(e) => setSelectedUserId(e.target.value)}
+                                id="user-select"
+                                value={selectedUser}
+                                onChange={(e) => setSelectedUser(e.target.value)}
                                 className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
                                 disabled={loading}
                             >
                                 <option value="">Selecciona un usuario...</option>
-                                {availableUsers.map((user) => (
+                                {allUsers.map((user) => (
                                     <option key={user.id} value={user.id}>
                                         {user.first_name && user.last_name
                                             ? `${user.first_name} ${user.last_name} (${user.email})`
@@ -202,52 +176,53 @@ export function ShareSpainCarModal({ isOpen, onClose, carId, carName }: ShareSpa
                                     </option>
                                 ))}
                             </select>
-                            <button
+                            <Button
                                 onClick={handleShare}
-                                disabled={loading || !selectedUserId}
-                                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                disabled={loading || !selectedUser}
+                                size="sm"
                             >
-                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-                                Compartir
-                            </button>
+                                {loading ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <UserPlus className="w-4 h-4" />
+                                )}
+                            </Button>
                         </div>
                     </div>
 
                     {/* Lista de usuarios con acceso */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Usuarios con acceso:</label>
-                        {loadingShares ? (
-                            <div className="flex items-center justify-center py-4">
-                                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                            </div>
-                        ) : sharedUsers.length === 0 ? (
+                        <Label>Usuarios con acceso:</Label>
+                        {sharedUsers.length === 0 ? (
                             <p className="text-sm text-muted-foreground italic py-2">
                                 No has compartido este coche con nadie aún
                             </p>
                         ) : (
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                                {sharedUsers.map((sharedUser) => (
+                            <div className="space-y-2 max-h-48 overflow-y-auto border border-border rounded-lg p-2">
+                                {sharedUsers.map((user) => (
                                     <div
-                                        key={sharedUser.id}
+                                        key={user.id}
                                         className="flex items-center justify-between p-2 bg-secondary/50 rounded-lg"
                                     >
                                         <div className="flex-1">
                                             <p className="text-sm font-medium">
-                                                {sharedUser.first_name && sharedUser.last_name
-                                                    ? `${sharedUser.first_name} ${sharedUser.last_name}`
-                                                    : sharedUser.email}
+                                                {user.first_name && user.last_name
+                                                    ? `${user.first_name} ${user.last_name}`
+                                                    : user.email}
                                             </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {new Date(sharedUser.shared_at).toLocaleDateString()}
-                                            </p>
+                                            {user.first_name && user.last_name && (
+                                                <p className="text-xs text-muted-foreground">{user.email}</p>
+                                            )}
                                         </div>
-                                        <button
-                                            onClick={() => handleUnshare(sharedUser.id)}
-                                            className="p-1 hover:bg-destructive/10 text-destructive rounded transition-colors"
-                                            title="Dejar de compartir"
+                                        <Button
+                                            onClick={() => handleUnshare(user.id)}
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={loading}
+                                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
                                         >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                            <UserMinus className="w-4 h-4" />
+                                        </Button>
                                     </div>
                                 ))}
                             </div>
@@ -255,16 +230,12 @@ export function ShareSpainCarModal({ isOpen, onClose, carId, carName }: ShareSpa
                     </div>
                 </div>
 
-                {/* Footer */}
-                <div className="p-4 border-t border-border flex justify-end">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
-                    >
+                <DialogFooter>
+                    <Button onClick={onClose} variant="outline">
                         Cerrar
-                    </button>
-                </div>
-            </div>
-        </div>
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     )
 }
