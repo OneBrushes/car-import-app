@@ -1188,7 +1188,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
       <ConfirmDialog
         isOpen={showCloseDialog}
         title="¿Cerrar sin guardar?"
-        message="El borrador se guardará automáticamente y podrás recuperarlo más tarde."
+        message="El borrador no se guardará automáticamente. ¿Estás seguro?"
         confirmText="Cerrar"
         cancelText="Seguir editando"
         onConfirm={handleConfirmClose}
