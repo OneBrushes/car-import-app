@@ -71,6 +71,43 @@ export function ShareCarModal({ isOpen, onClose, carId, currentSharedWith, onSha
 
             if (error) throw error
 
+            // Obtener datos del coche y del propietario
+            const { data: carData } = await supabase
+                .from('imported_cars')
+                .select('brand, model, year, user_id')
+                .eq('id', carId)
+                .single()
+
+            const { data: { user: currentUser } } = await supabase.auth.getUser()
+
+            const { data: ownerData } = await supabase
+                .from('profiles')
+                .select('first_name, last_name, email')
+                .eq('id', currentUser?.id)
+                .single()
+
+            const ownerName = ownerData?.first_name && ownerData?.last_name
+                ? `${ownerData.first_name} ${ownerData.last_name}`
+                : ownerData?.email || 'Alguien'
+
+            // Crear notificación para el usuario con quien se compartió
+            if (carData) {
+                await supabase
+                    .from('notifications')
+                    .insert({
+                        user_id: selectedUser,
+                        type: 'car_shared',
+                        title: 'Coche compartido contigo',
+                        message: `${ownerName} ha compartido ${carData.brand} ${carData.model} (${carData.year}) contigo`,
+                        link: '/car-import',
+                        metadata: {
+                            car_id: carId,
+                            shared_by: currentUser?.id,
+                            owner_name: ownerName
+                        }
+                    })
+            }
+
             toast.success("Coche compartido correctamente")
 
             // Cerrar modal ANTES de recargar

@@ -219,6 +219,37 @@ export function CarImport({ role }: CarImportProps) {
           action: 'UPDATE_CAR',
           details: `Actualizado coche: ${newCar.brand} ${newCar.model}`
         })
+
+        // Notificar a usuarios con quienes está compartido
+        if (editingCar.shared_with && editingCar.shared_with.length > 0) {
+          // Obtener datos del propietario
+          const { data: ownerData } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, email')
+            .eq('id', user.id)
+            .single()
+
+          const ownerName = ownerData?.first_name && ownerData?.last_name
+            ? `${ownerData.first_name} ${ownerData.last_name}`
+            : ownerData?.email || 'Alguien'
+
+          // Crear notificación para cada usuario compartido
+          const notifications = editingCar.shared_with.map((userId: string) => ({
+            user_id: userId,
+            type: 'car_updated',
+            title: 'Coche compartido modificado',
+            message: `El coche compartido por ${ownerName} ha sido modificado`,
+            link: '/car-import',
+            metadata: {
+              car_id: editingCar.id,
+              car_name: `${newCar.brand} ${newCar.model} (${newCar.year})`,
+              updated_by: user.id,
+              owner_name: ownerName
+            }
+          }))
+
+          await supabase.from('notifications').insert(notifications)
+        }
       } else {
         // Crear (CON user_id)
         const { error } = await supabase
