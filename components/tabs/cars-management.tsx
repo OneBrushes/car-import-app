@@ -5,6 +5,7 @@ import { Plus, ShoppingBag, TrendingUp, Calendar, Loader2 } from "lucide-react"
 import { BoughtCarCard } from "@/components/cards/bought-car-card"
 import { MarkAsBoughtModal } from "@/components/modals/mark-as-bought-modal"
 import { SellCarModal } from "@/components/modals/sell-car-modal"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
@@ -41,6 +42,10 @@ export function CarsManagement() {
   const [sellCarModalOpen, setSellCarModalOpen] = useState(false)
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | "inventory" | "sold">("all")
+
+  // Delete confirmation state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [carToDelete, setCarToDelete] = useState<string | null>(null)
 
   // Cargar datos desde Supabase
   useEffect(() => {
@@ -208,13 +213,19 @@ export function CarsManagement() {
   }
 
   const deleteCar = async (id: string) => {
-    if (!confirm("¿Estás seguro de eliminar este coche del inventario?")) return
+    // Show confirmation dialog instead of window.confirm
+    setCarToDelete(id)
+    setShowDeleteDialog(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!carToDelete) return
 
     try {
       const { error } = await supabase
         .from('inventory_cars')
         .delete()
-        .eq('id', id)
+        .eq('id', carToDelete)
 
       if (error) throw error
 
@@ -222,7 +233,15 @@ export function CarsManagement() {
       fetchCars()
     } catch (error) {
       toast.error("Error al eliminar coche")
+    } finally {
+      setShowDeleteDialog(false)
+      setCarToDelete(null)
     }
+  }
+
+  const cancelDelete = () => {
+    setShowDeleteDialog(false)
+    setCarToDelete(null)
   }
 
   const filteredCars = boughtCars.filter((car) => {
@@ -358,6 +377,18 @@ export function CarsManagement() {
           onSubmit={(data) => markAsSold(selectedCarId, data)}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        title="¿Eliminar coche?"
+        message="Esta acción es definitiva y no se puede deshacer. Se eliminará el coche y todos sus gastos asociados."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+        type="danger"
+      />
     </div>
   )
 }
