@@ -46,8 +46,6 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/favicon.png" type="image/png" />
         <title>NorDrive - Gestión de Importación</title>
       </head>
       <body className={`font-sans antialiased`} suppressHydrationWarning>
