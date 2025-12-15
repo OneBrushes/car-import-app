@@ -281,6 +281,28 @@ export function CarImport({ role }: CarImportProps) {
     // Eliminado confirmación nativa a petición del usuario
     try {
       const carToDelete = cars.find(c => c.id === id)
+
+      // Eliminar imágenes del storage de Supabase
+      if (carToDelete && carToDelete.images && carToDelete.images.length > 0) {
+        const imagePaths = carToDelete.images.map(imageUrl => {
+          // Extraer el path de la URL de Supabase
+          // Formato: https://[project].supabase.co/storage/v1/object/public/car-images/[path]
+          const urlParts = imageUrl.split('/car-images/')
+          return urlParts.length > 1 ? urlParts[1] : null
+        }).filter(Boolean) as string[]
+
+        if (imagePaths.length > 0) {
+          const { error: storageError } = await supabase.storage
+            .from('car-images')
+            .remove(imagePaths)
+
+          if (storageError) {
+            console.error('Error deleting images from storage:', storageError)
+            // No lanzar error, continuar con eliminación del coche
+          }
+        }
+      }
+
       const { error } = await supabase
         .from('imported_cars')
         .delete()

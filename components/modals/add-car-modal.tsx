@@ -546,7 +546,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
         {!initialData && (
           <div className="bg-orange-500/10 border-b border-orange-500/20 px-4 py-3">
             <p className="text-sm text-orange-600 dark:text-orange-400">
-              ⚠️ <strong>Importante:</strong> Si quieres guardar este coche, completa los datos y dale a "Guardar". Después podrás modificarlo editándolo. Si cierras sin guardar, se perderán los datos.
+              ⚠️ <strong>Importante:</strong> Si quieres guardar este coche, rellena la marca y/o el modelo y dale a "Añadir Coche". Después podrás modificarlo editándolo. Si cierras sin guardar, se perderán los datos.
             </p>
           </div>
         )}
