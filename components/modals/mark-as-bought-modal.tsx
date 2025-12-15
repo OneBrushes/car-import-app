@@ -2,8 +2,10 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { X } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
 
 interface MarkAsBoughtModalProps {
   isOpen: boolean
@@ -12,21 +14,31 @@ interface MarkAsBoughtModalProps {
 }
 
 export function MarkAsBoughtModal({ isOpen, onClose, onSubmit }: MarkAsBoughtModalProps) {
+  const { user } = useAuth()
   const [carId, setCarId] = useState("")
   const [datePurchased, setDatePurchased] = useState(new Date().toISOString().split("T")[0])
   const [importedCars, setImportedCars] = useState<any[]>([])
 
-  // Cargar coches importados
-  const handleOpenModal = () => {
-    const cars = JSON.parse(localStorage.getItem("importedCars") || "[]")
-    setImportedCars(cars)
-  }
+  // Cargar coches importados desde Supabase
+  useEffect(() => {
+    const loadCars = async () => {
+      if (!isOpen || !user) return
+
+      const { data, error } = await supabase
+        .from('imported_cars')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (!error && data) {
+        setImportedCars(data)
+      }
+    }
+
+    loadCars()
+  }, [isOpen, user])
 
   if (!isOpen) return null
-
-  if (importedCars.length === 0) {
-    handleOpenModal()
-  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

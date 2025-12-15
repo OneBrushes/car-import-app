@@ -295,52 +295,29 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     }
   })
 
-  // Restore draft on mount (only for new cars) - FIXED to work every time modal opens
+  // Clean up old drafts (no restoration)
   useEffect(() => {
-    // Reset draft check when modal opens
-    if (isOpen && !initialData) {
-      setDraftChecked(false)
-    }
-
-    if (!initialData && isOpen && !draftChecked) {
+    if (!initialData && isOpen) {
       const draftKey = 'car-draft-autosave'
       const saved = localStorage.getItem(draftKey)
 
       if (saved) {
         try {
-          const { formData: savedData, timestamp } = JSON.parse(saved)
+          const { timestamp } = JSON.parse(saved)
           const hourAgo = Date.now() - (60 * 60 * 1000)
 
-          // Check if draft has actual data
-          const hasRealData = savedData.brand || savedData.model || savedData.price ||
-            savedData.mileage || savedData.cv || savedData.year !== new Date().getFullYear()
-
-          // Only restore if less than 1 hour old AND has real data
-          if (timestamp > hourAgo && hasRealData) {
-            setPendingDraft(savedData)
-            setShowRestoreDialog(true)
-            setDraftChecked(true)
-          } else {
-            // Remove old or empty draft
+          // Remove old drafts
+          if (timestamp < hourAgo) {
             localStorage.removeItem(draftKey)
-            setDraftChecked(true)
           }
         } catch (error) {
-          console.error('Error restoring draft:', error)
           localStorage.removeItem(draftKey)
-          setDraftChecked(true)
         }
-      } else {
-        setDraftChecked(true)
       }
     }
-  }, [initialData, isOpen, draftChecked])
+  }, [initialData, isOpen])
 
   const handleRestoreDraft = () => {
-    if (pendingDraft) {
-      setFormData(pendingDraft)
-      toast.success('Borrador recuperado')
-    }
     setShowRestoreDialog(false)
     setPendingDraft(null)
   }
@@ -564,6 +541,15 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
             <X className="w-6 h-6" />
           </button>
         </div>
+
+        {/* Warning Banner for New Cars */}
+        {!initialData && (
+          <div className="bg-orange-500/10 border-b border-orange-500/20 px-4 py-3">
+            <p className="text-sm text-orange-600 dark:text-orange-400">
+              ⚠️ <strong>Importante:</strong> Si quieres guardar este coche, completa los datos y dale a "Guardar". Después podrás modificarlo editándolo. Si cierras sin guardar, se perderán los datos.
+            </p>
+          </div>
+        )}
 
         {/* Read-Only Banner for Shared Cars */}
         {isSharedCar && (
@@ -1197,18 +1183,6 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
           </button>
         </div>
       </div>
-
-      {/* Restore Draft Dialog */}
-      <ConfirmDialog
-        isOpen={showRestoreDialog}
-        title="Borrador encontrado"
-        message="Tienes un borrador guardado. ¿Quieres recuperarlo?"
-        confirmText="Recuperar"
-        cancelText="Descartar"
-        onConfirm={handleRestoreDraft}
-        onCancel={handleDiscardDraft}
-        type="info"
-      />
 
       {/* Close Confirmation Dialog */}
       <ConfirmDialog
