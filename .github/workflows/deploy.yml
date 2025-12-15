@@ -36,7 +36,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
-          NEXT_PUBLIC_WORKER_URL: ${{ secrets.NEXT_PUBLIC_WORKER_URL }}
+          NEXT_PUBLIC_STRIPE_PAYMENT_WORKER: https://stripe-payment-intent.onebrushes.workers.dev
+          NEXT_PUBLIC_STRIPE_SUBSCRIPTION_WORKER: https://stripe-subscription.onebrushes.workers.dev
           
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

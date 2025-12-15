@@ -19,8 +19,11 @@ Añade estos secrets:
 NEXT_PUBLIC_SUPABASE_URL=https://luzacvchtxkurisuywic.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=[tu-anon-key]
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=[tu-stripe-key]
-NEXT_PUBLIC_WORKER_URL=https://[tu-worker].workers.dev
 ```
+
+**Nota:** Las URLs de los workers ya están configuradas en el workflow:
+- Payment Intent: `https://stripe-payment-intent.onebrushes.workers.dev`
+- Subscription: `https://stripe-subscription.onebrushes.workers.dev`
 
 ### 3. Desplegar Workers de Stripe en Cloudflare
 
