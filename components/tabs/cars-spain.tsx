@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Plus, Loader2 } from "lucide-react"
 import { AddSpainCarModal } from "@/components/modals/add-spain-car-modal"
+import { ShareSpainCarModal } from "@/components/modals/share-spain-car-modal"
 import { SpainCarCard } from "@/components/cards/spain-car-card"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
@@ -37,9 +38,12 @@ export function CarsSpain({ role }: CarsSpainProps) {
     const [cars, setCars] = useState<SpainCar[]>([])
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [shareModalOpen, setShareModalOpen] = useState(false)
+    const [sharingCar, setSharingCar] = useState<SpainCar | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState("price")
     const [editingCar, setEditingCar] = useState<SpainCar | null>(null)
+    const [sharedCarIds, setSharedCarIds] = useState<Set<string>>(new Set())
 
     // Cargar datos desde Supabase
     useEffect(() => {
@@ -49,14 +53,40 @@ export function CarsSpain({ role }: CarsSpainProps) {
     const fetchCars = async () => {
         try {
             setLoading(true)
+            // Obtener coches propios
             const { data, error } = await supabase
                 .from('spain_cars')
                 .select('*')
+                .eq('user_id', user?.id)
                 .order('created_at', { ascending: false })
 
             if (error) throw error
 
-            const formattedCars: SpainCar[] = data.map((car: any) => ({
+            // Obtener coches compartidos conmigo
+            const { data: sharedData, error: sharedError } = await supabase
+                .from('spain_car_shares')
+                .select(`
+                    car_id,
+                    spain_cars (*)
+                `)
+                .eq('shared_with_id', user?.id)
+
+            if (sharedError) throw sharedError
+
+            // Combinar coches propios y compartidos
+            const sharedCars = (sharedData || []).map((share: any) => share.spain_cars)
+            const allCars = [...(data || []), ...sharedCars]
+
+            // Obtener IDs de coches compartidos (propios que he compartido)
+            const { data: myShares } = await supabase
+                .from('spain_car_shares')
+                .select('car_id')
+                .eq('owner_id', user?.id)
+
+            const sharedIds = new Set((myShares || []).map((s: any) => s.car_id))
+            setSharedCarIds(sharedIds)
+
+            const formattedCars: SpainCar[] = allCars.map((car: any) => ({
                 id: car.id,
                 brand: car.brand,
                 model: car.model,
@@ -73,7 +103,8 @@ export function CarsSpain({ role }: CarsSpainProps) {
                 notes: car.notes,
                 equipmentLevel: car.equipment_level,
                 images: car.images || [],
-                imageUrl: car.image_url
+                imageUrl: car.image_url,
+                user_id: car.user_id // Importante para saber si es propietario
             }))
 
             setCars(formattedCars)
@@ -158,9 +189,20 @@ export function CarsSpain({ role }: CarsSpainProps) {
         setIsModalOpen(true)
     }
 
+    const handleShare = (car: SpainCar) => {
+        setSharingCar(car)
+        setShareModalOpen(true)
+    }
+
     const handleCloseModal = () => {
         setIsModalOpen(false)
         setEditingCar(null)
+    }
+
+    const handleCloseShareModal = () => {
+        setShareModalOpen(false)
+        setSharingCar(null)
+        fetchCars() // Recargar para actualizar estados compartidos
     }
 
     const filteredCars = cars.filter((car) => {
@@ -241,14 +283,37 @@ export function CarsSpain({ role }: CarsSpainProps) {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {sortedCars.map((car) => (
-                        <SpainCarCard key={car.id} car={car} onDelete={() => deleteCar(car.id)} onEdit={() => handleEdit(car)} />
+                    {sortedCars.map((car: any) => (
+                        <SpainCarCard
+                            key={car.id}
+                            car={car}
+                            onDelete={() => deleteCar(car.id)}
+                            onEdit={() => handleEdit(car)}
+                            onShare={() => handleShare(car)}
+                            isShared={sharedCarIds.has(car.id)}
+                            isOwner={car.user_id === user?.id}
+                        />
                     ))}
                 </div>
             )}
 
-            {/* Modal */}
-            <AddSpainCarModal isOpen={isModalOpen} onClose={handleCloseModal} onSubmit={addCar} initialData={editingCar} />
+            {/* Modal Añadir/Editar */}
+            <AddSpainCarModal
+                isOpen={isModalOpen}
+                onClose={handleCloseModal}
+                onSubmit={addCar}
+                initialData={editingCar}
+            />
+
+            {/* Modal Compartir */}
+            {sharingCar && (
+                <ShareSpainCarModal
+                    isOpen={shareModalOpen}
+                    onClose={handleCloseShareModal}
+                    carId={sharingCar.id}
+                    carName={`${sharingCar.brand} ${sharingCar.model}`}
+                />
+            )}
         </div>
     )
 }
