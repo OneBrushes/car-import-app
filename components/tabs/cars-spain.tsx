@@ -53,29 +53,20 @@ export function CarsSpain({ role }: CarsSpainProps) {
     const fetchCars = async () => {
         try {
             setLoading(true)
-            // Obtener coches propios
+
+            // Obtener todos los coches de España
             const { data, error } = await supabase
                 .from('spain_cars')
                 .select('*')
-                .eq('user_id', user?.id)
                 .order('created_at', { ascending: false })
 
             if (error) throw error
 
-            // Obtener coches compartidos conmigo
-            const { data: sharedData, error: sharedError } = await supabase
-                .from('spain_car_shares')
-                .select(`
-                    car_id,
-                    spain_cars (*)
-                `)
-                .eq('shared_with_id', user?.id)
-
-            if (sharedError) throw sharedError
-
-            // Combinar coches propios y compartidos
-            const sharedCars = (sharedData || []).map((share: any) => share.spain_cars)
-            const allCars = [...(data || []), ...sharedCars]
+            // Filtrar: coches propios O compartidos conmigo
+            const filteredData = (data || []).filter((car: any) =>
+                car.user_id === user?.id ||
+                (car.shared_with && car.shared_with.includes(user?.id))
+            )
 
             // Obtener IDs de coches compartidos (propios que he compartido)
             const { data: myShares } = await supabase
@@ -86,8 +77,10 @@ export function CarsSpain({ role }: CarsSpainProps) {
             const sharedIds = new Set((myShares || []).map((s: any) => s.car_id))
             setSharedCarIds(sharedIds)
 
-            const formattedCars: SpainCar[] = allCars.map((car: any) => ({
+            const formattedCars: SpainCar[] = filteredData.map((car: any) => ({
                 id: car.id,
+                user_id: car.user_id,
+                shared_with: car.shared_with || [],
                 brand: car.brand,
                 model: car.model,
                 year: car.year,
@@ -102,9 +95,8 @@ export function CarsSpain({ role }: CarsSpainProps) {
                 tags: car.tags || [],
                 notes: car.notes,
                 equipmentLevel: car.equipment_level,
-                images: car.images || [],
-                imageUrl: car.image_url,
-                user_id: car.user_id // Importante para saber si es propietario
+                images: car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : []),
+                imageUrl: car.image_url
             }))
 
             setCars(formattedCars)
