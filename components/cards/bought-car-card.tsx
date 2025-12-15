@@ -17,7 +17,7 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
     concept: "",
     amount: "",
     date: new Date().toISOString().split("T")[0],
-    category: "Reparación",
+    category: "Precio del coche",
   })
 
   const safeInitialPrice = typeof car.initialPrice === "number" && !isNaN(car.initialPrice) ? car.initialPrice : 0
@@ -48,12 +48,22 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
         concept: "",
         amount: "",
         date: new Date().toISOString().split("T")[0],
-        category: "Reparación",
+        category: "Precio del coche",
       })
     }
   }
 
-  const expenseCategories = ["Reparación", "Mantenimiento", "Seguro", "Transporte", "Otro"]
+  const expenseCategories = [
+    "Precio del coche",
+    "Transporte",
+    "ITV",
+    "Trámites",
+    "Reparación",
+    "Mantenimiento",
+    "Seguro",
+    "Impuestos",
+    "Otro"
+  ]
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -65,9 +75,8 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
               {car.brand} {car.model}
             </h3>
             <span
-              className={`px-2 py-1 rounded-full text-xs font-medium ${
-                car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-accent/10 text-accent"
-              }`}
+              className={`px-2 py-1 rounded-full text-xs font-medium ${car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-accent/10 text-accent"
+                }`}
             >
               {car.status === "inventory" ? "En Inventario" : "Vendido"}
             </span>
@@ -117,19 +126,21 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
           <div>
             <h4 className="font-semibold mb-3">Desglose de Inversión</h4>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Precio inicial</span>
-                <span>{safeInitialPrice}€</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Gastos de importación</span>
-                <span>{safeInitialExpenses}€</span>
-              </div>
+              {car.expenses.length === 0 && (
+                <p className="text-muted-foreground text-sm italic">
+                  No hay gastos registrados. Añade el precio del coche como primer gasto.
+                </p>
+              )}
               {car.expenses.map((expense: any) => (
                 <div key={expense.id} className="flex justify-between items-center">
-                  <span className="text-muted-foreground">
-                    {expense.concept} ({new Date(expense.date).toLocaleDateString()})
-                  </span>
+                  <div className="flex-1">
+                    <span className="text-muted-foreground">
+                      {expense.concept}
+                    </span>
+                    <span className="text-xs text-muted-foreground/70 ml-2">
+                      ({expense.category}) - {new Date(expense.date).toLocaleDateString()}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <span>{expense.amount}€</span>
                     <button
