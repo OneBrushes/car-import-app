@@ -214,7 +214,11 @@ export default function LoginPage() {
                 {/* Logo / Brand */}
                 <div className="flex flex-col items-center mb-8 text-center">
                     <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-900/50 mb-4 p-2">
-                        <img src="/NorDrive.png" alt="NorDrive Logo" className="w-full h-full object-contain" />
+                        <img
+                            src={`${process.env.__NEXT_ROUTER_BASEPATH || ''}/NorDrive.png`}
+                            alt="NorDrive Logo"
+                            className="w-full h-full object-contain"
+                        />
                     </div>
                     <h1 className="text-3xl font-bold text-white tracking-tight">NorDrive Manager</h1>
                     <p className="text-slate-400 mt-2 text-sm">Gestión profesional de importación de vehículos</p>
