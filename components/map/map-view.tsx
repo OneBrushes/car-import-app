@@ -53,29 +53,38 @@ interface MapViewProps {
   filterMode?: "all" | "imported" | "bought"
 }
 
-// Component to handle bounds
+// Component to handle bounds safely
 function MapBounds({ markers }: { markers: { lat: number; lng: number }[] }) {
   const map = useMap()
 
   useEffect(() => {
-    if (markers.length === 0) return
-    const bounds = L.latLngBounds(markers.map(m => [m.lat, m.lng]))
-    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 })
+    // Filter out any NaN coordinates just in case to prevent Leaflet from crashing (gray map)
+    const validMarkers = markers.filter(m => typeof m.lat === 'number' && typeof m.lng === 'number' && !isNaN(m.lat) && !isNaN(m.lng));
+    if (validMarkers.length === 0) return;
+
+    try {
+      const bounds = L.latLngBounds(validMarkers.map(m => [m.lat, m.lng]))
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 })
+    } catch(e) {
+      console.warn("Error setting map bounds", e);
+    }
   }, [markers, map])
 
   return null
 }
 
 const globalCachedCoords: Record<string, { lat: number; lng: number }> = {}
-const LOCAL_STORAGE_CACHE_KEY = 'car_map_geocode_cache_v2'
+const LOCAL_STORAGE_CACHE_KEY = 'car_map_geocode_arcgis_cache_v3'
 let isCacheLoaded = false;
+
+// Promisified timeout
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
   const [geocodedCars, setGeocodedCars] = useState<(CarData & { lat: number; lng: number })[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Cargar caché local para que sea instantáneo en recargas
     if (!isCacheLoaded && typeof window !== 'undefined') {
       try {
         const cached = localStorage.getItem(LOCAL_STORAGE_CACHE_KEY);
@@ -86,96 +95,85 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
 
     const geocodeAddresses = async () => {
       setLoading(true)
-      const results: (CarData & { lat: number; lng: number })[] = []
-
-      // Combinar location y origin. Excluimos coches donde ambos están vacíos o dicen 'importado'.
+      
       const hasValidAddress = (car: CarData) => {
         const l = car.location?.trim().toLowerCase() || '';
         const o = car.origin?.trim().toLowerCase() || '';
         return (l !== '' && l !== 'importado') || (o !== '' && o !== 'importado');
       };
+
+      let allResults: (CarData & { lat: number; lng: number })[] = [];
+
+      // Procesamiento por lotes paralelos para máxima velocidad
+      const CHUNK_SIZE = 10;
       
-      const carsWithOrigin = cars.filter(hasValidAddress);
-
-      for (const car of cars) {
-        if (!hasValidAddress(car)) {
-          // Fallback a Alemania Aproximada
-          results.push({ ...car, lat: 51.1657, lng: 10.4515, isApproximated: true })
-          continue;
-        }
-
-        // Construir la dirección completa uniendo location (ej: calle) y origin (ej: Alemania)
-        const parts = [];
-        if (car.location && car.location.trim().toLowerCase() !== 'importado') parts.push(car.location.trim());
-        if (car.origin && car.origin.trim().toLowerCase() !== 'importado') parts.push(car.origin.trim());
-        const originalAddress = parts.join(", ");
-
-        if (!originalAddress) continue;
-
-        if (globalCachedCoords[originalAddress]) {
-          results.push({ ...car, ...globalCachedCoords[originalAddress] })
-          setGeocodedCars([...results])
-          continue
-        }
-
-        try {
-          const cleanAddress = originalAddress.replace(/\b[A-Z]{1,3}-/gi, " ").trim();
-          
-          let countrySuffix = "";
-          if (originalAddress.toUpperCase().includes("DE-") || /\b(BERLIN|MUNICH|FRANKFURT|HAMBURG|STUTTGART|KOLN|COLOGNE|NUREMBERG|NIEDER OLM)\b/i.test(originalAddress)) {
-            countrySuffix = ", Germany";
-          } else if (originalAddress.toUpperCase().includes("ES-") || /\b(MADRID|BARCELONA|VALENCIA|SEVILLA|ALICANTE|MALAGA)\b/i.test(originalAddress)) {
-            countrySuffix = ", Spain";
-          } else if (originalAddress.toUpperCase().includes("FR-") || /\b(PARIS|LYON|MARSEILLE)\b/i.test(originalAddress)) {
-            countrySuffix = ", France";
-          } else if (/\b(ITALIA|ITALY|ROMA|MILAN|NAPOLI)\b/i.test(originalAddress)) {
-            countrySuffix = ", Italy";
-          }
-
-          // Photon no sufre tanto de rate-limits severos como Nominatim.
-          // Se usa lat/lon de Alemania Central para "sesgar" la búsqueda dando prioridad a Europa.
-          let response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress + countrySuffix)}&limit=1&lat=51.1657&lon=10.4515`)
-          let data = await response.json()
-
-          // Si falla, probar sin countrySuffix
-          if (!data || !data.features || data.features.length === 0) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress)}&limit=1&lat=51.1657&lon=10.4515`)
-            data = await response.json()
-          }
-
-          // Fallback final: intentamos buscar solo por Código Postal + Ciudad
-          if ((!data || !data.features || data.features.length === 0) && cleanAddress.match(/\b\d{4,5}\b/)) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-            const zipAndCity = cleanAddress.substring(cleanAddress.search(/\b\d{4,5}\b/));
-            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(zipAndCity + countrySuffix)}&limit=1&lat=51.1657&lon=10.4515`);
-            data = await response.json();
-          }
-
-          if (data && data.features && data.features.length > 0) {
-            // Photon devuelve las coordenadas como [lon, lat]
-            const coords = { lat: parseFloat(data.features[0].geometry.coordinates[1]), lng: parseFloat(data.features[0].geometry.coordinates[0]) }
-            globalCachedCoords[originalAddress] = coords
-            try { localStorage.setItem(LOCAL_STORAGE_CACHE_KEY, JSON.stringify(globalCachedCoords)); } catch(e) {}
-            results.push({ ...car, ...coords, isApproximated: false })
-          } else {
-            console.warn(`No se encontraron coordenadas para: ${originalAddress}`)
-            results.push({ ...car, lat: 51.1657, lng: 10.4515, isApproximated: true })
-          }
-
-          // Espera mínima para no saturar al servidor de Photon
-          await new Promise(resolve => setTimeout(resolve, 400));
-        } catch (err) {
-          console.error(`Error geocoding ${originalAddress}:`, err)
-          results.push({ ...car, lat: 51.1657, lng: 10.4515, isApproximated: true })
-        }
+      for (let i = 0; i < cars.length; i += CHUNK_SIZE) {
+        const chunk = cars.slice(i, i + CHUNK_SIZE);
         
-        // Update incrementally!
-        setGeocodedCars([...results])
+        // Ejecutamos el chunk entero a la vez
+        const chunkPromises = chunk.map(async (car) => {
+          if (!hasValidAddress(car)) {
+            return { ...car, lat: 51.1657, lng: 10.4515, isApproximated: true };
+          }
+
+          const parts = [];
+          if (car.location && car.location.trim().toLowerCase() !== 'importado') parts.push(car.location.trim());
+          if (car.origin && car.origin.trim().toLowerCase() !== 'importado') parts.push(car.origin.trim());
+          const originalAddress = parts.join(", ");
+
+          if (!originalAddress) {
+             return { ...car, lat: 51.1657, lng: 10.4515, isApproximated: true };
+          }
+
+          if (globalCachedCoords[originalAddress]) {
+            return { ...car, ...globalCachedCoords[originalAddress], isApproximated: false };
+          }
+
+          try {
+            // Limpieza básica
+            const cleanAddress = originalAddress.replace(/\b[A-Z]{1,3}-/gi, " ").trim();
+            
+            // ArcGIS Geocoding Service (Muy permisivo, sin problemas CORS fuertes y acepta búsquedas globales rápidamente)
+            const url = `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&singleLine=${encodeURIComponent(cleanAddress)}&maxLocations=1`;
+            
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data && data.candidates && data.candidates.length > 0) {
+              const location = data.candidates[0].location; // {x: lon, y: lat}
+              const coords = { lat: location.y, lng: location.x };
+              
+              if (typeof coords.lat === 'number' && typeof coords.lng === 'number' && !isNaN(coords.lat)) {
+                globalCachedCoords[originalAddress] = coords;
+                return { ...car, ...coords, isApproximated: false };
+              }
+            } 
+            
+            // Fallback si no encuentra nada
+            console.warn(`No se encontró dirección para: ${originalAddress}`);
+            return { ...car, lat: 51.1657, lng: 10.4515, isApproximated: true };
+
+          } catch (err) {
+            console.error(`Error geocoding ${originalAddress}:`, err);
+            return { ...car, lat: 51.1657, lng: 10.4515, isApproximated: true };
+          }
+        });
+
+        const resolvedChunk = await Promise.all(chunkPromises);
+        allResults = [...allResults, ...resolvedChunk];
+        
+        // Guardar cache tras cada chunk por seguridad
+        try { localStorage.setItem(LOCAL_STORAGE_CACHE_KEY, JSON.stringify(globalCachedCoords)); } catch(e) {}
+        
+        // Actualizar UI progresivamente (muy rápido)
+        setGeocodedCars([...allResults]);
+        
+        // Micro-pausa entre chunks para evitar asfixiar la cola del navegador
+        if (i + CHUNK_SIZE < cars.length) await delay(100);
       }
 
-      setGeocodedCars([...results])
-      setLoading(false)
+      setGeocodedCars(allResults);
+      setLoading(false);
     }
 
     if (cars.length > 0) {
@@ -185,13 +183,11 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
     }
   }, [cars])
 
-  // Aplicar el filtro visualmente SIN destruir la lista cacheada
   const filteredCarsToShow = geocodedCars.filter(c => 
     filterMode === 'all' || 
     (filterMode === 'bought' ? c.isBought : !c.isBought)
   )
 
-  // Contar los coches que quedaron excluidos por no tener ninguna dirección válida
   const carsWithoutValidOrigin = cars.filter(c => {
      const l = c.location?.trim().toLowerCase() || '';
      const o = c.origin?.trim().toLowerCase() || '';
@@ -202,10 +198,16 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
     const carsArray = filteredCarsToShow;
     const registry: Record<string, number> = {};
     return carsArray.map(car => {
-      const coordKey = `${car.lat},${car.lng}`;
+      // Garantizar que la coordenada es válida antes de esparcir
+      if (typeof car.lat !== 'number' || isNaN(car.lat) || typeof car.lng !== 'number' || isNaN(car.lng)) {
+         return { ...car, lat: 51.1657, lng: 10.4515 }; // Default fallback for entirely broken coords
+      }
+      
+      // Precision key para identificar solapamientos 
+      const coordKey = `${car.lat.toFixed(5)},${car.lng.toFixed(5)}`;
       if (registry[coordKey]) {
         registry[coordKey]++;
-        // Aplicar una pequeñísima dispersión aleatoria concéntrica según cuantas superposiciones haya
+        // Aplicar dispersión aleatoria concéntrica si hay varios en el mismo sitio exacto
         const scatterRange = 0.005 * registry[coordKey];
         return {
           ...car,
@@ -245,27 +247,27 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
       {loading && (
          <div className="absolute top-4 right-4 z-[1000] bg-background/90 backdrop-blur-sm border border-border px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            <span className="text-sm font-medium">Cargando poco a poco...</span>
+            <span className="text-sm font-medium">Cargando ubicaciones...</span>
          </div>
       )}
       <MapContainer
-        center={[40.4168, -3.7038]} // Madrid as default
+        center={[51.1657, 10.4515]} // Germany center instead of Madrid as default to avoid big jumps
         zoom={5}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%', zIndex: 0 }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
         />
 
-        <MapBounds markers={scatteredCarsToShow.map((c: CarData & {lat: number; lng: number}) => ({ lat: c.lat, lng: c.lng }))} />
+        <MapBounds markers={scatteredCarsToShow.map(c => ({ lat: c.lat, lng: c.lng }))} />
 
-        {scatteredCarsToShow.map((car: CarData & {lat: number; lng: number}) => {
+        {scatteredCarsToShow.map((car) => {
           const mainImage = car.image_url || (car.images && car.images.length > 0 ? car.images[0] : null)
           
           return (
-            <Marker key={car.id} position={[car.lat, car.lng]} icon={brandIcon(car.isBought ? 'bought' : (car.isApproximated ? 'approximate' : 'imported'))}>
+            <Marker key={`${car.id}-${car.lat}-${car.lng}`} position={[car.lat, car.lng]} icon={brandIcon(car.isBought ? 'bought' : (car.isApproximated ? 'approximate' : 'imported'))}>
               <Popup className="car-popup">
                 <div className="flex flex-col gap-2 min-w-[200px]">
                   {mainImage ? (
