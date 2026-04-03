@@ -148,6 +148,8 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
     (filterMode === 'bought' ? c.isBought : !c.isBought)
   )
 
+  const carsWithoutValidOrigin = cars.filter(c => !c.origin || c.origin.trim() === '' || c.origin.trim().toLowerCase() === 'importado').length;
+
   if (!loading && filteredCarsToShow.length === 0) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center p-12 bg-card border border-border rounded-lg min-h-[500px]">
@@ -156,12 +158,44 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
         <p className="text-sm text-muted-foreground mt-2 text-center max-w-sm">
           Añade o edita tus coches e incluye una dirección real en el campo "Origen" para verlos en el mapa.
         </p>
+        {carsWithoutValidOrigin > 0 && (
+          <p className="text-sm font-semibold text-amber-500 mt-4 border border-amber-200 bg-amber-500/10 px-4 py-2 rounded-md">
+            Tienes {carsWithoutValidOrigin} coches en tu lista que no aparecerán aquí porque tienen el Origen en blanco o puesto como "Importado".
+          </p>
+        )}
       </div>
     )
   }
 
+  // Pequeña función para evitar que los coches con exactamente la misma dirección se tapen unos a otros en el mapa
+  const disperseOverlappingMarkers = (carsArray: typeof filteredCarsToShow) => {
+    const registry: Record<string, number> = {};
+    return carsArray.map(car => {
+      const coordKey = `${car.lat},${car.lng}`;
+      if (registry[coordKey]) {
+        registry[coordKey]++;
+        // Aplicar una pequeñísima dispersión aleatoria concéntrica según cuantas superposiciones haya
+        const scatterRange = 0.005 * registry[coordKey];
+        return {
+          ...car,
+          lat: car.lat + (Math.random() - 0.5) * scatterRange,
+          lng: car.lng + (Math.random() - 0.5) * scatterRange
+        };
+      }
+      registry[coordKey] = 1;
+      return car;
+    });
+  }
+
+  const scatteredCarsToShow = disperseOverlappingMarkers(filteredCarsToShow);
+
   return (
     <div className="w-full h-[600px] rounded-lg overflow-hidden border border-border shadow-md relative z-0" style={{ isolation: 'isolate' }}>
+      {carsWithoutValidOrigin > 0 && !loading && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-amber-500/90 text-white backdrop-blur-sm px-4 py-2 rounded-full shadow-lg text-xs font-medium text-center">
+          Ocultamos {carsWithoutValidOrigin} coches del mapa por falta de dirección (vacío o "Importado").
+        </div>
+      )}
       {loading && (
          <div className="absolute top-4 right-4 z-[1000] bg-background/90 backdrop-blur-sm border border-border px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin text-primary" />
@@ -179,9 +213,9 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <MapBounds markers={filteredCarsToShow.map(c => ({ lat: c.lat, lng: c.lng }))} />
+        <MapBounds markers={scatteredCarsToShow.map((c: CarData & {lat: number; lng: number}) => ({ lat: c.lat, lng: c.lng }))} />
 
-        {filteredCarsToShow.map((car) => {
+        {scatteredCarsToShow.map((car: CarData & {lat: number; lng: number}) => {
           const mainImage = car.image_url || (car.images && car.images.length > 0 ? car.images[0] : null)
           
           return (
