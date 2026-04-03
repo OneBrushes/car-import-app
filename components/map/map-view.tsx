@@ -132,26 +132,29 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
             countrySuffix = ", Italy";
           }
 
-          let response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress + countrySuffix)}&limit=1&email=admin@carimportapp.com`)
+          // Photon no sufre tanto de rate-limits severos como Nominatim.
+          // Se usa lat/lon de Alemania Central para "sesgar" la búsqueda dando prioridad a Europa.
+          let response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress + countrySuffix)}&limit=1&lat=51.1657&lon=10.4515`)
           let data = await response.json()
 
           // Si falla, probar sin countrySuffix
-          if (!data || data.length === 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress)}&limit=1&email=admin@carimportapp.com`)
+          if (!data || !data.features || data.features.length === 0) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress)}&limit=1&lat=51.1657&lon=10.4515`)
             data = await response.json()
           }
 
           // Fallback final: intentamos buscar solo por Código Postal + Ciudad
-          if ((!data || data.length === 0) && cleanAddress.match(/\b\d{4,5}\b/)) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+          if ((!data || !data.features || data.features.length === 0) && cleanAddress.match(/\b\d{4,5}\b/)) {
+            await new Promise(resolve => setTimeout(resolve, 300));
             const zipAndCity = cleanAddress.substring(cleanAddress.search(/\b\d{4,5}\b/));
-            response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(zipAndCity + countrySuffix)}&limit=1&email=admin@carimportapp.com`);
+            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(zipAndCity + countrySuffix)}&limit=1&lat=51.1657&lon=10.4515`);
             data = await response.json();
           }
 
-          if (data && data.length > 0) {
-            const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+          if (data && data.features && data.features.length > 0) {
+            // Photon devuelve las coordenadas como [lon, lat]
+            const coords = { lat: parseFloat(data.features[0].geometry.coordinates[1]), lng: parseFloat(data.features[0].geometry.coordinates[0]) }
             globalCachedCoords[originalAddress] = coords
             try { localStorage.setItem(LOCAL_STORAGE_CACHE_KEY, JSON.stringify(globalCachedCoords)); } catch(e) {}
             results.push({ ...car, ...coords, isApproximated: false })
@@ -160,8 +163,8 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
             results.push({ ...car, lat: 51.1657, lng: 10.4515, isApproximated: true })
           }
 
-          // Always wait 1s after a successful geocoding iteration to avoid getting banned by Nominatim
-          await new Promise(resolve => setTimeout(resolve, 1200));
+          // Espera mínima para no saturar al servidor de Photon
+          await new Promise(resolve => setTimeout(resolve, 400));
         } catch (err) {
           console.error(`Error geocoding ${originalAddress}:`, err)
           results.push({ ...car, lat: 51.1657, lng: 10.4515, isApproximated: true })
