@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, ShoppingBag, TrendingUp, Calendar, Loader2 } from "lucide-react"
+import { Plus, ShoppingBag, TrendingUp, Calendar, Loader2, LayoutList, LayoutDashboard } from "lucide-react"
 import { BoughtCarCard } from "@/components/cards/bought-car-card"
 import { MarkAsBoughtModal } from "@/components/modals/mark-as-bought-modal"
 import { SellCarModal } from "@/components/modals/sell-car-modal"
@@ -9,21 +9,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
-
-interface BoughtCar {
-  id: string
-  brand: string
-  model: string
-  year: number
-  initialPrice: number
-  initialExpenses: number
-  datePurchased: string
-  status: "inventory" | "sold"
-  sellPrice?: number
-  dateSold?: string
-  buyer?: string
-  expenses: Expense[]
-}
+import { Car } from "lucide-react"
 
 interface Expense {
   id: string
@@ -34,6 +20,32 @@ interface Expense {
   notes?: string
 }
 
+export type LogisticStatus = "purchased" | "in_transit" | "homologation" | "detailing" | "ready"
+
+interface BoughtCar {
+  id: string
+  brand: string
+  model: string
+  year: number
+  initialPrice: number
+  initialExpenses: number
+  datePurchased: string
+  status: "inventory" | "sold"
+  logistic_status: LogisticStatus
+  sellPrice?: number
+  dateSold?: string
+  buyer?: string
+  expenses: Expense[]
+}
+
+const KANBAN_COLUMNS: { id: LogisticStatus; label: string; color: string }[] = [
+  { id: "purchased", label: "Comprado", color: "bg-blue-500" },
+  { id: "in_transit", label: "En Tránsito / Grúa", color: "bg-orange-500" },
+  { id: "homologation", label: "Trámites / ITV", color: "bg-purple-500" },
+  { id: "detailing", label: "Taller / Limpieza", color: "bg-pink-500" },
+  { id: "ready", label: "En Stock / Listo", color: "bg-emerald-500" },
+]
+
 export function CarsManagement() {
   const { user } = useAuth()
   const [boughtCars, setBoughtCars] = useState<BoughtCar[]>([])
@@ -41,13 +53,13 @@ export function CarsManagement() {
   const [markAsBoughtModalOpen, setMarkAsBoughtModalOpen] = useState(false)
   const [sellCarModalOpen, setSellCarModalOpen] = useState(false)
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null)
-  const [filter, setFilter] = useState<"all" | "inventory" | "sold">("all")
+  const [filter, setFilter] = useState<"all" | "inventory" | "sold">("inventory")
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban")
 
   // Delete confirmation state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [carToDelete, setCarToDelete] = useState<string | null>(null)
 
-  // Cargar datos desde Supabase
   useEffect(() => {
     if (user) fetchCars()
   }, [user])
@@ -65,7 +77,6 @@ export function CarsManagement() {
 
       if (carsError) throw carsError
 
-      // Transformar datos de snake_case (DB) a camelCase (Frontend)
       const formattedCars: BoughtCar[] = carsData.map((car: any) => ({
         id: car.id,
         brand: car.brand,
@@ -75,6 +86,7 @@ export function CarsManagement() {
         initialExpenses: Number(car.initial_expenses),
         datePurchased: car.date_purchased,
         status: car.status,
+        logistic_status: car.logistic_status || 'purchased',
         sellPrice: car.sell_price ? Number(car.sell_price) : undefined,
         dateSold: car.date_sold,
         buyer: car.buyer,
@@ -97,8 +109,6 @@ export function CarsManagement() {
     if (!user) return
 
     try {
-      // 1. Obtener datos del coche importado (si viene de ahí)
-      // Nota: Aquí asumimos que data.carId es el ID de imported_cars
       let carData = {
         brand: "Desconocido",
         model: "Desconocido",
@@ -119,13 +129,12 @@ export function CarsManagement() {
             brand: importedCar.brand,
             model: importedCar.model,
             year: importedCar.year,
-            price: 0, // Empezar en 0, el usuario añadirá el precio real
-            expenses: 0 // Empezar en 0, el usuario añadirá los gastos
+            price: 0,
+            expenses: 0
           }
         }
       }
 
-      // 2. Insertar en inventory_cars
       const { data: newCar, error } = await supabase
         .from('inventory_cars')
         .insert({
@@ -136,16 +145,17 @@ export function CarsManagement() {
           initial_price: carData.price,
           initial_expenses: carData.expenses,
           date_purchased: data.datePurchased,
-          status: 'inventory'
+          status: 'inventory',
+          logistic_status: 'purchased'
         })
         .select()
         .single()
 
       if (error) throw error
 
-      toast.success("Coche añadido al inventario")
+      toast.success("Coche añadido al inventario. Frecuencia lo puedes mover en el Kanban.")
       setMarkAsBoughtModalOpen(false)
-      fetchCars() // Recargar lista
+      fetchCars()
     } catch (error: any) {
       toast.error("Error al añadir coche: " + error.message)
     }
@@ -165,7 +175,6 @@ export function CarsManagement() {
         })
 
       if (error) throw error
-
       toast.success("Gasto añadido")
       fetchCars()
     } catch (error) {
@@ -181,7 +190,6 @@ export function CarsManagement() {
         .eq('id', expenseId)
 
       if (error) throw error
-
       toast.success("Gasto eliminado")
       fetchCars()
     } catch (error) {
@@ -213,14 +221,12 @@ export function CarsManagement() {
   }
 
   const deleteCar = async (id: string) => {
-    // Show confirmation dialog instead of window.confirm
     setCarToDelete(id)
     setShowDeleteDialog(true)
   }
 
   const confirmDelete = async () => {
     if (!carToDelete) return
-
     try {
       const { error } = await supabase
         .from('inventory_cars')
@@ -242,6 +248,45 @@ export function CarsManagement() {
   const cancelDelete = () => {
     setShowDeleteDialog(false)
     setCarToDelete(null)
+  }
+
+  const updateLogisticStatus = async (carId: string, newStatus: LogisticStatus) => {
+    // Optimistic UI update
+    setBoughtCars(prev => prev.map(c => c.id === carId ? { ...c, logistic_status: newStatus } : c))
+    
+    try {
+      const { error } = await supabase
+        .from('inventory_cars')
+        .update({ logistic_status: newStatus })
+        .eq('id', carId)
+      
+      if (error) {
+        throw error
+      }
+      toast.success("Fase logística actualizada")
+    } catch(err) {
+      toast.error("Error al actualizar el estado logístico")
+      fetchCars() // Revert UI
+    }
+  }
+
+  const handleDragStart = (e: React.DragEvent, carId: string) => {
+    e.dataTransfer.setData("carId", carId)
+  }
+
+  const handleDrop = (e: React.DragEvent, status: LogisticStatus) => {
+    e.preventDefault()
+    const carId = e.dataTransfer.getData("carId")
+    if (carId) {
+      const car = boughtCars.find(c => c.id === carId)
+      if (car && car.logistic_status !== status) {
+        updateLogisticStatus(carId, status)
+      }
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
   }
 
   const filteredCars = boughtCars.filter((car) => {
@@ -294,15 +339,15 @@ export function CarsManagement() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold mb-2">Coches Comprados</h2>
-          <p className="text-muted-foreground">Gestiona tu inventario ({boughtCars.length})</p>
+          <h2 className="text-3xl font-bold mb-2">Coches en Patrulla</h2>
+          <p className="text-muted-foreground">Gestiona la logística y los gastos de tu inventario ({boughtCars.length})</p>
         </div>
         <button
           onClick={() => setMarkAsBoughtModalOpen(true)}
           className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
         >
           <Plus className="w-5 h-5" />
-          Marcar como Comprado
+          Añadir Coche Comprado
         </button>
       </div>
 
@@ -319,44 +364,140 @@ export function CarsManagement() {
         <StatCard label="En Inventario" value={stats.carsInInventory} icon={Calendar} />
       </div>
 
-      {/* Filtros */}
-      <div className="flex gap-2">
-        {(["all", "inventory", "sold"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === f ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground hover:bg-secondary/80"
-              }`}
-          >
-            {f === "all" ? "Todos" : f === "inventory" ? "En Inventario" : "Vendidos"}
-          </button>
-        ))}
-      </div>
-
-      {/* Lista de Coches */}
-      {filteredCars.length === 0 ? (
-        <div className="bg-card border border-border rounded-lg p-12 text-center">
-          <p className="text-muted-foreground mb-4">No hay coches registrados</p>
-          <button onClick={() => setMarkAsBoughtModalOpen(true)} className="text-primary hover:underline font-medium">
-            Marca tu primer coche como comprado
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filteredCars.map((car) => (
-            <BoughtCarCard
-              key={car.id}
-              car={car}
-              onAddExpense={(expense) => addExpense(car.id, expense)}
-              onRemoveExpense={(expenseId) => removeExpense(car.id, expenseId)}
-              onMarkAsSold={() => {
-                setSelectedCarId(car.id)
-                setSellCarModalOpen(true)
+      {/* Filtros & Vista Toggle */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex gap-2">
+          {(["all", "inventory", "sold"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => {
+                 setFilter(f)
+                 if (f === "sold") setViewMode("list") // Kanban doesn't make sense for sold cars
               }}
-              onDelete={() => deleteCar(car.id)}
-            />
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === f ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground hover:bg-secondary/80"
+                }`}
+            >
+              {f === "all" ? "Todos" : f === "inventory" ? "En Inventario" : "Vendidos"}
+            </button>
           ))}
         </div>
+
+        {filter !== 'sold' && (
+          <div className="flex bg-secondary p-1 rounded-lg">
+             <button
+                onClick={() => setViewMode("kanban")}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === "kanban" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
+             >
+                <LayoutDashboard className="w-4 h-4" /> Tablero Kanban
+             </button>
+             <button
+                onClick={() => setViewMode("list")}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === "list" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
+             >
+                <LayoutList className="w-4 h-4" /> Lista Clásica
+             </button>
+          </div>
+        )}
+      </div>
+
+      {/* VISTA KANBAN */}
+      {viewMode === "kanban" && filter !== "sold" && (
+         <div className="flex gap-4 overflow-x-auto pb-6 pt-2 snap-x">
+            {KANBAN_COLUMNS.map((column) => {
+               const columnCars = filteredCars.filter(car => (car.logistic_status || 'purchased') === column.id && car.status === 'inventory')
+               
+               return (
+                  <div 
+                     key={column.id}
+                     onDragOver={handleDragOver}
+                     onDrop={(e) => handleDrop(e, column.id)}
+                     className="flex-shrink-0 w-80 bg-secondary/30 rounded-xl border border-border p-3 flex flex-col snap-center"
+                     style={{ minHeight: '500px' }}
+                  >
+                     <div className="flex items-center gap-2 mb-4">
+                        <div className={`w-3 h-3 rounded-full ${column.color}`}></div>
+                        <h3 className="font-bold text-sm uppercase tracking-wider">{column.label}</h3>
+                        <span className="ml-auto bg-background px-2 py-0.5 rounded-full text-xs font-semibold">{columnCars.length}</span>
+                     </div>
+                     
+                     <div className="flex flex-col gap-3 flex-1">
+                        {columnCars.map(car => (
+                           <div 
+                              key={car.id} 
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, car.id)}
+                              className="bg-card cursor-grab active:cursor-grabbing border-l-4 border-y border-r border-border rounded-lg p-3 shadow-sm hover:shadow-md transition-all divide-y divide-border"
+                              style={{ borderLeftColor: `var(--tw-colors-${column.color.split('-')[1]}-500)` }}
+                           >
+                              <div className="pb-2">
+                                 <div className="font-bold text-base leading-tight flex items-center justify-between">
+                                    <span className="truncate">{car.brand} {car.model}</span>
+                                 </div>
+                                 <div className="flex items-center text-xs text-muted-foreground mt-1 gap-1">
+                                    <Calendar className="w-3 h-3" /> {new Date(car.datePurchased).toLocaleDateString()}
+                                 </div>
+                              </div>
+                              <div className="pt-2 flex justify-between items-center mt-2 gap-2">
+                                 <div className="text-sm font-semibold truncate flex-shrink min-w-0">
+                                    €{car.initialPrice.toLocaleString()}
+                                 </div>
+                                 <div className="flex-shrink-0 flex gap-1">
+                                   <button 
+                                      onClick={() => { setSelectedCarId(car.id); setSellCarModalOpen(true); }}
+                                      className="text-xs bg-primary/10 text-primary px-2 py-1 flex items-center justify-center rounded hover:bg-primary/20 transition-colors"
+                                      title="Vender Coche"
+                                   >
+                                     <ShoppingBag className="w-3.5 h-3.5" />
+                                   </button>
+                                   <button 
+                                      onClick={() => setViewMode("list")} // Volver a la lista para editar gastos
+                                      className="text-xs bg-secondary hover:bg-secondary/80 px-2 py-1 flex items-center justify-center rounded"
+                                      title="Ver Detalles y Gastos"
+                                   >
+                                     <LayoutList className="w-3.5 h-3.5" />
+                                   </button>
+                                 </div>
+                              </div>
+                           </div>
+                        ))}
+                        {columnCars.length === 0 && (
+                           <div className="flex-1 border-2 border-dashed border-border/50 rounded-lg flex flex-col items-center justify-center text-muted-foreground/50 italic text-sm">
+                              Arrastra un coche aquí
+                           </div>
+                        )}
+                     </div>
+                  </div>
+               )
+            })}
+         </div>
+      )}
+
+      {/* VISTA LISTA CLÁSICA */}
+      {(viewMode === "list" || filter === "sold") && (
+        filteredCars.length === 0 ? (
+          <div className="bg-card border border-border rounded-lg p-12 text-center">
+            <p className="text-muted-foreground mb-4">No hay coches registrados en este filtro.</p>
+            <button onClick={() => setMarkAsBoughtModalOpen(true)} className="text-primary hover:underline font-medium">
+              Marca tu primer coche como comprado
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredCars.map((car) => (
+              <BoughtCarCard
+                key={car.id}
+                car={{...car, logistic_status: car.logistic_status || 'purchased'}} // Propagación normal de props
+                onAddExpense={(expense) => addExpense(car.id, expense)}
+                onRemoveExpense={(expenseId) => removeExpense(car.id, expenseId)}
+                onMarkAsSold={() => {
+                  setSelectedCarId(car.id)
+                  setSellCarModalOpen(true)
+                }}
+                onDelete={() => deleteCar(car.id)}
+              />
+            ))}
+          </div>
+        )
       )}
 
       {/* Modales */}
