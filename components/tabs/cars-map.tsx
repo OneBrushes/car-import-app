@@ -67,6 +67,7 @@ export function CarsMap() {
           image_url: car.image_url,
           images: car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : []),
           origin: car.origin,
+          location: car.location,
           isBought: isBought
         }
       })

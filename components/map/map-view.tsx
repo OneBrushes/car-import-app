@@ -36,6 +36,7 @@ interface CarData {
   image_url?: string
   images?: string[]
   origin?: string
+  location?: string
   currency: string
   isBought?: boolean
 }
@@ -69,11 +70,23 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
       setLoading(true)
       const results: (CarData & { lat: number; lng: number })[] = []
 
-      // Solo coches con origen (excluyendo 'Importado', que tira a Colombia)
-      const carsWithOrigin = cars.filter(c => c.origin && c.origin.trim() !== '' && c.origin.trim().toLowerCase() !== 'importado')
+      // Combinar location y origin. Excluimos coches donde ambos están vacíos o dicen 'importado'.
+      const hasValidAddress = (car: CarData) => {
+        const l = car.location?.trim().toLowerCase() || '';
+        const o = car.origin?.trim().toLowerCase() || '';
+        return (l !== '' && l !== 'importado') || (o !== '' && o !== 'importado');
+      };
+      
+      const carsWithOrigin = cars.filter(hasValidAddress);
 
       for (const car of carsWithOrigin) {
-        const originalAddress = car.origin!
+        // Construir la dirección completa uniendo location (ej: calle) y origin (ej: Alemania)
+        const parts = [];
+        if (car.location && car.location.trim().toLowerCase() !== 'importado') parts.push(car.location.trim());
+        if (car.origin && car.origin.trim().toLowerCase() !== 'importado') parts.push(car.origin.trim());
+        const originalAddress = parts.join(", ");
+
+        if (!originalAddress) continue;
 
         if (globalCachedCoords[originalAddress]) {
           results.push({ ...car, ...globalCachedCoords[originalAddress] })
@@ -148,7 +161,12 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
     (filterMode === 'bought' ? c.isBought : !c.isBought)
   )
 
-  const carsWithoutValidOrigin = cars.filter(c => !c.origin || c.origin.trim() === '' || c.origin.trim().toLowerCase() === 'importado').length;
+  // Contar los coches que quedaron excluidos por no tener ninguna dirección válida
+  const carsWithoutValidOrigin = cars.filter(c => {
+     const l = c.location?.trim().toLowerCase() || '';
+     const o = c.origin?.trim().toLowerCase() || '';
+     return (l === '' || l === 'importado') && (o === '' || o === 'importado');
+  }).length;
 
   if (!loading && filteredCarsToShow.length === 0) {
     return (
@@ -240,8 +258,10 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
                       {car.isBought ? 'Adquirido / En Inventario' : 'De importación'}
                     </span>
                     <span className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                      <MapPin className="w-3 h-3" />
-                      {car.origin}
+                      <MapPin className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate" title={[car.location, car.origin].filter(Boolean).join(", ")}>
+                        {[car.location, car.origin].filter(Boolean).join(", ") || "Ubicación desconocida"}
+                      </span>
                     </span>
                   </div>
                   
