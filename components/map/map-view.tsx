@@ -73,6 +73,31 @@ function MapBounds({ markers }: { markers: { lat: number; lng: number }[] }) {
   return null
 }
 
+// FIX FOR TABS: Leaflet map glitches if rendered while hidden. Opening F12 resizes the window and fixes it.
+// This component forces Leaflet to recalculate its size after rendering and CSS animations finish.
+function MapResizer() {
+  const map = useMap()
+  
+  useEffect(() => {
+    // Trigger invalidation after standard render
+    const timeout1 = setTimeout(() => {
+      map.invalidateSize()
+    }, 100)
+    
+    // Trigger again after framer-motion animations (usually 300ms) would finish
+    const timeout2 = setTimeout(() => {
+      map.invalidateSize()
+    }, 450)
+    
+    return () => {
+      clearTimeout(timeout1)
+      clearTimeout(timeout2)
+    }
+  }, [map])
+
+  return null
+}
+
 const globalCachedCoords: Record<string, { lat: number; lng: number }> = {}
 const LOCAL_STORAGE_CACHE_KEY = 'car_map_geocode_arcgis_cache_v3'
 let isCacheLoaded = false;
@@ -261,6 +286,7 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
           url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
         />
 
+        <MapResizer />
         <MapBounds markers={scatteredCarsToShow.map(c => ({ lat: c.lat, lng: c.lng }))} />
 
         {scatteredCarsToShow.map((car) => {
