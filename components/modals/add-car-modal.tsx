@@ -8,7 +8,7 @@ import { ImageUpload } from "../image-upload"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
 import { Badge } from "@/components/ui/badge"
-import { Users, Eye, Sparkles, Loader2 } from "lucide-react"
+import { Users, Eye } from "lucide-react"
 import { convertCurrency, getCurrencySymbol } from "@/lib/currency"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { usePageVisibility } from "@/hooks/use-page-visibility"
@@ -109,54 +109,6 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [pendingDraft, setPendingDraft] = useState<any>(null)
   const [draftChecked, setDraftChecked] = useState(false)
-
-  // Magic Scraper States
-  const [showMagicScraper, setShowMagicScraper] = useState(false)
-  const [magicUrl, setMagicUrl] = useState("")
-  const [isScraping, setIsScraping] = useState(false)
-
-  const handleMagicScrape = async () => {
-    if (!magicUrl) {
-      toast.error("Por favor, introduce una URL válida.");
-      return;
-    }
-    setIsScraping(true);
-    try {
-      const response = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: magicUrl }),
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Error al analizar el anuncio. Módulo anti-bots detectado.');
-      }
-
-      toast.success("¡Datos mágicos importados correctamente!");
-      
-      setFormData(prev => ({
-        ...prev,
-        brand: data.brand || prev.brand,
-        model: data.model || prev.model,
-        price: data.price ? data.price.toString() : prev.price,
-        year: data.year || prev.year,
-        mileage: data.mileage ? data.mileage.toString() : prev.mileage,
-        url: magicUrl,
-        // Only add images if they don't already exist to prevent dupes
-        images: [...new Set([...prev.images, ...(data.images || [])])]
-      }));
-      
-      setShowMagicScraper(false);
-      setMagicUrl("");
-      
-    } catch(e: any) {
-      toast.error(e.message || "La página está bloqueando los bots. Tendrás que rellenarlo a mano.");
-    } finally {
-      setIsScraping(false);
-    }
-  }
 
 
   // Load initial data if provided
@@ -584,50 +536,11 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
       <div className="bg-background rounded-lg w-full max-w-6xl shadow-xl border border-border flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-background rounded-t-lg">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold">{initialData ? "Editar Coche" : "Añadir Coche"}</h2>
-            {!initialData && (
-              <button 
-                onClick={() => setShowMagicScraper(!showMagicScraper)}
-                className={`flex items-center gap-1.5 px-3 py-1 text-sm rounded-full font-medium transition-all ${showMagicScraper ? 'bg-indigo-500 text-white shadow-md' : 'bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/20'}`}
-              >
-                <Sparkles className="w-4 h-4" />
-                Auto-Relleno Mágico
-              </button>
-            )}
-          </div>
+          <h2 className="text-xl font-bold">{initialData ? "Editar Coche" : "Añadir Coche"}</h2>
           <button onClick={handleClose} className="p-1 hover:bg-secondary rounded-lg transition-colors">
             <X className="w-6 h-6" />
           </button>
         </div>
-
-        {/* Magic Scraper Panel */}
-        {showMagicScraper && !initialData && (
-          <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-b border-indigo-500/20 p-4 animate-in slide-in-from-top-2">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="url"
-                placeholder="Pega aquí el enlace de Mobile.de, AutoScout24, Coches.net..."
-                value={magicUrl}
-                onChange={(e) => setMagicUrl(e.target.value)}
-                className="flex-1 px-4 py-2 rounded-lg bg-background border border-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm placeholder:text-muted-foreground/50"
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleMagicScrape())}
-              />
-              <button
-                onClick={(e) => { e.preventDefault(); handleMagicScrape(); }}
-                disabled={isScraping || !magicUrl}
-                className="flex items-center justify-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 min-w-[140px]"
-              >
-                {isScraping ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Analizando...</>
-                ) : (
-                   <><Sparkles className="w-4 h-4" /> Extraer</>
-                )}
-              </button>
-            </div>
-            <p className="text-xs text-indigo-600/70 mt-2">Extraeremos automáticamente las fotos principales, la marca, el modelo, año y el precio para que no tengas que escribirlo.</p>
-          </div>
-        )}
 
         {/* Warning Banner for New Cars */}
         {!initialData && (
