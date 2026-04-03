@@ -124,9 +124,11 @@ export default function MapView({ cars, filterMode }: MapViewProps) {
         } catch (err) {
           console.error(`Error geocoding ${originalAddress}:`, err)
         }
+        
+        // Update incrementally!
+        setGeocodedCars([...results])
       }
 
-      setGeocodedCars(results)
       setLoading(false)
     }
 
@@ -137,19 +139,7 @@ export default function MapView({ cars, filterMode }: MapViewProps) {
     }
   }, [cars])
 
-  if (loading) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center p-12 bg-card border border-border rounded-lg min-h-[500px]">
-        <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground font-medium text-lg">Buscando las ubicaciones de los coches...</p>
-        <p className="text-sm text-muted-foreground mt-2 max-w-md text-center">
-          Estamos convirtiendo las direcciones en coordenadas para mostrarlas en el mapa. Esto puede tomar unos segundos.
-        </p>
-      </div>
-    )
-  }
-
-  if (geocodedCars.length === 0) {
+  if (!loading && geocodedCars.length === 0) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center p-12 bg-card border border-border rounded-lg min-h-[500px]">
         <MapIcon className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
@@ -162,7 +152,13 @@ export default function MapView({ cars, filterMode }: MapViewProps) {
   }
 
   return (
-    <div className="w-full h-[600px] rounded-lg overflow-hidden border border-border shadow-md relative z-0">
+    <div className="w-full h-[600px] rounded-lg overflow-hidden border border-border shadow-md relative z-0" style={{ isolation: 'isolate' }}>
+      {loading && (
+         <div className="absolute top-4 right-4 z-[1000] bg-background/90 backdrop-blur-sm border border-border px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+            <span className="text-sm font-medium">Cargando poco a poco...</span>
+         </div>
+      )}
       <MapContainer
         center={[40.4168, -3.7038]} // Madrid as default
         zoom={5}
