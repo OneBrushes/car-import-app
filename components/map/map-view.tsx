@@ -93,30 +93,34 @@ export default function MapView({ cars, filterMode }: MapViewProps) {
             countrySuffix = ", Italy";
           }
 
-          let response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress + countrySuffix)}&limit=1`)
+          let response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress + countrySuffix)}&limit=1&email=admin@carimportapp.com`)
           let data = await response.json()
 
           // Si falla, probar sin countrySuffix
-          if (!data.features || data.features.length === 0) {
-            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress)}&limit=1`)
+          if (!data || data.length === 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress)}&limit=1&email=admin@carimportapp.com`)
             data = await response.json()
           }
 
-          // Fallback: si no lo encuentra, intentamos buscar solo por Código Postal + Ciudad
-          if ((!data.features || data.features.length === 0) && cleanAddress.match(/\b\d{4,5}\b/)) {
+          // Fallback final: intentamos buscar solo por Código Postal + Ciudad
+          if ((!data || data.length === 0) && cleanAddress.match(/\b\d{4,5}\b/)) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
             const zipAndCity = cleanAddress.substring(cleanAddress.search(/\b\d{4,5}\b/));
-            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(zipAndCity + countrySuffix)}&limit=1`);
+            response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(zipAndCity + countrySuffix)}&limit=1&email=admin@carimportapp.com`);
             data = await response.json();
           }
 
-          if (data.features && data.features.length > 0) {
-            const [lng, lat] = data.features[0].geometry.coordinates;
-            const coords = { lat: parseFloat(lat), lng: parseFloat(lng) }
+          if (data && data.length > 0) {
+            const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
             cachedCoords[originalAddress] = coords
             results.push({ ...car, ...coords })
           } else {
             console.warn(`No se encontraron coordenadas para: ${originalAddress}`)
           }
+
+          // Always wait 1s after a successful geocoding iteration to avoid getting banned by Nominatim
+          await new Promise(resolve => setTimeout(resolve, 1200));
         } catch (err) {
           console.error(`Error geocoding ${originalAddress}:`, err)
         }
