@@ -122,89 +122,30 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     }
     setIsScraping(true);
     try {
-      // Puesto que tu app se exporta de forma estática (output: 'export'), no podemos usar Rutas API de Node.js.
-      // Usaremos un Proxy público (AllOrigins) para saltarnos el CORS y parsear todo en el propio navegador.
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(magicUrl)}`;
-      const response = await fetch(proxyUrl);
-      const json = await response.json();
-      
-      if (!response.ok || !json.contents) {
-        throw new Error('Error al descargar el anuncio. La web protegió el acceso.');
-      }
-
-      const html = json.contents;
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      
-      // -- Extracción de Metadatos Ocultos --
-      const title = doc.querySelector('meta[property="og:title"]')?.getAttribute('content') || doc.title || '';
-      const description = doc.querySelector('meta[property="og:description"]')?.getAttribute('content') || doc.querySelector('meta[name="description"]')?.getAttribute('content') || '';
-      const mainImage = doc.querySelector('meta[property="og:image"]')?.getAttribute('content') || '';
-      
-      // Imágenes secundarias
-      const images: string[] = [];
-      if (mainImage) images.push(mainImage);
-      
-      doc.querySelectorAll('img').forEach((img) => {
-        const src = img.getAttribute('src') || img.getAttribute('data-src');
-        if (src && (src.includes('img.classistatic.de') || src.includes('m-oe-img') || src.includes('pictures.autoscout24.net') || src.includes('autocasion'))) {
-            let hdUrl = src.replace(/_\d+\.jpg$/, '_27.jpg').replace(/resize=\d+x\d+/, 'resize=1000x800');
-            if (hdUrl.includes('pictures.autoscout24.net')) {
-                hdUrl = hdUrl.replace(/w=\d+/, 'w=1200').replace(/h=\d+/, 'h=900');
-            }
-            if (!images.includes(hdUrl) && hdUrl.startsWith('http')) {
-                images.push(hdUrl);
-            }
-        }
+      const response = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: magicUrl }),
       });
-
-      // JSON-LD estructurado
-      let price = 0;
-      let brand = '';
-      let model = '';
-      let mileage = 0;
-      let year = 0;
-
-      doc.querySelectorAll('script[type="application/ld+json"]').forEach((script) => {
-          try {
-              const rawData = JSON.parse(script.innerHTML || '{}');
-              const dataArr = Array.isArray(rawData) ? rawData : [rawData];
-              for (const data of dataArr) {
-                  if (data['@type'] === 'Vehicle' || data['@type'] === 'Car' || data['@type'] === 'Product') {
-                      if (data.brand && data.brand.name) brand = data.brand.name;
-                      if (data.model) model = data.model;
-                      if (data.mileageFromOdometer && data.mileageFromOdometer.value) mileage = parseInt(data.mileageFromOdometer.value);
-                      if (data.productionDate || data.vehicleModelDate) year = parseInt(data.productionDate || data.vehicleModelDate);
-
-                      const offer = data.offers || (Array.isArray(data.offers) ? data.offers[0] : null);
-                      if (offer && offer.price) price = parseFloat(offer.price);
-                  }
-              }
-          } catch(e){}
-      });
-
-      // Búsqueda de precio de respaldo
-      if (!price) {
-          const priceRegex = /€?\s*(\d{1,3}(?:\.\d{3})*)[,.](\d{2})?\s*€?/i;
-          const match = title.match(priceRegex) || description.match(priceRegex);
-          if (match) {
-             price = parseFloat(match[1].replace(/\./g, ''));
-          }
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Error al analizar el anuncio. Módulo anti-bots detectado.');
       }
 
       toast.success("¡Datos mágicos importados correctamente!");
       
-      const uniqueImages = [...new Set(images)].slice(0, 6);
-      
       setFormData(prev => ({
         ...prev,
-        brand: brand || prev.brand,
-        model: model || prev.model,
-        price: price ? price.toString() : prev.price,
-        year: year || prev.year,
-        mileage: mileage ? mileage.toString() : prev.mileage,
+        brand: data.brand || prev.brand,
+        model: data.model || prev.model,
+        price: data.price ? data.price.toString() : prev.price,
+        year: data.year || prev.year,
+        mileage: data.mileage ? data.mileage.toString() : prev.mileage,
         url: magicUrl,
-        images: [...new Set([...prev.images, ...uniqueImages])]
+        // Only add images if they don't already exist to prevent dupes
+        images: [...new Set([...prev.images, ...(data.images || [])])]
       }));
       
       setShowMagicScraper(false);
