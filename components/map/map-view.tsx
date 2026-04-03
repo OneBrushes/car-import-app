@@ -66,34 +66,47 @@ export default function MapView({ cars }: MapViewProps) {
       const cachedCoords: Record<string, { lat: number, lng: number }> = {}
       const results: (CarData & { lat: number; lng: number })[] = []
 
-      // Solo coches con origen
-      const carsWithOrigin = cars.filter(c => c.origin && c.origin.trim() !== '')
+      // Solo coches con origen (excluyendo 'Importado', que tira a Colombia)
+      const carsWithOrigin = cars.filter(c => c.origin && c.origin.trim() !== '' && c.origin.trim().toLowerCase() !== 'importado')
 
       for (const car of carsWithOrigin) {
-        const address = car.origin!
+        const originalAddress = car.origin!
 
-        if (cachedCoords[address]) {
-          results.push({ ...car, ...cachedCoords[address] })
+        if (cachedCoords[originalAddress]) {
+          results.push({ ...car, ...cachedCoords[originalAddress] })
           continue
         }
 
         try {
-          // Uso de Nominatim API (gratuito) con delay para no ser bloqueados
-          const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`)
-          const data = await response.json()
+          // Limpiar dirección (quitar prefijos como DE- que rompen Nominatim)
+          // "Langgewann 3 DE-55268 Nieder Olm" -> "Langgewann 3 55268 Nieder Olm"
+          const cleanAddress = originalAddress.replace(/\b[A-Z]{1,3}-/gi, "");
+          
+          let response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress)}`)
+          let data = await response.json()
+
+          // Fallback: si no lo encuentra, intentamos buscar solo por Código Postal + Ciudad
+          // Buscamos algo parecido a un código postal seguido de texto
+          if ((!data || data.length === 0) && cleanAddress.match(/\b\d{4,5}\b/)) {
+            // Un poco de delay extra para la API
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            const zipAndCity = cleanAddress.substring(cleanAddress.search(/\b\d{4,5}\b/));
+            response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(zipAndCity)}`);
+            data = await response.json();
+          }
 
           if (data && data.length > 0) {
             const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
-            cachedCoords[address] = coords
+            cachedCoords[originalAddress] = coords
             results.push({ ...car, ...coords })
           } else {
-            console.warn(`No se encontraron coordenadas para: ${address}`)
+            console.warn(`No se encontraron coordenadas para: ${originalAddress}`)
           }
 
           // Delay to respect Nominatim usage policy (1 request per second)
           await new Promise(resolve => setTimeout(resolve, 1000))
         } catch (err) {
-          console.error(`Error geocoding ${address}:`, err)
+          console.error(`Error geocoding ${originalAddress}:`, err)
         }
       }
 

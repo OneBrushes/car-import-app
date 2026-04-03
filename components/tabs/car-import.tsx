@@ -119,7 +119,7 @@ export function CarImport({ role }: CarImportProps) {
         // Priorizar el array de imágenes real, si no existe, usar image_url
         images: car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : []),
         tags: car.tags || [],
-        origin: car.origin || "Importado",
+        origin: car.origin || "",
         totalExpenses: Number(car.total_cost) - Number(car.price),
         url: car.url || "",
         itv_link: car.itv_link || "",

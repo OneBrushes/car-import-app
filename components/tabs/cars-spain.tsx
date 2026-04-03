@@ -27,6 +27,7 @@ interface SpainCar {
     equipmentLevel?: string
     images?: string[]
     imageUrl?: string
+    created_at?: string
 }
 
 interface CarsSpainProps {
@@ -41,7 +42,7 @@ export function CarsSpain({ role }: CarsSpainProps) {
     const [shareModalOpen, setShareModalOpen] = useState(false)
     const [sharingCar, setSharingCar] = useState<SpainCar | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
-    const [sortBy, setSortBy] = useState("price")
+    const [sortBy, setSortBy] = useState("date")
     const [editingCar, setEditingCar] = useState<SpainCar | null>(null)
 
     // Cargar datos desde Supabase
@@ -86,7 +87,8 @@ export function CarsSpain({ role }: CarsSpainProps) {
                 notes: car.notes,
                 equipmentLevel: car.equipment_level,
                 images: car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : []),
-                imageUrl: car.image_url
+                imageUrl: car.image_url,
+                created_at: car.created_at
             }))
 
             setCars(formattedCars)
@@ -199,6 +201,8 @@ export function CarsSpain({ role }: CarsSpainProps) {
 
     const sortedCars = [...filteredCars].sort((a, b) => {
         switch (sortBy) {
+            case "date":
+                return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
             case "price":
                 return a.price - b.price
             case "mileage":
@@ -249,9 +253,10 @@ export function CarsSpain({ role }: CarsSpainProps) {
                         onChange={(e) => setSortBy(e.target.value)}
                         className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                     >
+                        <option value="date">Últimos añadidos</option>
                         <option value="price">Precio menor</option>
                         <option value="mileage">Menor km</option>
-                        <option value="year">Más reciente</option>
+                        <option value="year">Año del coche</option>
                     </select>
                 </div>
             </div>
