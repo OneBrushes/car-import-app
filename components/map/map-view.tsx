@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet"
 import "leaflet/dist/leaflet.css"
 import L from "leaflet"
@@ -18,12 +18,18 @@ const defaultIcon = L.icon({
 })
 
 // Custom Icon matching brand colors
-const brandIcon = (isBought: boolean) => L.divIcon({
-  className: "custom-leaflet-icon",
-  html: `<div style="background-color: ${isBought ? '#16a34a' : '#3b82f6'}; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-1.2-1-2-2-2h-1l-3-4H8L5 11H4c-1.1 0-2 .8-2 2v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15]
-})
+const brandIcon = (status: 'bought' | 'imported' | 'approximate') => {
+  let bgColor = '#3b82f6'; // imported (blue)
+  if (status === 'bought') bgColor = '#16a34a'; // bought (green)
+  if (status === 'approximate') bgColor = '#eab308'; // approximate (yellow)
+
+  return L.divIcon({
+    className: "custom-leaflet-icon",
+    html: `<div style="background-color: ${bgColor}; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-1.2-1-2-2-2h-1l-3-4H8L5 11H4c-1.1 0-2 .8-2 2v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15]
+  })
+}
 
 L.Marker.prototype.options.icon = defaultIcon
 
@@ -39,6 +45,7 @@ interface CarData {
   location?: string
   currency: string
   isBought?: boolean
+  isApproximated?: boolean
 }
 
 interface MapViewProps {
@@ -60,12 +67,23 @@ function MapBounds({ markers }: { markers: { lat: number; lng: number }[] }) {
 }
 
 const globalCachedCoords: Record<string, { lat: number; lng: number }> = {}
+const LOCAL_STORAGE_CACHE_KEY = 'car_map_geocode_cache_v2'
+let isCacheLoaded = false;
 
 export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
   const [geocodedCars, setGeocodedCars] = useState<(CarData & { lat: number; lng: number })[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Cargar caché local para que sea instantáneo en recargas
+    if (!isCacheLoaded && typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(LOCAL_STORAGE_CACHE_KEY);
+        if (cached) Object.assign(globalCachedCoords, JSON.parse(cached));
+      } catch(e) {}
+      isCacheLoaded = true;
+    }
+
     const geocodeAddresses = async () => {
       setLoading(true)
       const results: (CarData & { lat: number; lng: number })[] = []
@@ -79,7 +97,13 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
       
       const carsWithOrigin = cars.filter(hasValidAddress);
 
-      for (const car of carsWithOrigin) {
+      for (const car of cars) {
+        if (!hasValidAddress(car)) {
+          // Fallback a Alemania Aproximada
+          results.push({ ...car, lat: 51.1657, lng: 10.4515, isApproximated: true })
+          continue;
+        }
+
         // Construir la dirección completa uniendo location (ej: calle) y origin (ej: Alemania)
         const parts = [];
         if (car.location && car.location.trim().toLowerCase() !== 'importado') parts.push(car.location.trim());
@@ -129,15 +153,18 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
           if (data && data.length > 0) {
             const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
             globalCachedCoords[originalAddress] = coords
-            results.push({ ...car, ...coords })
+            try { localStorage.setItem(LOCAL_STORAGE_CACHE_KEY, JSON.stringify(globalCachedCoords)); } catch(e) {}
+            results.push({ ...car, ...coords, isApproximated: false })
           } else {
             console.warn(`No se encontraron coordenadas para: ${originalAddress}`)
+            results.push({ ...car, lat: 51.1657, lng: 10.4515, isApproximated: true })
           }
 
           // Always wait 1s after a successful geocoding iteration to avoid getting banned by Nominatim
           await new Promise(resolve => setTimeout(resolve, 1200));
         } catch (err) {
           console.error(`Error geocoding ${originalAddress}:`, err)
+          results.push({ ...car, lat: 51.1657, lng: 10.4515, isApproximated: true })
         }
         
         // Update incrementally!
@@ -178,15 +205,15 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
         </p>
         {carsWithoutValidOrigin > 0 && (
           <p className="text-sm font-semibold text-amber-500 mt-4 border border-amber-200 bg-amber-500/10 px-4 py-2 rounded-md">
-            Tienes {carsWithoutValidOrigin} coches en tu lista que no aparecerán aquí porque tienen el Origen en blanco o puesto como "Importado".
+            Tienes {carsWithoutValidOrigin} coches sin dirección. Se muestran aproximados en el centro de Alemania (color amarillo).
           </p>
         )}
       </div>
     )
   }
 
-  // Pequeña función para evitar que los coches con exactamente la misma dirección se tapen unos a otros en el mapa
-  const disperseOverlappingMarkers = (carsArray: typeof filteredCarsToShow) => {
+  const scatteredCarsToShow = useMemo(() => {
+    const carsArray = filteredCarsToShow;
     const registry: Record<string, number> = {};
     return carsArray.map(car => {
       const coordKey = `${car.lat},${car.lng}`;
@@ -203,15 +230,13 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
       registry[coordKey] = 1;
       return car;
     });
-  }
-
-  const scatteredCarsToShow = disperseOverlappingMarkers(filteredCarsToShow);
+  }, [filteredCarsToShow]);
 
   return (
     <div className="w-full h-[600px] rounded-lg overflow-hidden border border-border shadow-md relative z-0" style={{ isolation: 'isolate' }}>
       {carsWithoutValidOrigin > 0 && !loading && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-amber-500/90 text-white backdrop-blur-sm px-4 py-2 rounded-full shadow-lg text-xs font-medium text-center">
-          Ocultamos {carsWithoutValidOrigin} coches del mapa por falta de dirección (vacío o "Importado").
+          {carsWithoutValidOrigin} coches sin dirección ubicados aproximadamente en Alemania (amarillo).
         </div>
       )}
       {loading && (
@@ -237,7 +262,7 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
           const mainImage = car.image_url || (car.images && car.images.length > 0 ? car.images[0] : null)
           
           return (
-            <Marker key={car.id} position={[car.lat, car.lng]} icon={brandIcon(!!car.isBought)}>
+            <Marker key={car.id} position={[car.lat, car.lng]} icon={brandIcon(car.isBought ? 'bought' : (car.isApproximated ? 'approximate' : 'imported'))}>
               <Popup className="car-popup">
                 <div className="flex flex-col gap-2 min-w-[200px]">
                   {mainImage ? (
@@ -254,8 +279,8 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
                     <span className="font-bold text-base text-foreground leading-tight">
                       {car.brand} {car.model}
                     </span>
-                    <span className="text-xs font-semibold mt-1" style={{color: car.isBought ? '#16a34a' : '#3b82f6'}}>
-                      {car.isBought ? 'Adquirido / En Inventario' : 'De importación'}
+                    <span className="text-xs font-semibold mt-1" style={{color: car.isBought ? '#16a34a' : (car.isApproximated ? '#eab308' : '#3b82f6')}}>
+                      {car.isBought ? 'Adquirido / En Inventario' : (car.isApproximated ? 'Falta dirección - Ubicación Aproximada País' : 'De importación')}
                     </span>
                     <span className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                       <MapPin className="w-3 h-3 flex-shrink-0" />
