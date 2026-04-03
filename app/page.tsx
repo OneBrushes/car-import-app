@@ -12,6 +12,7 @@ import { AdminPanel } from "@/components/tabs/admin-panel"
 import { ProfitableCars } from "@/components/tabs/profitable-cars"
 import { ChecklistTab } from "@/components/tabs/checklist-tab"
 import { Dashboard } from "@/components/dashboard"
+import { CarsMap } from "@/components/tabs/cars-map"
 import { Navigation } from "@/components/navigation"
 import { DonationsTab } from "@/components/tabs/donations-tab"
 import { OnlineUsers } from "@/components/online-users"
@@ -34,7 +35,7 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations"
+type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations" | "map"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
@@ -57,8 +58,20 @@ export default function Home() {
     })
     observer.observe(document.documentElement, { attributes: true })
 
+    // Auto-reconnect / wake up when returning to the browser tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // Al volver a la pestaña, forzamos que Supabase despierte y no se quede atontado
+        supabase.auth.getSession().then(() => {
+          console.log("App devuelta a primer plano. Sesión refrescada.")
+        }).catch(console.error)
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
     return () => {
       observer.disconnect()
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
   }, [])
 
@@ -243,27 +256,40 @@ export default function Home() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-[1920px] mx-auto w-full">
-          <div className="p-4 sm:p-6 lg:p-8">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                {activeTab === "dashboard" && <Dashboard />}
-                {activeTab === "import" && <CarImport role={role} />}
-                {activeTab === "spain" && <CarsSpain role={role} />}
-                {activeTab === "comparison" && <ComparativeAnalysis />}
-                {activeTab === "management" && (role === 'gestor' || role === 'importador' || role === 'admin') && <CarsManagement />}
-                {activeTab === "report" && (role === 'importador' || role === 'admin') && <ReportGenerator />}
-                {activeTab === "profitable" && <ProfitableCars role={role || 'usuario'} />}
-                {activeTab === "checklist" && (role === 'importador' || role === 'admin') && <ChecklistTab />}
-                {activeTab === "donations" && <DonationsTab />}
-                {activeTab === "admin" && role === 'admin' && <AdminPanel />}
-              </motion.div>
-            </AnimatePresence>
+          <div className="p-4 sm:p-6 lg:p-8 relative">
+            <div className={activeTab === "dashboard" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <Dashboard />
+            </div>
+            <div className={activeTab === "import" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <CarImport role={role} />
+            </div>
+            <div className={activeTab === "spain" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <CarsSpain role={role} />
+            </div>
+            <div className={activeTab === "map" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <CarsMap />
+            </div>
+            <div className={activeTab === "comparison" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <ComparativeAnalysis />
+            </div>
+            <div className={activeTab === "management" && (role === 'gestor' || role === 'importador' || role === 'admin') ? "block animate-in fade-in duration-300" : "hidden"}>
+              <CarsManagement />
+            </div>
+            <div className={activeTab === "report" && (role === 'importador' || role === 'admin') ? "block animate-in fade-in duration-300" : "hidden"}>
+              <ReportGenerator />
+            </div>
+            <div className={activeTab === "profitable" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <ProfitableCars role={role || 'usuario'} />
+            </div>
+            <div className={activeTab === "checklist" && (role === 'importador' || role === 'admin') ? "block animate-in fade-in duration-300" : "hidden"}>
+              <ChecklistTab />
+            </div>
+            <div className={activeTab === "donations" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <DonationsTab />
+            </div>
+            <div className={activeTab === "admin" && role === 'admin' ? "block animate-in fade-in duration-300" : "hidden"}>
+              <AdminPanel />
+            </div>
           </div>
         </div>
       </main>

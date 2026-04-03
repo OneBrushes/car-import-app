@@ -99,7 +99,10 @@ export function CarsSpain({ role }: CarsSpainProps) {
     }
 
     const addCar = async (newCar: any) => {
-        if (!user) return
+        if (!user) {
+            toast.error("Tu sesión ha caducado. Por favor, recarga la página e inténtalo de nuevo.");
+            return;
+        }
 
         try {
             const carData = {

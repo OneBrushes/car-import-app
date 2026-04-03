@@ -1,6 +1,6 @@
 "use client"
 
-import { Car, MapPin, Scale, Archive, Home, Menu, X, FileText, TrendingUp, CheckSquare, Heart } from "lucide-react"
+import { Car, MapPin, Scale, Archive, Home, Menu, X, FileText, TrendingUp, CheckSquare, Heart, Map as MapIcon } from "lucide-react"
 import { useState } from "react"
 
 interface NavigationProps {
@@ -17,6 +17,7 @@ export function Navigation({ activeTab, onTabChange, role, donationsVisible = fa
     { id: "dashboard", label: "Dashboard", icon: Home, roles: ['usuario', 'gestor', 'importador', 'admin'] },
     { id: "import", label: "Importación", icon: Car, roles: ['usuario', 'gestor', 'importador', 'admin'] },
     { id: "spain", label: "España", icon: MapPin, roles: ['usuario', 'gestor', 'importador', 'admin'] },
+    { id: "map", label: "Mapa", icon: MapIcon, roles: ['usuario', 'gestor', 'importador', 'admin'] },
     { id: "comparison", label: "Comparativa", icon: Scale, roles: ['usuario', 'gestor', 'importador', 'admin'] },
     { id: "management", label: "Comprados", icon: Archive, roles: ['gestor', 'importador', 'admin'] },
     { id: "profitable", label: "Rentables", icon: TrendingUp, roles: ['usuario', 'gestor', 'importador', 'admin'] },

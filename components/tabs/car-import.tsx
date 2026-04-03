@@ -138,7 +138,10 @@ export function CarImport({ role }: CarImportProps) {
   }
 
   const addCar = async (newCar: any) => {
-    if (!user) return
+    if (!user) {
+      toast.error("Tu sesión ha caducado. Por favor, recarga la página e inténtalo de nuevo.");
+      return;
+    }
 
     try {
       // Datos completos del coche
