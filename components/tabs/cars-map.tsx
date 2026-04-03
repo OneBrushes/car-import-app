@@ -22,34 +22,54 @@ export function CarsMap() {
   const [cars, setCars] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
+  const [filterMode, setFilterMode] = useState<"all" | "imported" | "bought">("all")
+
   const fetchCars = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      // 1. Fetch imported cars
+      const { data: importedData, error: copyError } = await supabase
         .from('imported_cars')
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (copyError) throw copyError
+
+      // 2. Fetch inventory cars to see which ones are 'bought'
+      const { data: inventoryData, error: invError } = await supabase
+        .from('inventory_cars')
+        .select('brand, model, year, status')
+        
+      if (invError) throw invError
 
       // Filter cars: show only user's cars OR cars shared with user
-      const filteredData = data.filter((car: any) =>
+      const filteredData = importedData.filter((car: any) =>
         car.user_id === user?.id ||
         (car.shared_with && car.shared_with.includes(user?.id))
       )
 
-      // Transform for the map view
-      const mapCars = filteredData.map((car: any) => ({
-        id: car.id,
-        brand: car.brand,
-        model: car.model,
-        year: car.year,
-        price: Number(car.price),
-        currency: "EUR",
-        image_url: car.image_url,
-        images: car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : []),
-        origin: car.origin
-      }))
+      // Transform for the map view, checking if it exists in inventory
+      const mapCars = filteredData.map((car: any) => {
+        // Simple heuristic to detect if this car was bought
+        const isBought = inventoryData.some((invCar: any) => 
+            invCar.brand?.toLowerCase() === car.brand?.toLowerCase() && 
+            invCar.model?.toLowerCase() === car.model?.toLowerCase() && 
+            invCar.year === car.year
+        );
+
+        return {
+          id: car.id,
+          brand: car.brand,
+          model: car.model,
+          year: car.year,
+          price: Number(car.price),
+          currency: "EUR",
+          image_url: car.image_url,
+          images: car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : []),
+          origin: car.origin,
+          isBought: isBought
+        }
+      })
 
       setCars(mapCars)
     } catch (error) {
@@ -78,14 +98,26 @@ export function CarsMap() {
           </p>
         </div>
         
-        <Button variant="outline" size="sm" onClick={fetchCars} disabled={loading} className="shrink-0 gap-2">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar mapa
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+          {(["all", "imported", "bought"] as const).map((mode) => (
+            <Button
+              key={mode}
+              variant={filterMode === mode ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilterMode(mode)}
+              className={filterMode === mode && mode === "bought" ? "bg-green-600 hover:bg-green-700 text-white border-green-600" : ""}
+            >
+              {mode === "all" ? "Todos" : mode === "imported" ? "Solo Importación" : "Comprados"}
+            </Button>
+          ))}
+          <Button variant="outline" size="sm" onClick={fetchCars} disabled={loading} className="shrink-0 gap-2 ml-auto sm:ml-2">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </div>
 
       <div className="bg-card w-full rounded-xl overflow-hidden shadow-sm">
-        <MapView cars={cars} />
+        <MapView cars={cars.filter(c => filterMode === 'all' || (filterMode === 'bought' ? c.isBought : !c.isBought))} filterMode={filterMode} />
       </div>
     </div>
   )

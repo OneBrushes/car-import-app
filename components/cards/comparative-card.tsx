@@ -32,70 +32,65 @@ export function ComparativeCard({ id, importedCar, spainCar, steringAdjustment, 
     text: "text-destructive",
   }
 
-  if (importedCar.price > 10000) {
-    if (profitPercentage > 50 || difference > 10000) {
-      status = {
-        label: "UNICORNIO",
-        color: "purple-500",
-        icon: "🦄",
-        bg: "bg-purple-500/10",
-        border: "border-purple-500",
-        text: "text-purple-500",
-      }
-    } else if (profitPercentage > 20 || difference > 5000) {
-      status = {
-        label: "OCASIÓN MUY BUENA",
-        color: "emerald-500",
-        icon: "✓✓",
-        bg: "bg-emerald-500/10",
-        border: "border-emerald-500",
-        text: "text-emerald-500",
-      }
-    } else if (profitPercentage > 10 || difference > 2000) {
-      status = {
-        label: "BUENA OPCIÓN",
-        color: "accent",
-        icon: "✓",
-        bg: "bg-accent/10",
-        border: "border-accent",
-        text: "text-accent",
-      }
-    } else if (
-      (profitPercentage >= 5 && profitPercentage <= 10) &&
-      (difference >= 1000 && difference <= 2000)
-    ) {
-      status = {
-        label: "OPCIÓN VÁLIDA PERO MEJORABLE",
-        color: "blue-500",
-        icon: "!",
-        bg: "bg-blue-500/10",
-        border: "border-blue-500",
-        text: "text-blue-500",
-      }
-    } else if (
-      (profitPercentage >= 0 && profitPercentage < 5) &&
-      (difference >= 0 && difference < 1000)
-    ) {
-      status = {
-        label: "MUY JUSTO",
-        color: "orange-500",
-        icon: "⚠",
-        bg: "bg-orange-500/10",
-        border: "border-orange-500",
-        text: "text-orange-500",
-      }
+  if (profitPercentage > 50 || difference > 10000) {
+    status = {
+      label: "UNICORNIO",
+      color: "purple-500",
+      icon: "🦄",
+      bg: "bg-purple-500/10",
+      border: "border-purple-500",
+      text: "text-purple-500",
     }
-  } else {
-    // Lógica simple para coches baratos
-    if (difference > 0) {
-      status = {
-        label: "BUENA OPCIÓN",
-        color: "accent",
-        icon: "✓",
-        bg: "bg-accent/10",
-        border: "border-accent",
-        text: "text-accent",
-      }
+  } else if (profitPercentage > 20 || difference > 5000) {
+    status = {
+      label: "OCASIÓN MUY BUENA",
+      color: "emerald-500",
+      icon: "✓✓",
+      bg: "bg-emerald-500/10",
+      border: "border-emerald-500",
+      text: "text-emerald-500",
+    }
+  } else if (profitPercentage > 10 || difference > 2000) {
+    status = {
+      label: "BUENA OPCIÓN",
+      color: "accent",
+      icon: "✓",
+      bg: "bg-accent/10",
+      border: "border-accent",
+      text: "text-accent",
+    }
+  } else if (
+    (profitPercentage >= 5 && profitPercentage <= 10) &&
+    (difference >= 1000 && difference <= 2000)
+  ) {
+    status = {
+      label: "OPCIÓN VÁLIDA PERO MEJORABLE",
+      color: "blue-500",
+      icon: "!",
+      bg: "bg-blue-500/10",
+      border: "border-blue-500",
+      text: "text-blue-500",
+    }
+  } else if (
+    (profitPercentage >= 0 && profitPercentage < 5) &&
+    (difference >= 0 && difference < 1000)
+  ) {
+    status = {
+      label: "MUY JUSTO",
+      color: "orange-500",
+      icon: "⚠",
+      bg: "bg-orange-500/10",
+      border: "border-orange-500",
+      text: "text-orange-500",
+    }
+  } else if (difference > 0) {
+    status = {
+      label: "BUENA OPCIÓN",
+      color: "accent",
+      icon: "✓",
+      bg: "bg-accent/10",
+      border: "border-accent",
+      text: "text-accent",
     }
   }
 

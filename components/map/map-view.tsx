@@ -18,9 +18,9 @@ const defaultIcon = L.icon({
 })
 
 // Custom Icon matching brand colors
-const brandIcon = L.divIcon({
+const brandIcon = (isBought: boolean) => L.divIcon({
   className: "custom-leaflet-icon",
-  html: `<div style="background-color: #3b82f6; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-1.2-1-2-2-2h-1l-3-4H8L5 11H4c-1.1 0-2 .8-2 2v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></div>`,
+  html: `<div style="background-color: ${isBought ? '#16a34a' : '#3b82f6'}; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-1.2-1-2-2-2h-1l-3-4H8L5 11H4c-1.1 0-2 .8-2 2v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></div>`,
   iconSize: [30, 30],
   iconAnchor: [15, 15]
 })
@@ -37,10 +37,12 @@ interface CarData {
   images?: string[]
   origin?: string
   currency: string
+  isBought?: boolean
 }
 
 interface MapViewProps {
   cars: CarData[]
+  filterMode?: "all" | "imported" | "bought"
 }
 
 // Component to handle bounds
@@ -56,7 +58,7 @@ function MapBounds({ markers }: { markers: { lat: number; lng: number }[] }) {
   return null
 }
 
-export default function MapView({ cars }: MapViewProps) {
+export default function MapView({ cars, filterMode }: MapViewProps) {
   const [geocodedCars, setGeocodedCars] = useState<(CarData & { lat: number; lng: number })[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -78,33 +80,25 @@ export default function MapView({ cars }: MapViewProps) {
         }
 
         try {
-          // Limpiar dirección (quitar prefijos como DE- que rompen Nominatim)
-          // "Langgewann 3 DE-55268 Nieder Olm" -> "Langgewann 3 55268 Nieder Olm"
           const cleanAddress = originalAddress.replace(/\b[A-Z]{1,3}-/gi, "");
-          
-          let response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress)}`)
+          let response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress)}&limit=1`)
           let data = await response.json()
 
           // Fallback: si no lo encuentra, intentamos buscar solo por Código Postal + Ciudad
-          // Buscamos algo parecido a un código postal seguido de texto
-          if ((!data || data.length === 0) && cleanAddress.match(/\b\d{4,5}\b/)) {
-            // Un poco de delay extra para la API
-            await new Promise(resolve => setTimeout(resolve, 1000))
+          if ((!data.features || data.features.length === 0) && cleanAddress.match(/\b\d{4,5}\b/)) {
             const zipAndCity = cleanAddress.substring(cleanAddress.search(/\b\d{4,5}\b/));
-            response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(zipAndCity)}`);
+            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(zipAndCity)}&limit=1`);
             data = await response.json();
           }
 
-          if (data && data.length > 0) {
-            const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+          if (data.features && data.features.length > 0) {
+            const [lng, lat] = data.features[0].geometry.coordinates;
+            const coords = { lat: parseFloat(lat), lng: parseFloat(lng) }
             cachedCoords[originalAddress] = coords
             results.push({ ...car, ...coords })
           } else {
             console.warn(`No se encontraron coordenadas para: ${originalAddress}`)
           }
-
-          // Delay to respect Nominatim usage policy (1 request per second)
-          await new Promise(resolve => setTimeout(resolve, 1000))
         } catch (err) {
           console.error(`Error geocoding ${originalAddress}:`, err)
         }
@@ -164,7 +158,7 @@ export default function MapView({ cars }: MapViewProps) {
           const mainImage = car.image_url || (car.images && car.images.length > 0 ? car.images[0] : null)
           
           return (
-            <Marker key={car.id} position={[car.lat, car.lng]} icon={brandIcon}>
+            <Marker key={car.id} position={[car.lat, car.lng]} icon={brandIcon(!!car.isBought)}>
               <Popup className="car-popup">
                 <div className="flex flex-col gap-2 min-w-[200px]">
                   {mainImage ? (
@@ -180,6 +174,9 @@ export default function MapView({ cars }: MapViewProps) {
                   <div className="flex flex-col">
                     <span className="font-bold text-base text-foreground leading-tight">
                       {car.brand} {car.model}
+                    </span>
+                    <span className="text-xs font-semibold mt-1" style={{color: car.isBought ? '#16a34a' : '#3b82f6'}}>
+                      {car.isBought ? 'Adquirido / En Inventario' : 'De importación'}
                     </span>
                     <span className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                       <MapPin className="w-3 h-3" />
