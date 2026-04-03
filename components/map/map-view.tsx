@@ -80,14 +80,32 @@ export default function MapView({ cars, filterMode }: MapViewProps) {
         }
 
         try {
-          const cleanAddress = originalAddress.replace(/\b[A-Z]{1,3}-/gi, "");
-          let response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress)}&limit=1`)
+          const cleanAddress = originalAddress.replace(/\b[A-Z]{1,3}-/gi, " ").trim();
+          
+          let countrySuffix = "";
+          if (originalAddress.toUpperCase().includes("DE-") || /\b(BERLIN|MUNICH|FRANKFURT|HAMBURG|STUTTGART|KOLN|COLOGNE|NUREMBERG|NIEDER OLM)\b/i.test(originalAddress)) {
+            countrySuffix = ", Germany";
+          } else if (originalAddress.toUpperCase().includes("ES-") || /\b(MADRID|BARCELONA|VALENCIA|SEVILLA|ALICANTE|MALAGA)\b/i.test(originalAddress)) {
+            countrySuffix = ", Spain";
+          } else if (originalAddress.toUpperCase().includes("FR-") || /\b(PARIS|LYON|MARSEILLE)\b/i.test(originalAddress)) {
+            countrySuffix = ", France";
+          } else if (/\b(ITALIA|ITALY|ROMA|MILAN|NAPOLI)\b/i.test(originalAddress)) {
+            countrySuffix = ", Italy";
+          }
+
+          let response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress + countrySuffix)}&limit=1`)
           let data = await response.json()
+
+          // Si falla, probar sin countrySuffix
+          if (!data.features || data.features.length === 0) {
+            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanAddress)}&limit=1`)
+            data = await response.json()
+          }
 
           // Fallback: si no lo encuentra, intentamos buscar solo por Código Postal + Ciudad
           if ((!data.features || data.features.length === 0) && cleanAddress.match(/\b\d{4,5}\b/)) {
             const zipAndCity = cleanAddress.substring(cleanAddress.search(/\b\d{4,5}\b/));
-            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(zipAndCity)}&limit=1`);
+            response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(zipAndCity + countrySuffix)}&limit=1`);
             data = await response.json();
           }
 
