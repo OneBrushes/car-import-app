@@ -195,23 +195,6 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
      return (l === '' || l === 'importado') && (o === '' || o === 'importado');
   }).length;
 
-  if (!loading && filteredCarsToShow.length === 0) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center p-12 bg-card border border-border rounded-lg min-h-[500px]">
-        <MapIcon className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
-        <p className="text-muted-foreground font-medium text-lg">No se encontraron coches con dirección de origen válida.</p>
-        <p className="text-sm text-muted-foreground mt-2 text-center max-w-sm">
-          Añade o edita tus coches e incluye una dirección real en el campo "Origen" para verlos en el mapa.
-        </p>
-        {carsWithoutValidOrigin > 0 && (
-          <p className="text-sm font-semibold text-amber-500 mt-4 border border-amber-200 bg-amber-500/10 px-4 py-2 rounded-md">
-            Tienes {carsWithoutValidOrigin} coches sin dirección. Se muestran aproximados en el centro de Alemania (color amarillo).
-          </p>
-        )}
-      </div>
-    )
-  }
-
   const scatteredCarsToShow = useMemo(() => {
     const carsArray = filteredCarsToShow;
     const registry: Record<string, number> = {};
@@ -231,6 +214,23 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
       return car;
     });
   }, [filteredCarsToShow]);
+
+  if (!loading && filteredCarsToShow.length === 0) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center p-12 bg-card border border-border rounded-lg min-h-[500px]">
+        <MapIcon className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+        <p className="text-muted-foreground font-medium text-lg">No se encontraron coches con dirección de origen válida.</p>
+        <p className="text-sm text-muted-foreground mt-2 text-center max-w-sm">
+          Añade o edita tus coches e incluye una dirección real en el campo "Origen" para verlos en el mapa.
+        </p>
+        {carsWithoutValidOrigin > 0 && (
+          <p className="text-sm font-semibold text-amber-500 mt-4 border border-amber-200 bg-amber-500/10 px-4 py-2 rounded-md">
+            Tienes {carsWithoutValidOrigin} coches sin dirección. Se muestran aproximados en el centro de Alemania (color amarillo).
+          </p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="w-full h-[600px] rounded-lg overflow-hidden border border-border shadow-md relative z-0" style={{ isolation: 'isolate' }}>
