@@ -74,24 +74,25 @@ function MapBounds({ markers }: { markers: { lat: number; lng: number }[] }) {
 }
 
 // FIX FOR TABS: Leaflet map glitches if rendered while hidden. Opening F12 resizes the window and fixes it.
-// This component forces Leaflet to recalculate its size after rendering and CSS animations finish.
+// This component forces Leaflet to recalculate its size using a ResizeObserver on the map's container.
 function MapResizer() {
   const map = useMap()
   
   useEffect(() => {
-    // Trigger invalidation after standard render
-    const timeout1 = setTimeout(() => {
-      map.invalidateSize()
-    }, 100)
+    const container = map.getContainer()
     
-    // Trigger again after framer-motion animations (usually 300ms) would finish
-    const timeout2 = setTimeout(() => {
+    // Si el ancho/alto cambia de 0 a un valor (al abrir la pestaña), forzamos invalidateSize
+    const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize()
-    }, 450)
+    })
+    
+    resizeObserver.observe(container)
+    
+    // Trigger initial just in case
+    setTimeout(() => map.invalidateSize(), 150)
     
     return () => {
-      clearTimeout(timeout1)
-      clearTimeout(timeout2)
+      resizeObserver.disconnect()
     }
   }, [map])
 
