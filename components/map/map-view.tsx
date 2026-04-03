@@ -77,6 +77,7 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
 
         if (globalCachedCoords[originalAddress]) {
           results.push({ ...car, ...globalCachedCoords[originalAddress] })
+          setGeocodedCars([...results])
           continue
         }
 
@@ -130,6 +131,7 @@ export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
         setGeocodedCars([...results])
       }
 
+      setGeocodedCars([...results])
       setLoading(false)
     }
 
