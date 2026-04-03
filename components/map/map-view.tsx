@@ -58,14 +58,15 @@ function MapBounds({ markers }: { markers: { lat: number; lng: number }[] }) {
   return null
 }
 
-export default function MapView({ cars, filterMode }: MapViewProps) {
+const globalCachedCoords: Record<string, { lat: number; lng: number }> = {}
+
+export default function MapView({ cars, filterMode = 'all' }: MapViewProps) {
   const [geocodedCars, setGeocodedCars] = useState<(CarData & { lat: number; lng: number })[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const geocodeAddresses = async () => {
       setLoading(true)
-      const cachedCoords: Record<string, { lat: number, lng: number }> = {}
       const results: (CarData & { lat: number; lng: number })[] = []
 
       // Solo coches con origen (excluyendo 'Importado', que tira a Colombia)
@@ -74,8 +75,8 @@ export default function MapView({ cars, filterMode }: MapViewProps) {
       for (const car of carsWithOrigin) {
         const originalAddress = car.origin!
 
-        if (cachedCoords[originalAddress]) {
-          results.push({ ...car, ...cachedCoords[originalAddress] })
+        if (globalCachedCoords[originalAddress]) {
+          results.push({ ...car, ...globalCachedCoords[originalAddress] })
           continue
         }
 
@@ -113,7 +114,7 @@ export default function MapView({ cars, filterMode }: MapViewProps) {
 
           if (data && data.length > 0) {
             const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
-            cachedCoords[originalAddress] = coords
+            globalCachedCoords[originalAddress] = coords
             results.push({ ...car, ...coords })
           } else {
             console.warn(`No se encontraron coordenadas para: ${originalAddress}`)
@@ -139,7 +140,13 @@ export default function MapView({ cars, filterMode }: MapViewProps) {
     }
   }, [cars])
 
-  if (!loading && geocodedCars.length === 0) {
+  // Aplicar el filtro visualmente SIN destruir la lista cacheada
+  const filteredCarsToShow = geocodedCars.filter(c => 
+    filterMode === 'all' || 
+    (filterMode === 'bought' ? c.isBought : !c.isBought)
+  )
+
+  if (!loading && filteredCarsToShow.length === 0) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center p-12 bg-card border border-border rounded-lg min-h-[500px]">
         <MapIcon className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
@@ -170,9 +177,9 @@ export default function MapView({ cars, filterMode }: MapViewProps) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <MapBounds markers={geocodedCars.map(c => ({ lat: c.lat, lng: c.lng }))} />
+        <MapBounds markers={filteredCarsToShow.map(c => ({ lat: c.lat, lng: c.lng }))} />
 
-        {geocodedCars.map((car) => {
+        {filteredCarsToShow.map((car) => {
           const mainImage = car.image_url || (car.images && car.images.length > 0 ? car.images[0] : null)
           
           return (

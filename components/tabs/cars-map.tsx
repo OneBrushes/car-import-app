@@ -117,7 +117,7 @@ export function CarsMap() {
       </div>
 
       <div className="bg-card w-full rounded-xl overflow-hidden shadow-sm">
-        <MapView cars={cars.filter(c => filterMode === 'all' || (filterMode === 'bought' ? c.isBought : !c.isBought))} filterMode={filterMode} />
+        <MapView cars={cars} filterMode={filterMode} />
       </div>
     </div>
   )
