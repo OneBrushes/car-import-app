@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/auth-provider'
 import { stringToColor } from '@/components/live-cursors'
-import { Users } from 'lucide-react'
+import { Users, MousePointerClick } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
     Popover,
@@ -30,8 +30,14 @@ interface OnlineUsersProps {
 export function OnlineUsers({ activeTab }: OnlineUsersProps) {
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([])
     const [role, setRole] = useState<string | null>(null)
+    const [cursorsVisible, setCursorsVisible] = useState(true)
     const { user } = useAuth()
     const [channel, setChannel] = useState<any>(null)
+
+    useEffect(() => {
+        const savedCursors = localStorage.getItem("showLiveCursors")
+        if (savedCursors !== null) setCursorsVisible(JSON.parse(savedCursors))
+    }, [])
 
     useEffect(() => {
         if (!user) return
@@ -139,8 +145,15 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
 
     if (!user || onlineUsers.length === 0) return null
 
-    // Only Super Admin can view the list/spy mode
-    const canViewList = role === 'super_admin'
+    // Admins and Super Admins can see the list. But only Super Admins will see the active tab
+    const canViewList = role === 'admin' || role === 'super_admin' || role === 'importador'
+
+    const toggleCursors = () => {
+        const newState = !cursorsVisible;
+        setCursorsVisible(newState);
+        localStorage.setItem("showLiveCursors", JSON.stringify(newState));
+        window.dispatchEvent(new Event("live-cursors-toggled"));
+    }
 
     const badgeContent = (
         <button className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors">
@@ -163,13 +176,24 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
             </PopoverTrigger>
             <PopoverContent className="w-72 p-3" align="end">
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <h4 className="font-semibold text-sm">Usuarios Online</h4>
-                        <Badge variant="outline" className="text-xs">
-                            {onlineUsers.length} {onlineUsers.length === 1 ? 'usuario' : 'usuarios'}
-                        </Badge>
+                    <div className="flex items-center justify-between border-b pb-2">
+                        <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-sm">Usuarios Online</h4>
+                            <Badge variant="outline" className="text-xs">
+                                {onlineUsers.length} {onlineUsers.length === 1 ? 'usuario' : 'usuarios'}
+                            </Badge>
+                        </div>
+                        {role === 'super_admin' && (
+                            <button
+                                onClick={toggleCursors}
+                                title={cursorsVisible ? "Ocultar radares" : "Mostrar radares"}
+                                className={`p-1.5 rounded-md transition-colors ${cursorsVisible ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"}`}
+                            >
+                                <MousePointerClick className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto pt-1">
                         {onlineUsers.map((onlineUser) => (
                             <div
                                 key={onlineUser.id}
@@ -193,7 +217,9 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
                                     {onlineUser.id === user.id ? (
                                         <p className="text-xs text-muted-foreground">Tú</p>
                                     ) : (
-                                        <p className="text-[10px] text-accent font-semibold">{onlineUser.active_tab ? `Pestaña: ${onlineUser.active_tab.toUpperCase()}` : "Navegando..."}</p>
+                                        role === 'super_admin' && (
+                                            <p className="text-[10px] text-accent font-semibold">{onlineUser.active_tab ? `Pestaña: ${onlineUser.active_tab.toUpperCase()}` : "Navegando..."}</p>
+                                        )
                                     )}
                                 </div>
                             </div>

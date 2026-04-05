@@ -157,13 +157,6 @@ export default function Home() {
     }
   }, [])
 
-  const toggleCursors = () => {
-    const newState = !cursorsVisible;
-    setCursorsVisible(newState);
-    localStorage.setItem("showLiveCursors", JSON.stringify(newState));
-    window.dispatchEvent(new Event("live-cursors-toggled"));
-  }
-
   if (!mounted || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -245,15 +238,6 @@ export default function Home() {
                     <Shield className="mr-2 h-4 w-4" />
                     <span>Panel Admin</span>
                   </DropdownMenuItem>
-                )}
-                {role === 'super_admin' && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={toggleCursors}>
-                      <MousePointerClick className="mr-2 h-4 w-4" />
-                      <span>{cursorsVisible ? "Ocultar Radares" : "Mostrar Radares"}</span>
-                    </DropdownMenuItem>
-                  </>
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => signOut()}>
