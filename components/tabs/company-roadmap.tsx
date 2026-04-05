@@ -12,7 +12,8 @@ import {
   Connection,
   Edge,
   Node,
-  Panel
+  Panel,
+  Position
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -21,8 +22,18 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Save, Plus, X } from 'lucide-react';
 
+const defaultNodeStyle = { backgroundColor: 'hsl(var(--card))', color: 'hsl(var(--foreground))', borderColor: 'hsl(var(--border))' };
+
 const initialNodes: Node[] = [
-  { id: '1', position: { x: 250, y: 50 }, data: { label: 'Inicio de Importación' }, type: 'input' }
+  { 
+    id: '1', 
+    position: { x: 250, y: 50 }, 
+    data: { label: 'Inicio de Importación' }, 
+    type: 'input',
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
+    style: defaultNodeStyle
+  }
 ];
 const initialEdges: Edge[] = [];
 
@@ -63,7 +74,13 @@ export function CompanyRoadmap({ role }: CompanyRoadmapProps) {
         }
 
         if (data && data.nodes && data.nodes.length > 0) {
-          setNodes(data.nodes);
+          const styledNodes = data.nodes.map((n: Node) => ({
+             ...n,
+             sourcePosition: Position.Right,
+             targetPosition: Position.Left,
+             style: defaultNodeStyle
+          }));
+          setNodes(styledNodes);
           setEdges(data.edges || []);
         }
       } catch (e) {
@@ -109,7 +126,10 @@ export function CompanyRoadmap({ role }: CompanyRoadmapProps) {
     const newNode: Node = {
       id: crypto.randomUUID(),
       position: { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 },
-      data: { label: 'Nuevo Nodo', description: '' }
+      data: { label: 'Nuevo Nodo', description: '' },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      style: defaultNodeStyle
     };
     setNodes((nds) => [...nds, newNode]);
   };
@@ -160,8 +180,9 @@ export function CompanyRoadmap({ role }: CompanyRoadmapProps) {
         nodesDraggable={isAdmin}
         nodesConnectable={isAdmin}
         elementsSelectable={isAdmin}
+        colorMode="system"
         fitView
-        className="bg-muted/10"
+        className="bg-muted/10 text-foreground"
       >
         <Controls />
         <MiniMap />
