@@ -246,11 +246,15 @@ export default function Home() {
                     <span>Panel Admin</span>
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={toggleCursors}>
-                  <MousePointerClick className="mr-2 h-4 w-4" />
-                  <span>{cursorsVisible ? "Ocultar Radares" : "Mostrar Radares"}</span>
-                </DropdownMenuItem>
+                {role === 'super_admin' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={toggleCursors}>
+                      <MousePointerClick className="mr-2 h-4 w-4" />
+                      <span>{cursorsVisible ? "Ocultar Radares" : "Mostrar Radares"}</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => signOut()}>
                   <LogOut className="mr-2 h-4 w-4" />

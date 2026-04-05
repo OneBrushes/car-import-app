@@ -54,7 +54,7 @@ export function LiveCursors() {
     }, []);
 
     useEffect(() => {
-        if (!user || !showLiveCursors) {
+        if (!user || (!showLiveCursors && profile?.role === 'super_admin')) {
             if (channelRef.current) {
                 channelRef.current.unsubscribe();
                 channelRef.current = null;
@@ -98,7 +98,7 @@ export function LiveCursors() {
     }, [user, showLiveCursors]);
 
     useEffect(() => {
-        if (!user || !showLiveCursors) return;
+        if (!user) return; // All users must broadcast, but we respect if they want to pause (if we add such feature). Currently we just let everyone broadcast quietly.
 
         let frame: number;
         let lastSend = 0;
@@ -136,7 +136,7 @@ export function LiveCursors() {
         return () => window.removeEventListener("mousemove", handleMouseMove);
     }, [user, profile, showLiveCursors]);
 
-    if (!showLiveCursors) return null;
+    if (!showLiveCursors || profile?.role !== 'super_admin') return null;
 
     return (
         <div className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden">

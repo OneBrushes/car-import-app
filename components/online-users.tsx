@@ -139,8 +139,8 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
 
     if (!user || onlineUsers.length === 0) return null
 
-    // For usuario and gestor roles, only show the badge without popover
-    const canViewList = role === 'admin' || role === 'super_admin' || role === 'importador'
+    // Only Super Admin can view the list/spy mode
+    const canViewList = role === 'super_admin'
 
     const badgeContent = (
         <button className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors">
