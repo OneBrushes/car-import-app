@@ -282,6 +282,7 @@ export function CarsSpain({ role }: CarsSpainProps) {
                             onShare={() => handleShare(car)}
                             isShared={car.shared_with && car.shared_with.length > 0}
                             isOwner={car.user_id === user?.id}
+                            isGodMode={isGodMode}
                         />
                     ))}
                 </div>

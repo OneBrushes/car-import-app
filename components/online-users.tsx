@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/auth-provider'
+import { stringToColor } from '@/components/live-cursors'
 import { Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -184,7 +185,7 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
                                     <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">
+                                    <p className="text-sm font-medium truncate" style={{ color: stringToColor(onlineUser.id) }}>
                                         {onlineUser.first_name && onlineUser.last_name
                                             ? `${onlineUser.first_name} ${onlineUser.last_name.charAt(0)}.`
                                             : onlineUser.email}

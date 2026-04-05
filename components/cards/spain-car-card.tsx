@@ -10,10 +10,12 @@ interface SpainCarCardProps {
     onShare?: () => void
     isShared?: boolean
     isOwner?: boolean
+    isGodMode?: boolean
 }
 
-export function SpainCarCard({ car, onDelete, onEdit, onShare, isShared = false, isOwner = true }: SpainCarCardProps) {
+export function SpainCarCard({ car, onDelete, onEdit, onShare, isShared = false, isOwner = true, isGodMode = false }: SpainCarCardProps) {
     const images = car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : [])
+    const _isOwner = isOwner || isGodMode;
 
     return (
         <div className={`bg-card border rounded-lg overflow-hidden hover:border-primary/30 transition-colors ${isShared ? 'border-blue-500/50 shadow-blue-500/10 shadow-lg' : 'border-border'
@@ -79,7 +81,7 @@ export function SpainCarCard({ car, onDelete, onEdit, onShare, isShared = false,
 
                 {/* Botones de acción */}
                 <div className="flex gap-2 pt-2">
-                    {isOwner && (
+                    {_isOwner && (
                         <>
                             <button
                                 onClick={onEdit}
@@ -110,10 +112,10 @@ export function SpainCarCard({ car, onDelete, onEdit, onShare, isShared = false,
                             href={car.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`${isOwner ? 'px-3' : 'flex-1'} py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors text-sm font-medium flex items-center justify-center gap-2`}
+                            className={`${_isOwner ? 'px-3' : 'flex-1'} py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors text-sm font-medium flex items-center justify-center gap-2`}
                         >
                             <ExternalLink className="w-4 h-4" />
-                            {!isOwner && 'Ver anuncio'}
+                            {!_isOwner && 'Ver anuncio'}
                         </a>
                     )}
                 </div>

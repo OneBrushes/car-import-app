@@ -13,16 +13,17 @@ interface CarCardProps {
   onEdit: (car: any) => void
   onShare?: (car: any) => void
   currentUserId?: string
+  isGodMode?: boolean
 }
 
-export function CarCard({ car, onDelete, onEdit, onShare, currentUserId }: CarCardProps) {
+export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMode = false }: CarCardProps) {
   const [ownerName, setOwnerName] = useState<string>("")
   const finalPrice = (car.price || 0) + (car.totalExpenses || 0)
   const images = car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : [])
 
-  const isOwner = currentUserId === car.user_id
+  const isOwner = currentUserId === car.user_id || isGodMode
   const isSharedWithMe = !isOwner && currentUserId && car.shared_with?.includes(currentUserId)
-  const isSharedByMe = isOwner && car.shared_with && car.shared_with.length > 0
+  const isSharedByMe = (currentUserId === car.user_id) && car.shared_with && car.shared_with.length > 0
 
   // Fetch owner name if car is shared with me
   useEffect(() => {

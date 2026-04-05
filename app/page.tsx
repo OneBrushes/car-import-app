@@ -21,8 +21,9 @@ import { CompanyRoadmap } from "@/components/tabs/company-roadmap"
 import { GlobalExpenses } from "@/components/tabs/global-expenses"
 import { EasterEggs } from "@/components/easter-eggs"
 import { ConnectionStatus } from "@/components/connection-status"
+import { LiveCursors } from "@/components/live-cursors"
 import { useAuth } from "@/components/auth-provider"
-import { Loader2, LogOut, User as UserIcon, Shield } from "lucide-react"
+import { Loader2, LogOut, User as UserIcon, Shield, MousePointerClick } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +46,7 @@ export default function Home() {
   const [role, setRole] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [donationsEnabled, setDonationsEnabled] = useState(false)
+  const [cursorsVisible, setCursorsVisible] = useState(true)
   const { user, loading, signOut } = useAuth()
   const router = useRouter()
 
@@ -58,6 +60,9 @@ export default function Home() {
       setIsDark(isDarkNow)
     })
     observer.observe(document.documentElement, { attributes: true })
+
+    const savedCursors = localStorage.getItem("showLiveCursors")
+    if (savedCursors !== null) setCursorsVisible(JSON.parse(savedCursors))
 
     // Auto-reconnect / wake up when returning to the browser tab
     const handleVisibilityChange = () => {
@@ -152,6 +157,13 @@ export default function Home() {
     }
   }, [])
 
+  const toggleCursors = () => {
+    const newState = !cursorsVisible;
+    setCursorsVisible(newState);
+    localStorage.setItem("showLiveCursors", JSON.stringify(newState));
+    window.dispatchEvent(new Event("live-cursors-toggled"));
+  }
+
   if (!mounted || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -167,7 +179,8 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col relative w-full overflow-x-hidden">
+      <LiveCursors />
       {/* Connection Status Indicator */}
       <ConnectionStatus />
 
@@ -233,6 +246,11 @@ export default function Home() {
                     <span>Panel Admin</span>
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={toggleCursors}>
+                  <MousePointerClick className="mr-2 h-4 w-4" />
+                  <span>{cursorsVisible ? "Ocultar Radares" : "Mostrar Radares"}</span>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => signOut()}>
                   <LogOut className="mr-2 h-4 w-4" />

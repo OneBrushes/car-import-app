@@ -445,6 +445,7 @@ export function CarImport({ role }: CarImportProps) {
                   onEdit={() => handleEdit(car)}
                   onShare={() => handleShareClick(car)}
                   currentUserId={user?.id}
+                  isGodMode={isGodMode}
                 />
               ))}
             </div>
