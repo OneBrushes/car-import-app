@@ -209,7 +209,7 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
                                     <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate" style={{ color: stringToColor(onlineUser.id) }}>
+                                    <p className="text-sm font-medium truncate" style={{ color: role === 'super_admin' ? stringToColor(onlineUser.id) : undefined }}>
                                         {onlineUser.first_name && onlineUser.last_name
                                             ? `${onlineUser.first_name} ${onlineUser.last_name.charAt(0)}.`
                                             : onlineUser.email}
