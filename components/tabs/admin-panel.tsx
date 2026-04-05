@@ -20,6 +20,7 @@ interface Profile {
     role: string
     created_at: string
     last_sign_in_at?: string
+    can_manage_expenses?: boolean
 }
 
 interface Log {
@@ -354,6 +355,28 @@ export function AdminPanel() {
         handleRoleChange(userId, newRole)
     }
 
+    const toggleManageExpenses = async (userId: string, currentValue: boolean | undefined) => {
+        try {
+            const newValue = !currentValue;
+            const { error } = await supabase
+                .from('profiles')
+                .update({ can_manage_expenses: newValue })
+                .eq('id', userId)
+
+            if (error) throw error
+
+            setUsers(users.map(u => u.id === userId ? { ...u, can_manage_expenses: newValue } : u))
+            toast.success(`Permisos de gastos ${newValue ? 'concedidos' : 'revocados'}`)
+            
+            await supabase.from('activity_logs').insert({
+                action: 'PERMISSION_CHANGE',
+                details: `Permisos de gastos ${newValue ? 'concedidos' : 'revocados'} al usuario ${userId}`
+            })
+        } catch (error) {
+            toast.error("Error al actualizar permisos")
+        }
+    }
+
     // --- Security Functions ---
 
     const toggleRegistrations = async () => {
@@ -571,6 +594,7 @@ export function AdminPanel() {
                                         <TableRow>
                                             <TableHead>Email</TableHead>
                                             <TableHead>Rol</TableHead>
+                                            <TableHead>Gastos Globales</TableHead>
                                             <TableHead>Registro</TableHead>
                                             <TableHead>Última Conexión</TableHead>
                                             <TableHead>Acciones</TableHead>
@@ -597,8 +621,17 @@ export function AdminPanel() {
                                                             <SelectItem value="gestor">Gestor</SelectItem>
                                                             <SelectItem value="importador">Importador</SelectItem>
                                                             <SelectItem value="admin">Admin</SelectItem>
+                                                            {user.role === 'super_admin' && <SelectItem value="super_admin">Super Admin (God Level)</SelectItem>}
                                                         </SelectContent>
                                                     </Select>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div
+                                                        onClick={() => toggleManageExpenses(user.id, user.can_manage_expenses)}
+                                                        className={`w-10 h-5 rounded-full p-0.5 cursor-pointer transition-colors flex-shrink-0 ${user.can_manage_expenses ? 'bg-primary' : 'bg-secondary'}`}
+                                                    >
+                                                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${user.can_manage_expenses ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell className="whitespace-nowrap">{new Date(user.created_at).toLocaleDateString()}</TableCell>
                                                 <TableCell className="whitespace-nowrap">

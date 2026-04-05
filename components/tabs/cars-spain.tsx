@@ -35,7 +35,7 @@ interface CarsSpainProps {
 }
 
 export function CarsSpain({ role }: CarsSpainProps) {
-    const { user } = useAuth()
+    const { user, isGodMode } = useAuth()
     const [cars, setCars] = useState<SpainCar[]>([])
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -62,8 +62,8 @@ export function CarsSpain({ role }: CarsSpainProps) {
 
             if (error) throw error
 
-            // Filtrar: coches propios O compartidos conmigo
-            const filteredData = (data || []).filter((car: any) =>
+            // Filtrar: coches propios O compartidos conmigo (bypass por God Mode)
+            const filteredData = isGodMode ? (data || []) : (data || []).filter((car: any) =>
                 car.user_id === user?.id ||
                 (car.shared_with && car.shared_with.includes(user?.id))
             )

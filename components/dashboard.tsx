@@ -35,7 +35,7 @@ interface ImportedCar {
 }
 
 export function Dashboard() {
-  const { user } = useAuth()
+  const { user, isGodMode } = useAuth()
   const [loading, setLoading] = useState(true)
   const [boughtCars, setBoughtCars] = useState<BoughtCar[]>([])
   const [importedCars, setImportedCars] = useState<ImportedCar[]>([])
@@ -79,8 +79,13 @@ export function Dashboard() {
         .from('global_expenses')
         .select('amount')
 
+      // Filtrado Local basado en God Mode
+      const myInventory = isGodMode ? inventoryData : (inventoryData || []).filter(item => item.user_id === user?.id)
+      const myImported = isGodMode ? importedData : (importedData || []).filter(item => item.user_id === user?.id || (item.shared_with && item.shared_with.includes(user?.id)))
+      const myComparisons = isGodMode ? comparisonsData : (comparisonsData || []).filter(item => item.user_id === user?.id)
+
       // Transformar datos para que coincidan con las interfaces
-      const formattedInventory: BoughtCar[] = (inventoryData || []).map((car: any) => ({
+      const formattedInventory: BoughtCar[] = (myInventory || []).map((car: any) => ({
         id: car.id,
         brand: car.brand,
         model: car.model,
@@ -97,7 +102,7 @@ export function Dashboard() {
         }))
       }))
 
-      const formattedImported: ImportedCar[] = (importedData || []).map((car: any) => ({
+      const formattedImported: ImportedCar[] = (myImported || []).map((car: any) => ({
         id: car.id,
         brand: car.brand,
         model: car.model,
@@ -166,7 +171,7 @@ export function Dashboard() {
         carsInInventory,
         avgDaysInInventory: avgDays,
         totalCostImports,
-        comparisons: comparisonsData || [],
+        comparisons: myComparisons || [],
         globalExpenses,
       })
 

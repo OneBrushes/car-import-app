@@ -39,7 +39,7 @@ interface CarImportProps {
 }
 
 export function CarImport({ role }: CarImportProps) {
-  const { user } = useAuth()
+  const { user, isGodMode } = useAuth()
   const [cars, setCars] = useState<Car[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'grid' | 'table' | 'gallery'>('grid')
@@ -96,8 +96,8 @@ export function CarImport({ role }: CarImportProps) {
 
       if (error) throw error
 
-      // Filter cars: show only user's cars OR cars shared with user
-      const filteredData = data.filter((car: any) =>
+      // Filter cars: show only user's cars OR cars shared with user (unless God Mode is active)
+      const filteredData = isGodMode ? data : data.filter((car: any) =>
         car.user_id === user?.id ||
         (car.shared_with && car.shared_with.includes(user?.id))
       )

@@ -44,7 +44,7 @@ interface Comparison {
 }
 
 export function ComparativeAnalysis() {
-  const { user } = useAuth()
+  const { user, isGodMode } = useAuth()
   const [comparisons, setComparisons] = useState<Comparison[]>([])
   const [importedCars, setImportedCars] = useState<ImportedCar[]>([])
   const [spainCars, setSpainCars] = useState<SpainCar[]>([])
@@ -86,8 +86,10 @@ export function ComparativeAnalysis() {
       setImportedCars(impData as any || [])
       setSpainCars(espData as any || [])
 
-      // Formatear comparativas
-      const formattedComps: Comparison[] = compsData.map((c: any) => ({
+      // Formatear comparativas y apalancar el Modo Dios
+      const myCompsData = isGodMode ? compsData : (compsData || []).filter((c: any) => c.user_id === user?.id)
+
+      const formattedComps: Comparison[] = myCompsData.map((c: any) => ({
         id: c.id,
         importedCarId: c.imported_car_id,
         spainCarId: c.spain_car_id,

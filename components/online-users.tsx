@@ -19,9 +19,14 @@ interface OnlineUser {
     last_name?: string
     avatar_url?: string
     presence_ref: string
+    active_tab?: string
 }
 
-export function OnlineUsers() {
+interface OnlineUsersProps {
+    activeTab?: string
+}
+
+export function OnlineUsers({ activeTab }: OnlineUsersProps) {
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([])
     const [role, setRole] = useState<string | null>(null)
     const { user } = useAuth()
@@ -68,6 +73,7 @@ export function OnlineUsers() {
                                     last_name: presence.last_name,
                                     avatar_url: presence.avatar_url,
                                     presence_ref: presence.presence_ref,
+                                    active_tab: presence.active_tab,
                                 })
                             }
                         }
@@ -78,10 +84,9 @@ export function OnlineUsers() {
             })
             .subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
-                    // Get user profile data
                     const { data: profile } = await supabase
                         .from('profiles')
-                        .select('email, avatar_url, first_name, last_name')
+                        .select('email, avatar_url, first_name, last_name, role')
                         .eq('id', user.id)
                         .single()
 
@@ -92,6 +97,7 @@ export function OnlineUsers() {
                         first_name: profile?.first_name || user.user_metadata?.first_name,
                         last_name: profile?.last_name || user.user_metadata?.last_name,
                         avatar_url: profile?.avatar_url,
+                        active_tab: activeTab || "dashboard",
                         online_at: new Date().toISOString(),
                     })
 
@@ -108,12 +114,32 @@ export function OnlineUsers() {
                 presenceChannel.unsubscribe()
             }
         }
-    }, [user])
+    }, [user]) // Eliminamos activeTab de dependencias para no resetear toda la conexión al cambiar de tab
+
+    // Actualizar el estado de la presencia al cambiar de pestaña
+    useEffect(() => {
+        if (channel && user) {
+            const updatePresence = async () => {
+                const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+                
+                channel.track({
+                    user_id: user.id,
+                    email: profile?.email || user.email,
+                    first_name: profile?.first_name,
+                    last_name: profile?.last_name,
+                    avatar_url: profile?.avatar_url,
+                    active_tab: activeTab || "dashboard",
+                    online_at: new Date().toISOString(),
+                })
+            }
+            updatePresence()
+        }
+    }, [activeTab, channel, user])
 
     if (!user || onlineUsers.length === 0) return null
 
     // For usuario and gestor roles, only show the badge without popover
-    const canViewList = role === 'admin' || role === 'importador'
+    const canViewList = role === 'admin' || role === 'super_admin' || role === 'importador'
 
     const badgeContent = (
         <button className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors">
@@ -163,8 +189,10 @@ export function OnlineUsers() {
                                             ? `${onlineUser.first_name} ${onlineUser.last_name.charAt(0)}.`
                                             : onlineUser.email}
                                     </p>
-                                    {onlineUser.id === user.id && (
+                                    {onlineUser.id === user.id ? (
                                         <p className="text-xs text-muted-foreground">Tú</p>
+                                    ) : (
+                                        <p className="text-[10px] text-accent font-semibold">{onlineUser.active_tab ? `Pestaña: ${onlineUser.active_tab.toUpperCase()}` : "Navegando..."}</p>
                                     )}
                                 </div>
                             </div>

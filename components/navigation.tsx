@@ -1,7 +1,8 @@
 "use client"
 
-import { Car, MapPin, Scale, Archive, Home, Menu, X, FileText, TrendingUp, CheckSquare, Heart, Map as MapIcon, Network, Wallet } from "lucide-react"
+import { Car, MapPin, Scale, Archive, Home, Menu, X, FileText, TrendingUp, CheckSquare, Heart, Map as MapIcon, Network, Wallet, EyeOff, Eye } from "lucide-react"
 import { useState } from "react"
+import { useAuth } from "./auth-provider"
 
 interface NavigationProps {
   activeTab: string
@@ -12,6 +13,8 @@ interface NavigationProps {
 
 export function Navigation({ activeTab, onTabChange, role, donationsVisible = false }: NavigationProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { isGodMode, toggleGodMode, profile } = useAuth()
+  const isSuperAdmin = profile?.role === 'super_admin'
 
   const allTabs = [
     { id: "dashboard", label: "Dashboard", icon: Home, roles: ['usuario', 'gestor', 'importador', 'admin'] },
@@ -51,6 +54,19 @@ export function Navigation({ activeTab, onTabChange, role, donationsVisible = fa
             </button>
           )
         })}
+
+        {isSuperAdmin && (
+          <div className="flex-1 flex justify-end">
+             <button
+                onClick={toggleGodMode}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors border ${isGodMode ? 'bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-secondary/50 text-muted-foreground border-transparent hover:text-foreground'}`}
+                title={isGodMode ? "Modo Dios Activado (Viendo toda la empresa)" : "Modo Aislado (Viendo solo tus datos)"}
+             >
+                {isGodMode ? <Eye className="w-4 h-4 animate-pulse" /> : <EyeOff className="w-4 h-4" />}
+                <span className="text-xs font-bold uppercase tracking-wider">{isGodMode ? 'Modo Dios' : 'Aislado'}</span>
+             </button>
+          </div>
+        )}
       </nav>
 
       {/* Mobile Menu Button */}

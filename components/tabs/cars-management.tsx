@@ -47,7 +47,7 @@ const KANBAN_COLUMNS: { id: LogisticStatus; label: string; color: string }[] = [
 ]
 
 export function CarsManagement() {
-  const { user } = useAuth()
+  const { user, isGodMode } = useAuth()
   const [boughtCars, setBoughtCars] = useState<BoughtCar[]>([])
   const [loading, setLoading] = useState(true)
   const [markAsBoughtModalOpen, setMarkAsBoughtModalOpen] = useState(false)
@@ -77,7 +77,10 @@ export function CarsManagement() {
 
       if (carsError) throw carsError
 
-      const formattedCars: BoughtCar[] = carsData.map((car: any) => ({
+      // Bypass for God Mode
+      const myData = isGodMode ? carsData : carsData.filter((car: any) => car.user_id === user?.id)
+
+      const formattedCars: BoughtCar[] = myData.map((car: any) => ({
         id: car.id,
         brand: car.brand,
         model: car.model,

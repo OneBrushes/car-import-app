@@ -18,7 +18,7 @@ const MapView = dynamic(() => import("@/components/map/map-view"), {
 })
 
 export function CarsMap() {
-  const { user } = useAuth()
+  const { user, isGodMode } = useAuth()
   const [cars, setCars] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -43,7 +43,7 @@ export function CarsMap() {
       if (invError) throw invError
 
       // Filter cars: show only user's cars OR cars shared with user
-      const filteredData = importedData.filter((car: any) =>
+      const filteredData = isGodMode ? importedData : importedData.filter((car: any) =>
         car.user_id === user?.id ||
         (car.shared_with && car.shared_with.includes(user?.id))
       )

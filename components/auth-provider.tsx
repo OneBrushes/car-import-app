@@ -9,6 +9,9 @@ interface AuthContextType {
     session: Session | null
     loading: boolean
     signOut: () => Promise<void>
+    isGodMode: boolean
+    toggleGodMode: () => void
+    profile: any | null
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -16,12 +19,19 @@ const AuthContext = createContext<AuthContextType>({
     session: null,
     loading: true,
     signOut: async () => { },
+    isGodMode: false,
+    toggleGodMode: () => {},
+    profile: null
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
     const [session, setSession] = useState<Session | null>(null)
     const [loading, setLoading] = useState(true)
+    const [isGodMode, setIsGodMode] = useState(false)
+    const [profile, setProfile] = useState<any | null>(null)
+
+    const toggleGodMode = () => setIsGodMode(prev => !prev)
 
     useEffect(() => {
         const initAuth = async () => {
@@ -31,6 +41,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 setSession(session)
                 setUser(session?.user ?? null)
+                
+                if (session?.user) {
+                    const { data: profileData } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
+                    setProfile(profileData)
+                }
             } catch (error) {
                 console.error("Error checking auth session:", error)
             } finally {
@@ -59,6 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     // alert("Tu cuenta ha sido suspendida.") // Opcional
                     return
                 }
+
+                setProfile(profile)
+            } else {
+                setProfile(null)
+                setIsGodMode(false)
             }
 
             setSession(session)
@@ -74,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return (
-        <AuthContext.Provider value={{ user, session, loading, signOut }}>
+        <AuthContext.Provider value={{ user, session, loading, signOut, isGodMode, toggleGodMode, profile }}>
             {children}
         </AuthContext.Provider>
     )

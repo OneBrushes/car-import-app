@@ -195,7 +195,7 @@ export default function Home() {
               </Button>
             )}
 
-            <OnlineUsers />
+            <OnlineUsers activeTab={activeTab} />
             <NotificationsCenter />
             <ThemeToggle isDark={isDark} onToggle={handleToggleTheme} />
 
