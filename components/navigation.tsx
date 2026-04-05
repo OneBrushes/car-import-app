@@ -17,18 +17,18 @@ export function Navigation({ activeTab, onTabChange, role, donationsVisible = fa
   const isSuperAdmin = profile?.role === 'super_admin'
 
   const allTabs = [
-    { id: "dashboard", label: "Dashboard", icon: Home, roles: ['usuario', 'gestor', 'importador', 'admin'] },
-    { id: "import", label: "Importación", icon: Car, roles: ['usuario', 'gestor', 'importador', 'admin'] },
-    { id: "spain", label: "España", icon: MapPin, roles: ['usuario', 'gestor', 'importador', 'admin'] },
-    { id: "map", label: "Mapa", icon: MapIcon, roles: ['usuario', 'gestor', 'importador', 'admin'] },
-    { id: "comparison", label: "Comparativa", icon: Scale, roles: ['usuario', 'gestor', 'importador', 'admin'] },
-    { id: "management", label: "Comprados", icon: Archive, roles: ['gestor', 'importador', 'admin'] },
-    { id: "profitable", label: "Rentables", icon: TrendingUp, roles: ['usuario', 'gestor', 'importador', 'admin'] },
-    { id: "report", label: "Informe", icon: FileText, roles: ['importador', 'admin'] },
-    { id: "checklist", label: "Checklist", icon: CheckSquare, roles: ['importador', 'admin'] },
-    { id: "roadmap", label: "Roadmap", icon: Network, roles: ['importador', 'admin'] },
-    { id: "expenses", label: "Gastos", icon: Wallet, roles: ['importador', 'admin'] },
-    ...(donationsVisible || role === 'admin' ? [{ id: "donations", label: "Donaciones", icon: Heart, roles: ['usuario', 'gestor', 'importador', 'admin'] }] : []),
+    { id: "dashboard", label: "Dashboard", icon: Home, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
+    { id: "import", label: "Importación", icon: Car, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
+    { id: "spain", label: "España", icon: MapPin, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
+    { id: "map", label: "Mapa", icon: MapIcon, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
+    { id: "comparison", label: "Comparativa", icon: Scale, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
+    { id: "management", label: "Comprados", icon: Archive, roles: ['gestor', 'importador', 'admin', 'super_admin'] },
+    { id: "profitable", label: "Rentables", icon: TrendingUp, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
+    { id: "report", label: "Informe", icon: FileText, roles: ['importador', 'admin', 'super_admin'] },
+    { id: "checklist", label: "Checklist", icon: CheckSquare, roles: ['importador', 'admin', 'super_admin'] },
+    { id: "roadmap", label: "Roadmap", icon: Network, roles: ['importador', 'admin', 'super_admin'] },
+    { id: "expenses", label: "Gastos", icon: Wallet, roles: ['importador', 'admin', 'super_admin'] },
+    ...(donationsVisible || role === 'admin' || role === 'super_admin' ? [{ id: "donations", label: "Donaciones", icon: Heart, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] }] : []),
   ]
 
   const tabs = allTabs.filter(tab => !role || tab.roles.includes(role))

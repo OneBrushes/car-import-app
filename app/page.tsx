@@ -183,7 +183,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2">
-            {role === 'admin' && (
+            {(role === 'admin' || role === 'super_admin') && (
               <Button
                 variant={activeTab === 'admin' ? 'default' : 'ghost'}
                 size="sm"
@@ -217,7 +217,7 @@ export default function Home() {
                     <p className="text-xs leading-none text-muted-foreground truncate">
                       {user.email}
                     </p>
-                    {role === 'admin' && (
+                    {(role === 'admin' || role === 'super_admin') && (
                       <Badge variant="outline" className="mt-1 w-fit text-[10px] px-1 py-0 h-4">Admin</Badge>
                     )}
                   </div>
@@ -227,7 +227,7 @@ export default function Home() {
                   <UserIcon className="mr-2 h-4 w-4" />
                   <span>Perfil</span>
                 </DropdownMenuItem>
-                {role === 'admin' && (
+                {(role === 'admin' || role === 'super_admin') && (
                   <DropdownMenuItem onClick={() => setActiveTab('admin')}>
                     <Shield className="mr-2 h-4 w-4" />
                     <span>Panel Admin</span>
@@ -273,16 +273,16 @@ export default function Home() {
             <div className={activeTab === "comparison" ? "block animate-in fade-in duration-300" : "hidden"}>
               <ComparativeAnalysis />
             </div>
-            <div className={activeTab === "management" && (role === 'gestor' || role === 'importador' || role === 'admin') ? "block animate-in fade-in duration-300" : "hidden"}>
+            <div className={activeTab === "management" && (role === 'gestor' || role === 'importador' || role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
               <CarsManagement />
             </div>
-            <div className={activeTab === "report" && (role === 'importador' || role === 'admin') ? "block animate-in fade-in duration-300" : "hidden"}>
+            <div className={activeTab === "report" && (role === 'importador' || role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
               <ReportGenerator />
             </div>
             <div className={activeTab === "profitable" ? "block animate-in fade-in duration-300" : "hidden"}>
               <ProfitableCars role={role || 'usuario'} />
             </div>
-            <div className={activeTab === "checklist" && (role === 'importador' || role === 'admin') ? "block animate-in fade-in duration-300" : "hidden"}>
+            <div className={activeTab === "checklist" && (role === 'importador' || role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
               <ChecklistTab />
             </div>
             <div className={activeTab === "donations" ? "block animate-in fade-in duration-300" : "hidden"}>
@@ -294,7 +294,7 @@ export default function Home() {
             <div className={activeTab === "expenses" ? "block animate-in fade-in duration-300" : "hidden"}>
               <GlobalExpenses role={role} />
             </div>
-            <div className={activeTab === "admin" && role === 'admin' ? "block animate-in fade-in duration-300" : "hidden"}>
+            <div className={activeTab === "admin" && (role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
               <AdminPanel />
             </div>
           </div>

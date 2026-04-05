@@ -328,7 +328,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             <CardTitle>Coches Rentables</CardTitle>
                             <CardDescription>Base de datos de rentabilidad por modelo</CardDescription>
                         </div>
-                        {(role === 'admin' || role === 'moderador') && (
+                        {(role === 'super_admin' || role === 'admin' || role === 'moderador') && (
                             <Button onClick={() => { resetForm(); setEditingCar(null); setIsModalOpen(true) }}>
                                 <Plus className="w-4 h-4 mr-2" /> Añadir Coche
                             </Button>
@@ -388,7 +388,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                                     <TableHead className="text-right">Precio Final</TableHead>
                                     <TableHead className="text-right">Precio España</TableHead>
                                     <TableHead>Rentabilidad</TableHead>
-                                    {(role === 'admin' || role === 'moderador') && <TableHead>Acciones</TableHead>}
+                                    {(role === 'super_admin' || role === 'admin' || role === 'moderador') && <TableHead>Acciones</TableHead>}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -407,7 +407,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                                         <TableCell className="text-right">{car.avg_import_cost.toLocaleString()}€</TableCell>
                                         <TableCell className="text-right">{car.avg_spain_price.toLocaleString()}€</TableCell>
                                         <TableCell>{getProfitBadge(car.profit_margin)}</TableCell>
-                                        {(role === 'admin' || role === 'moderador') && (
+                                        {(role === 'super_admin' || role === 'admin' || role === 'moderador') && (
                                             <TableCell>
                                                 <div className="flex gap-2">
                                                     <Button variant="ghost" size="icon" onClick={() => handleEdit(car)}>
