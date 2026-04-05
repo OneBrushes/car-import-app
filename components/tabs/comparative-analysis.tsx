@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, X, Loader2 } from "lucide-react"
+import { Plus, X, Loader2, LayoutList, LayoutGrid, AlignJustify } from "lucide-react"
 import { ComparativeCard } from "@/components/cards/comparative-card"
+import { ComparativeCardGrid } from "@/components/cards/comparative-card-grid"
+import { ComparativeCardMinimal } from "@/components/cards/comparative-card-minimal"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
@@ -48,6 +50,7 @@ export function ComparativeAnalysis() {
   const [spainCars, setSpainCars] = useState<SpainCar[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [viewMode, setViewMode] = useState<"detailed" | "grid" | "minimal">("detailed")
   const [newComparison, setNewComparison] = useState({
     importedCarId: "",
     spainCarId: "",
@@ -174,13 +177,39 @@ export function ComparativeAnalysis() {
           <h2 className="text-3xl font-bold mb-2">Análisis Comparativo</h2>
           <p className="text-muted-foreground">Compara coches importados vs coches de España ({comparisons.length})</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
-        >
-          <Plus className="w-5 h-5" />
-          Nueva Comparación
-        </button>
+        <div className="flex items-center justify-between mt-4">
+           {/* View Switcher */}
+           <div className="flex bg-secondary/50 rounded-lg p-1 border border-border">
+              <button
+                onClick={() => setViewMode("detailed")}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === "detailed" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                title="Vista Detallada"
+              >
+                <LayoutList className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("grid")}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                title="Vista Compacta"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("minimal")}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === "minimal" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                title="Vista Minimalista"
+              >
+                <AlignJustify className="w-4 h-4" />
+              </button>
+           </div>
+           <button
+             onClick={() => setShowForm(!showForm)}
+             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium text-sm sm:text-base"
+           >
+             <Plus className="w-5 h-5" />
+             <span className="hidden sm:inline">Nueva Comparación</span>
+           </button>
+        </div>
       </div>
 
       {/* Formulario de nueva comparación */}
@@ -253,9 +282,39 @@ export function ComparativeAnalysis() {
           </button>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className={
+           viewMode === "grid" 
+             ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" 
+             : "space-y-4"
+        }>
           {comparisons.map((comp) => {
             if (!comp.importedCar || !comp.spainCar) return null
+
+            if (viewMode === "minimal") {
+              return (
+                <ComparativeCardMinimal
+                  key={comp.id}
+                  id={comp.id}
+                  importedCar={comp.importedCar}
+                  spainCar={comp.spainCar}
+                  steringAdjustment={comp.steringAdjustment}
+                  onDelete={() => removeComparison(comp.id)}
+                />
+              )
+            }
+
+            if (viewMode === "grid") {
+              return (
+                <ComparativeCardGrid
+                  key={comp.id}
+                  id={comp.id}
+                  importedCar={comp.importedCar}
+                  spainCar={comp.spainCar}
+                  steringAdjustment={comp.steringAdjustment}
+                  onDelete={() => removeComparison(comp.id)}
+                />
+              )
+            }
 
             return (
               <ComparativeCard
