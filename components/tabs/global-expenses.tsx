@@ -22,9 +22,11 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
 
   // Form states
   const [showAddForm, setShowAddForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [newTitle, setNewTitle] = useState("")
   const [newAmount, setNewAmount] = useState("")
   const [newCategory, setNewCategory] = useState("Equipamiento")
+  const [newDate, setNewDate] = useState(new Date().toISOString().split('T')[0])
 
   const categories = [
     'Software/Suscripciones',
@@ -70,31 +72,58 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
         return
       }
 
-      const { data, error } = await supabase
-        .from('global_expenses')
-        .insert([{
-          user_id: userData.user.id,
-          title: newTitle,
-          amount: amount,
-          category: newCategory,
-          date: new Date().toISOString().split('T')[0]
-        }])
-        .select()
+      const payload = {
+        title: newTitle,
+        amount: amount,
+        category: newCategory,
+        date: newDate
+      };
 
-      if (error) throw error
+      if (editingId) {
+        // Update existing
+        const { error } = await supabase
+          .from('global_expenses')
+          .update(payload)
+          .eq('id', editingId);
 
-      toast.success("Gasto registrado")
-      if (data) {
-        setExpenses([data[0], ...expenses])
+        if (error) throw error;
+        toast.success("Gasto actualizado");
+        setExpenses(expenses.map(e => e.id === editingId ? { ...e, ...payload } : e));
+      } else {
+        // Insert new
+        const { data, error } = await supabase
+          .from('global_expenses')
+          .insert([{ user_id: userData.user.id, ...payload }])
+          .select();
+
+        if (error) throw error;
+        toast.success("Gasto registrado");
+        if (data) setExpenses([data[0], ...expenses]);
       }
       
-      setNewTitle("")
-      setNewAmount("")
-      setShowAddForm(false)
+      resetForm()
     } catch (e) {
       console.error(e)
       toast.error("Error al guardar el gasto")
     }
+  }
+
+  const resetForm = () => {
+    setNewTitle("")
+    setNewAmount("")
+    setNewDate(new Date().toISOString().split('T')[0])
+    setEditingId(null)
+    setShowAddForm(false)
+  }
+
+  const handleEdit = (exp: GlobalExpense) => {
+    if (!isAdmin) return;
+    setEditingId(exp.id)
+    setNewTitle(exp.title)
+    setNewAmount(exp.amount.toString())
+    setNewCategory(exp.category)
+    setNewDate(exp.date)
+    setShowAddForm(true)
   }
 
   const handleDelete = async (id: string) => {
@@ -137,8 +166,8 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
 
       {showAddForm && isAdmin && (
         <form onSubmit={handleAddExpense} className="bg-muted/30 border border-border rounded-xl p-4 sm:p-6 space-y-4 animate-in slide-in-from-top-4">
-          <h3 className="font-semibold border-b border-border pb-2">Registrar Nuevo Gasto</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <h3 className="font-semibold border-b border-border pb-2">{editingId ? 'Editar Gasto' : 'Registrar Nuevo Gasto'}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-xs text-muted-foreground font-medium mb-1 block">Motivo / Concepto</label>
               <input 
@@ -172,10 +201,22 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium mb-1 block">Fecha</label>
+              <input
+                required
+                type="date"
+                value={newDate}
+                onChange={e => setNewDate(e.target.value)}
+                className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setShowAddForm(false)}>Cancelar</Button>
-            <Button type="submit" className="bg-rose-600 hover:bg-rose-700 text-white">Guardar Gasto</Button>
+            <Button type="button" variant="ghost" onClick={resetForm}>Cancelar</Button>
+            <Button type="submit" className="bg-rose-600 hover:bg-rose-700 text-white">
+               {editingId ? 'Actualizar' : 'Guardar Gasto'}
+            </Button>
           </div>
         </form>
       )}
@@ -216,9 +257,14 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
                   <div className="flex items-center gap-4">
                      <span className="font-bold text-rose-600 dark:text-rose-400">-{Number(exp.amount).toLocaleString('es-ES')} €</span>
                      {isAdmin && (
-                        <button onClick={() => handleDelete(exp.id)} className="p-2 hover:bg-rose-500/10 hover:text-rose-500 rounded-md transition-colors text-muted-foreground">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleEdit(exp)} className="text-xs px-3 py-1.5 hover:bg-muted rounded-md transition-colors text-muted-foreground">
+                            Editar
+                          </button>
+                          <button onClick={() => handleDelete(exp.id)} className="p-2 hover:bg-rose-500/10 hover:text-rose-500 rounded-md transition-colors text-muted-foreground">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                      )}
                   </div>
                 </li>
