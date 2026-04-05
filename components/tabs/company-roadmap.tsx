@@ -91,7 +91,7 @@ export function CompanyRoadmap({ role }: CompanyRoadmapProps) {
     };
     
     fetchRoadmap();
-  }, [setNodes, setEdges]);
+  }, []);
 
   // Save to DB
   const handleSave = async () => {
