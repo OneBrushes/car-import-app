@@ -81,12 +81,17 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
 
       if (editingId) {
         // Update existing
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('global_expenses')
           .update(payload)
-          .eq('id', editingId);
+          .eq('id', editingId)
+          .select();
 
         if (error) throw error;
+        if (!data || data.length === 0) {
+           throw new Error("No tienes permisos para modificar este gasto, o RLS lo bloqueó silenciosamente.");
+        }
+        
         toast.success("Gasto actualizado");
         setExpenses(expenses.map(e => e.id === editingId ? { ...e, ...payload } : e));
       } else {
