@@ -1,6 +1,6 @@
 "use client"
 
-import { Car, MapPin, Scale, Archive, Home, Menu, X, FileText, TrendingUp, CheckSquare, Heart, Map as MapIcon } from "lucide-react"
+import { Car, MapPin, Scale, Archive, Home, Menu, X, FileText, TrendingUp, CheckSquare, Heart, Map as MapIcon, Network, Wallet } from "lucide-react"
 import { useState } from "react"
 
 interface NavigationProps {
@@ -23,6 +23,8 @@ export function Navigation({ activeTab, onTabChange, role, donationsVisible = fa
     { id: "profitable", label: "Rentables", icon: TrendingUp, roles: ['usuario', 'gestor', 'importador', 'admin'] },
     { id: "report", label: "Informe", icon: FileText, roles: ['importador', 'admin'] },
     { id: "checklist", label: "Checklist", icon: CheckSquare, roles: ['importador', 'admin'] },
+    { id: "roadmap", label: "Roadmap", icon: Network, roles: ['importador', 'admin'] },
+    { id: "expenses", label: "Gastos", icon: Wallet, roles: ['importador', 'admin'] },
     ...(donationsVisible || role === 'admin' ? [{ id: "donations", label: "Donaciones", icon: Heart, roles: ['usuario', 'gestor', 'importador', 'admin'] }] : []),
   ]
 

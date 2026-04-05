@@ -14,10 +14,11 @@ import { ChecklistTab } from "@/components/tabs/checklist-tab"
 import { Dashboard } from "@/components/dashboard"
 import { CarsMap } from "@/components/tabs/cars-map"
 import { Navigation } from "@/components/navigation"
-import { DonationsTab } from "@/components/tabs/donations-tab"
 import { OnlineUsers } from "@/components/online-users"
 import { NotificationsCenter } from "@/components/notifications-center"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { CompanyRoadmap } from "@/components/tabs/company-roadmap"
+import { GlobalExpenses } from "@/components/tabs/global-expenses"
 import { EasterEggs } from "@/components/easter-eggs"
 import { ConnectionStatus } from "@/components/connection-status"
 import { useAuth } from "@/components/auth-provider"
@@ -35,7 +36,7 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations" | "map"
+type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations" | "map" | "roadmap" | "expenses"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
@@ -285,7 +286,13 @@ export default function Home() {
               <ChecklistTab />
             </div>
             <div className={activeTab === "donations" ? "block animate-in fade-in duration-300" : "hidden"}>
-              <DonationsTab />
+              {/* <DonationsTab /> */}
+            </div>
+            <div className={activeTab === "roadmap" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <CompanyRoadmap role={role} />
+            </div>
+            <div className={activeTab === "expenses" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <GlobalExpenses role={role} />
             </div>
             <div className={activeTab === "admin" && role === 'admin' ? "block animate-in fade-in duration-300" : "hidden"}>
               <AdminPanel />

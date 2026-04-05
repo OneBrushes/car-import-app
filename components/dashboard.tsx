@@ -48,6 +48,7 @@ export function Dashboard() {
     avgDaysInInventory: 0,
     totalCostImports: 0,
     comparisons: [] as any[],
+    globalExpenses: 0
   })
 
   useEffect(() => {
@@ -72,6 +73,11 @@ export function Dashboard() {
       const { data: comparisonsData } = await supabase
         .from('comparisons')
         .select('*')
+
+      // 4. Cargar Gastos Globales
+      const { data: globalExpensesData } = await supabase
+        .from('global_expenses')
+        .select('amount')
 
       // Transformar datos para que coincidan con las interfaces
       const formattedInventory: BoughtCar[] = (inventoryData || []).map((car: any) => ({
@@ -147,6 +153,11 @@ export function Dashboard() {
         0,
       )
 
+      const globalExpenses = (globalExpensesData || []).reduce((sum: number, exp: any) => sum + Number(exp.amount), 0)
+      
+      // Ajustar el Beneficio Neto restando los gastos fijos empresariales
+      totalProfit -= globalExpenses
+
       setStats({
         totalSold,
         totalProfit,
@@ -156,6 +167,7 @@ export function Dashboard() {
         avgDaysInInventory: avgDays,
         totalCostImports,
         comparisons: comparisonsData || [],
+        globalExpenses,
       })
 
     } catch (error) {
@@ -197,7 +209,14 @@ export function Dashboard() {
       </div>
 
       {/* Fila 2 de métricas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="Gastos Fijos Empresa"
+          value={`€${stats.globalExpenses.toLocaleString()}`}
+          icon={TrendingDown}
+          color="destructive"
+          size="small"
+        />
         <MetricCard
           title="Inversión Activa"
           value={`€${stats.totalInvestment.toLocaleString()}`}
