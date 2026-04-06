@@ -14,7 +14,7 @@ interface MarkAsBoughtModalProps {
 }
 
 export function MarkAsBoughtModal({ isOpen, onClose, onSubmit }: MarkAsBoughtModalProps) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [carId, setCarId] = useState("")
   const [datePurchased, setDatePurchased] = useState(new Date().toISOString().split("T")[0])
   const [importedCars, setImportedCars] = useState<any[]>([])
@@ -24,11 +24,17 @@ export function MarkAsBoughtModal({ isOpen, onClose, onSubmit }: MarkAsBoughtMod
     const loadCars = async () => {
       if (!isOpen || !user) return
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('imported_cars')
         .select('*')
-        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
+
+      const canManageAll = ['admin', 'super_admin', 'importador'].includes(profile?.role || '')
+      if (!canManageAll) {
+        query = query.eq('user_id', user.id)
+      }
+
+      const { data, error } = await query
 
       if (!error && data) {
         setImportedCars(data)

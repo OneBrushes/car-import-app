@@ -77,8 +77,8 @@ export function CarsManagement() {
 
       if (carsError) throw carsError
 
-      // Bypass for God Mode or Admins
-      const isAdminOrGod = isGodMode || profile?.role === 'admin' || profile?.role === 'super_admin'
+      // Bypass for God Mode or Admins/Importadores
+      const isAdminOrGod = isGodMode || profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.role === 'importador'
       const myData = isAdminOrGod ? carsData : carsData.filter((car: any) => car.user_id === user?.id)
 
       const formattedCars: BoughtCar[] = myData.map((car: any) => ({
@@ -207,9 +207,9 @@ export function CarsManagement() {
         .from('inventory_cars')
         .update({
           status: 'sold',
-          sell_price: data.sellPrice,
-          date_sold: data.dateSold,
-          buyer: data.buyer
+          sell_price: data.sellPrice === "" ? null : Number(data.sellPrice),
+          date_sold: data.dateSold === "" ? null : data.dateSold,
+          buyer: data.buyer === "" ? null : data.buyer
         })
         .eq('id', carId)
 
