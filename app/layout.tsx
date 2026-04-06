@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { Geist, Geist_Mono } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
 import { useState, useEffect } from "react"
 import "./globals.css"
 
@@ -53,7 +52,6 @@ export default function RootLayout({
           <AuthProvider>
             {children}
             <Toaster />
-            <Analytics />
           </AuthProvider>
         ) : (
           <div className="min-h-screen bg-background" />
