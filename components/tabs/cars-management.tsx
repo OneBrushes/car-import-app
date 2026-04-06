@@ -203,27 +203,17 @@ export function CarsManagement() {
 
   const markAsSold = async (carId: string, data: any) => {
     try {
-      const isAdminOrGod = profile?.role === 'admin' || profile?.role === 'super_admin' || isGodMode
-
-      if (isAdminOrGod) {
-        const { error } = await supabase.rpc('god_mode_update_car', {
-          p_table: 'inventory_cars',
-          p_car_id: carId,
-          p_payload: { status: 'sold', sell_price: data.sellPrice, date_sold: data.dateSold, buyer: data.buyer }
+      const { error } = await supabase
+        .from('inventory_cars')
+        .update({
+          status: 'sold',
+          sell_price: data.sellPrice,
+          date_sold: data.dateSold,
+          buyer: data.buyer
         })
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('inventory_cars')
-          .update({
-            status: 'sold',
-            sell_price: data.sellPrice,
-            date_sold: data.dateSold,
-            buyer: data.buyer
-          })
-          .eq('id', carId)
-        if (error) throw error
-      }
+        .eq('id', carId)
+
+      if (error) throw error
 
       toast.success("¡Coche marcado como vendido!")
       setSellCarModalOpen(false)
@@ -242,22 +232,12 @@ export function CarsManagement() {
   const confirmDelete = async () => {
     if (!carToDelete) return
     try {
-      const isAdminOrGod = profile?.role === 'admin' || profile?.role === 'super_admin' || isGodMode
+      const { error } = await supabase
+        .from('inventory_cars')
+        .delete()
+        .eq('id', carToDelete)
 
-      if (isAdminOrGod) {
-        // Enforce cascading deletion via RPC if they have the power
-        const { error } = await supabase.rpc('god_mode_delete_car', {
-          p_table: 'inventory_cars',
-          p_car_id: carToDelete
-        })
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('inventory_cars')
-          .delete()
-          .eq('id', carToDelete)
-        if (error) throw error
-      }
+      if (error) throw error
 
       toast.success("Coche eliminado")
       fetchCars()
@@ -279,22 +259,12 @@ export function CarsManagement() {
     setBoughtCars(prev => prev.map(c => c.id === carId ? { ...c, logistic_status: newStatus } : c))
     
     try {
-      const isAdminOrGod = profile?.role === 'admin' || profile?.role === 'super_admin' || isGodMode
-
-      if (isAdminOrGod) {
-        const { error } = await supabase.rpc('god_mode_update_car', {
-          p_table: 'inventory_cars',
-          p_car_id: carId,
-          p_payload: { logistic_status: newStatus }
-        })
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('inventory_cars')
-          .update({ logistic_status: newStatus })
-          .eq('id', carId)
-        if (error) throw error
-      }
+      const { error } = await supabase
+        .from('inventory_cars')
+        .update({ logistic_status: newStatus })
+        .eq('id', carId)
+        
+      if (error) throw error
       
       toast.success("Fase logística actualizada")
     } catch(err) {

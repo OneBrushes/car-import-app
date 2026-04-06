@@ -42,7 +42,7 @@ DROP POLICY IF EXISTS "super_admin_all_inventory" ON inventory_cars;
 
 CREATE POLICY "super_admin_all_inventory" ON inventory_cars FOR ALL TO authenticated USING (
   user_id = auth.uid()
-  OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin')
+  OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND (profiles.role = 'super_admin' OR profiles.role = 'admin'))
 );
 
 -- Para `comparisons`

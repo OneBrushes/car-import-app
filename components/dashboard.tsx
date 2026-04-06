@@ -46,7 +46,7 @@ export function Dashboard() {
     totalInvestment: 0,
     carsInInventory: 0,
     avgDaysInInventory: 0,
-    totalCostImports: 0,
+    totalFacturacion: 0,
     comparisons: [] as any[],
     globalExpenses: 0
   })
@@ -124,6 +124,7 @@ export function Dashboard() {
       let totalInvestment = 0
       let carsInInventory = 0
       const daysInInventory: number[] = []
+      let totalFacturacion = 0
 
       formattedInventory.forEach((car) => {
         const totalInvested =
@@ -131,6 +132,7 @@ export function Dashboard() {
 
         if (car.status === "sold" && car.sellPrice) {
           totalSold++
+          totalFacturacion += car.sellPrice
           const profit = car.sellPrice - totalInvested
           totalProfit += profit
           profitPercentages.push((profit / totalInvested) * 100)
@@ -153,11 +155,6 @@ export function Dashboard() {
       const avgProfit =
         profitPercentages.length > 0 ? profitPercentages.reduce((a, b) => a + b, 0) / profitPercentages.length : 0
 
-      const totalCostImports = formattedInventory.reduce(
-        (sum: number, car: any) => sum + car.initialPrice + car.initialExpenses + (car.expenses?.reduce((eSum: number, e: any) => eSum + e.amount, 0) || 0),
-        0,
-      )
-
       const globalExpenses = (globalExpensesData || []).reduce((sum: number, exp: any) => sum + Number(exp.amount), 0)
       
       // Ajustar el Beneficio Neto restando los gastos fijos empresariales
@@ -170,7 +167,7 @@ export function Dashboard() {
         totalInvestment,
         carsInInventory,
         avgDaysInInventory: avgDays,
-        totalCostImports,
+        totalFacturacion,
         comparisons: myComparisons || [],
         globalExpenses,
       })
@@ -237,8 +234,8 @@ export function Dashboard() {
           size="small"
         />
         <MetricCard
-          title="Total Importaciones"
-          value={`€${stats.totalCostImports.toLocaleString()}`}
+          title="Facturación Total"
+          value={`€${stats.totalFacturacion.toLocaleString()}`}
           icon={DollarSign}
           color="primary"
           size="small"
