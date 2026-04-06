@@ -265,7 +265,7 @@ export default function Home() {
         <div className="max-w-[1920px] mx-auto w-full">
           <div className="p-4 sm:p-6 lg:p-8 relative">
             <div className={activeTab === "dashboard" ? "block animate-in fade-in duration-300" : "hidden"}>
-              <Dashboard />
+              <Dashboard isActive={activeTab === "dashboard"} />
             </div>
             <div className={activeTab === "import" ? "block animate-in fade-in duration-300" : "hidden"}>
               <CarImport role={role} />

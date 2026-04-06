@@ -34,7 +34,11 @@ interface ImportedCar {
   origin?: string
 }
 
-export function Dashboard() {
+interface DashboardProps {
+  isActive?: boolean
+}
+
+export function Dashboard({ isActive = true }: DashboardProps) {
   const { user, isGodMode } = useAuth()
   const [loading, setLoading] = useState(true)
   const [boughtCars, setBoughtCars] = useState<BoughtCar[]>([])
@@ -52,8 +56,8 @@ export function Dashboard() {
   })
 
   useEffect(() => {
-    if (user) fetchData()
-  }, [user])
+    if (user && isActive) fetchData()
+  }, [user, isActive])
 
   const fetchData = async () => {
     try {
@@ -146,6 +150,7 @@ export function Dashboard() {
         } else {
           carsInInventory++
           totalInvestment += totalInvested
+          totalProfit -= totalInvested // Cashflow realista: restamos inversión de coches no vendidos
         }
       })
 
