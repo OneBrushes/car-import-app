@@ -23,3 +23,21 @@ USING (bucket_id = 'car-documents');
 CREATE POLICY "Usuarios pueden borrar sus propios documentos"
 ON storage.objects FOR DELETE TO authenticated
 USING (bucket_id = 'car-documents');
+
+-- 4. Crear Storage Bucket para facturas de los Gastos Globales (receipts)
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('receipts', 'receipts', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Configuracion RLS para "receipts"
+CREATE POLICY "Admins pueden subir facturas"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'receipts');
+
+CREATE POLICY "Admins pueden ver facturas"
+ON storage.objects FOR SELECT TO authenticated
+USING (bucket_id = 'receipts');
+
+CREATE POLICY "Admins pueden borrar facturas"
+ON storage.objects FOR DELETE TO authenticated
+USING (bucket_id = 'receipts');

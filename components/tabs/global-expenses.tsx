@@ -13,6 +13,7 @@ interface GlobalExpense {
   date: string
   category: string
   created_at: string
+  receipt_url?: string
 }
 
 export function GlobalExpenses({ role }: { role?: string | null }) {
@@ -27,6 +28,8 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
   const [newAmount, setNewAmount] = useState("")
   const [newCategory, setNewCategory] = useState("Equipamiento")
   const [newDate, setNewDate] = useState(new Date().toISOString().split('T')[0])
+  const [newReceipt, setNewReceipt] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
 
   const categories = [
     'Software/Suscripciones',
@@ -72,12 +75,35 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
         return
       }
 
-      const payload = {
+      let receiptUrl = undefined;
+      
+      if (newReceipt) {
+        setIsUploading(true)
+        const fileName = `${Date.now()}-${newReceipt.name.replace(/[^a-zA-Z0-9.\-]/g, "_")}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('receipts')
+          .upload(fileName, newReceipt)
+
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(fileName)
+          receiptUrl = urlData.publicUrl
+        } else {
+          toast.error("Aviso: No se pudo subir el archivo adjunto.")
+        }
+        setIsUploading(false)
+      }
+
+      const payload: any = {
         title: newTitle,
         amount: amount,
         category: newCategory,
         date: newDate
       };
+
+      if (receiptUrl) {
+         payload.receipt_url = receiptUrl;
+      }
 
       if (editingId) {
         // Update existing
@@ -117,6 +143,7 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
     setNewTitle("")
     setNewAmount("")
     setNewDate(new Date().toISOString().split('T')[0])
+    setNewReceipt(null)
     setEditingId(null)
     setShowAddForm(false)
   }
@@ -128,6 +155,7 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
     setNewAmount(exp.amount.toString())
     setNewCategory(exp.category)
     setNewDate(exp.date)
+    setNewReceipt(null)
     setShowAddForm(true)
   }
 
@@ -216,11 +244,21 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
                 className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm focus:ring-2 focus:ring-primary/50"
               />
             </div>
+            <div className="sm:col-span-2 lg:col-span-4 mt-2">
+              <label className="text-xs text-muted-foreground font-medium mb-1 block">Recibo / Factura (Opcional)</label>
+              <input
+                type="file"
+                onChange={(e) => setNewReceipt(e.target.files?.[0] || null)}
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/20 file:text-primary hover:file:bg-primary/30 file:cursor-pointer transition-colors"
+                title="Sube una foto o PDF de la factura"
+              />
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={resetForm}>Cancelar</Button>
-            <Button type="submit" className="bg-rose-600 hover:bg-rose-700 text-white">
-               {editingId ? 'Actualizar' : 'Guardar Gasto'}
+            <Button type="button" variant="ghost" onClick={resetForm} disabled={isUploading}>Cancelar</Button>
+            <Button type="submit" disabled={isUploading} className="bg-rose-600 hover:bg-rose-700 text-white">
+               {isUploading ? 'Subiendo...' : (editingId ? 'Actualizar' : 'Guardar Gasto')}
             </Button>
           </div>
         </form>
@@ -253,9 +291,19 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
                      </div>
                      <div>
                        <h4 className="font-medium text-foreground">{exp.title}</h4>
-                       <div className="flex items-center gap-2 mt-1">
+                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                          <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground border border-border">{exp.category}</span>
                          <span className="text-xs text-muted-foreground">{new Date(exp.date).toLocaleDateString('es-ES')}</span>
+                         {exp.receipt_url && (
+                           <a 
+                             href={exp.receipt_url} 
+                             target="_blank" 
+                             rel="noopener noreferrer" 
+                             className="text-[10px] font-semibold bg-rose-500/10 text-rose-600 px-2 py-0.5 rounded-full border border-rose-500/20 hover:bg-rose-500/20 transition-colors flex items-center gap-1"
+                           >
+                              Factura 📎
+                           </a>
+                         )}
                        </div>
                      </div>
                   </div>
