@@ -3,16 +3,24 @@
 import { useState } from "react"
 import { Plus, Trash2, ChevronDown } from "lucide-react"
 
+import { DocumentsModal, CarDocument } from "@/components/modals/documents-modal"
+import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
+
 interface BoughtCarCardProps {
   car: any
   onAddExpense: (expense: any) => void
   onRemoveExpense: (expenseId: string) => void
   onMarkAsSold: () => void
   onDelete: () => void
+  onUpdateCar?: (carId: string, updates: any) => void
 }
 
-export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold, onDelete }: BoughtCarCardProps) {
+export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold, onDelete, onUpdateCar }: BoughtCarCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isDocsOpen, setIsDocsOpen] = useState(false)
+  const [localDocs, setLocalDocs] = useState<CarDocument[]>(car.documents || [])
+  const [checklist, setChecklist] = useState<Record<string, boolean>>(car.matriculation_checklist || {})
   const [newExpense, setNewExpense] = useState({
     concept: "",
     amount: "",
@@ -64,6 +72,37 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
     "Impuestos",
     "Otro"
   ]
+
+  const matriculationSteps = [
+    { id: "ficha_reducida", label: "Ficha Técnica Reducida (Ingenieros)" },
+    { id: "itv", label: "ITV Pasada y Tarjeta Ficha Técnica Original" },
+    { id: "hacienda", label: "Impuesto Especial (Mod 576) o Exención" },
+    { id: "ayuntamiento", label: "Impuesto de Circulación (Ayto)" },
+    { id: "dgt", label: "Tasas DGT y Matriculación" },
+    { id: "placas", label: "Placas Físicas Fabricadas" },
+  ]
+
+  const handleChecklistChange = async (stepId: string, checked: boolean) => {
+    const newChecklist = { ...checklist, [stepId]: checked }
+    setChecklist(newChecklist)
+
+    try {
+      const { error } = await supabase
+        .from('inventory_cars')
+        .update({ matriculation_checklist: newChecklist })
+        .eq('id', car.id)
+      
+      if (error) throw error
+      if (onUpdateCar) onUpdateCar(car.id, { matriculation_checklist: newChecklist })
+      
+    } catch (err) {
+      console.error(err)
+      toast.error("Error al actualizar la checklist")
+      setChecklist(checklist) // revert local
+    }
+  }
+
+  const checklistProgress = Math.round((Object.values(checklist).filter(v => v).length / matriculationSteps.length) * 100) || 0
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -119,9 +158,46 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
         )}
       </div>
 
+      <div className="bg-muted/10 grid grid-cols-2 text-sm border-b border-border">
+          <button onClick={() => setIsDocsOpen(true)} className="py-2.5 flex items-center justify-center gap-2 hover:bg-secondary/50 font-medium transition-colors border-r border-border">
+            <span className="text-xl">📎</span> Documentos ({localDocs.length})
+          </button>
+          
+          <div className="py-2.5 flex items-center justify-center gap-2 font-medium text-muted-foreground relative" title="Progreso de matriculación">
+            <div className="w-full max-w-[100px] h-2.5 bg-border rounded-full overflow-hidden">
+               <div className="h-full bg-blue-500 transition-all" style={{ width: `${checklistProgress}%` }}></div>
+            </div>
+            <span className="text-xs">{checklistProgress}%</span>
+          </div>
+      </div>
+
       {/* Contenido expandible */}
       {isExpanded && (
-        <div className="p-4 space-y-6 border-t border-border">
+        <div className="p-4 space-y-6">
+
+          {/* Checklist Matriculación (Solo visible si no está vendido)*/}
+          {car.status !== "sold" && (
+            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-blue-500 flex items-center gap-2">Trámites de Matriculación España</h4>
+                <span className="text-xs font-semibold bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-full">{checklistProgress}%</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                 {matriculationSteps.map(step => (
+                    <label key={step.id} className="flex items-center gap-2 p-2 hover:bg-background/50 rounded-md cursor-pointer transition-colors border border-transparent hover:border-border">
+                       <input 
+                         type="checkbox" 
+                         checked={!!checklist[step.id]} 
+                         onChange={(e) => handleChecklistChange(step.id, e.target.checked)}
+                         className="w-4 h-4 rounded text-blue-500 bg-background border-border"
+                       />
+                       <span className={checklist[step.id] ? "line-through text-muted-foreground" : "text-foreground"}>{step.label}</span>
+                    </label>
+                 ))}
+              </div>
+            </div>
+          )}
+
           {/* Desglose de inversión */}
           <div>
             <h4 className="font-semibold mb-3">Desglose de Inversión</h4>
@@ -242,6 +318,19 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
           </div>
         </div>
       )}
+
+      {/* Modal Independiente de Documentos */}
+      <DocumentsModal 
+         isOpen={isDocsOpen} 
+         onClose={() => setIsDocsOpen(false)} 
+         carId={car.id} 
+         carName={`${car.brand} ${car.model} (${car.year})`}
+         documents={localDocs}
+         onDocumentsUpdate={(newDocs) => {
+            setLocalDocs(newDocs)
+            if (onUpdateCar) onUpdateCar(car.id, { documents: newDocs })
+         }}
+      />
     </div>
   )
 }
