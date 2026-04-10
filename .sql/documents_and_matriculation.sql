@@ -5,8 +5,8 @@ ADD COLUMN IF NOT EXISTS matriculation_checklist jsonb DEFAULT '{}'::jsonb;
 
 -- 2. Crear Storage Bucket para los documentos PDF de los coches (car-documents)
 INSERT INTO storage.buckets (id, name, public) 
-VALUES ('car-documents', 'car-documents', false)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('car-documents', 'car-documents', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 -- 3. Configurar Acceso Seguro RLS para el Bucket "car-documents"
 -- Solo usuarios logueados pueden subir archivos
@@ -26,8 +26,8 @@ USING (bucket_id = 'car-documents');
 
 -- 4. Crear Storage Bucket para facturas de los Gastos Globales (receipts)
 INSERT INTO storage.buckets (id, name, public) 
-VALUES ('receipts', 'receipts', false)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('receipts', 'receipts', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 -- Configuracion RLS para "receipts"
 CREATE POLICY "Admins pueden subir facturas"
