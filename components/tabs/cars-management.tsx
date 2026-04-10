@@ -36,6 +36,8 @@ interface BoughtCar {
   dateSold?: string
   buyer?: string
   expenses: Expense[]
+  documents?: any[]
+  matriculation_checklist?: any
 }
 
 const KANBAN_COLUMNS: { id: LogisticStatus; label: string; color: string }[] = [
@@ -97,7 +99,9 @@ export function CarsManagement() {
         expenses: (car.expenses || []).map((e: any) => ({
           ...e,
           amount: Number(e.amount)
-        }))
+        })),
+        documents: car.documents || [],
+        matriculation_checklist: car.matriculation_checklist || {}
       }))
 
       setBoughtCars(formattedCars)
