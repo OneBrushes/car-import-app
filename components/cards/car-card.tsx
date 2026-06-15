@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ExternalLink, Trash2, Share2, Users } from "lucide-react"
+import { ExternalLink, Trash2, Share2, Users, Mail, MailOpen } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ImageCarousel } from "@/components/ui/image-carousel"
@@ -14,9 +14,10 @@ interface CarCardProps {
   onShare?: (car: any) => void
   currentUserId?: string
   isGodMode?: boolean
+  onToggleContacted?: (carId: string, currentStatus: boolean) => void
 }
 
-export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMode = false }: CarCardProps) {
+export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMode = false, onToggleContacted }: CarCardProps) {
   const [ownerName, setOwnerName] = useState<string>("")
   const finalPrice = (car.price || 0) + (car.totalExpenses || 0)
   const images = car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : [])
@@ -50,15 +51,23 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
   return (
     <div
       onClick={() => onEdit(car)} // Permitir ver tanto propios como compartidos
-      className={`bg-card border rounded-lg overflow-hidden transition-all group relative cursor-pointer ${isSharedWithMe
-        ? 'hover:border-blue-500/50 border-blue-500/30 bg-blue-500/5'
-        : isSharedByMe
-          ? 'hover:border-primary/30 border-blue-500/50'
-          : 'hover:border-primary/30 border-border'
-        }`}
+      className={`bg-card border rounded-lg overflow-hidden transition-all group relative cursor-pointer ${
+        car.contacted
+          ? 'hover:border-emerald-500/50 border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/5'
+          : isSharedWithMe
+            ? 'hover:border-blue-500/50 border-blue-500/30 bg-blue-500/5'
+            : isSharedByMe
+              ? 'hover:border-primary/30 border-blue-500/50'
+              : 'hover:border-primary/30 border-border'
+      }`}
     >
       {/* Badges de Estado */}
       <div className="absolute top-2 right-2 z-10 flex flex-col gap-1">
+        {car.contacted && (
+          <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+            <MailOpen className="w-3 h-3 mr-1" /> Contactado
+          </Badge>
+        )}
         {isSharedWithMe && (
           <Badge variant="secondary" className="bg-blue-500/20 text-blue-400 border-blue-500/20">
             <Users className="w-3 h-3 mr-1" /> Compartido contigo
@@ -124,6 +133,21 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
 
           {isOwner && (
             <>
+              {onToggleContacted && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-9 w-9 transition-colors ${
+                    car.contacted
+                      ? "text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  onClick={() => onToggleContacted(car.id, !!car.contacted)}
+                  title={car.contacted ? "Desmarcar como contactado" : "Marcar como contactado (mail/mensaje enviado)"}
+                >
+                  {car.contacted ? <MailOpen className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Search, Filter, Trash2, Edit, ChevronDown, ChevronUp, Image as ImageIcon, Loader2, LayoutGrid, List } from "lucide-react"
+import { Plus, Search, Filter, Trash2, Edit, ChevronDown, ChevronUp, Image as ImageIcon, Loader2, LayoutGrid, List, Mail, MailOpen } from "lucide-react"
 import { AddCarModal } from "@/components/modals/add-car-modal"
 import { Button } from "@/components/ui/button"
 import { CarCard } from "@/components/cards/car-card"
@@ -32,6 +32,7 @@ interface Car {
   steering?: string
   expenses?: any[]
   vehicleType?: string
+  contacted?: boolean
 }
 
 interface CarImportProps {
@@ -125,7 +126,8 @@ export function CarImport({ role }: CarImportProps) {
         itv_link: car.itv_link || "",
         steering: car.steering,
         // Asegurar que expenses se pasa
-        expenses: car.expenses || []
+        expenses: car.expenses || [],
+        contacted: !!car.contacted
       }))
 
       setCars(formattedCars)
@@ -204,7 +206,8 @@ export function CarImport({ role }: CarImportProps) {
         defects: newCar.defects || null,
         notes: newCar.notes || null,
         tags: newCar.tags || [],
-        equipment: newCar.equipment || []
+        equipment: newCar.equipment || [],
+        contacted: editingCar ? !!editingCar.contacted : false
       }
 
       if (editingCar) {
@@ -328,6 +331,24 @@ export function CarImport({ role }: CarImportProps) {
     }
   }
 
+  const toggleContacted = async (carId: string, currentStatus: boolean) => {
+    try {
+      const newStatus = !currentStatus
+      const { error } = await supabase
+        .from('imported_cars')
+        .update({ contacted: newStatus })
+        .eq('id', carId)
+
+      if (error) throw error
+
+      setCars(prevCars => prevCars.map(c => c.id === carId ? { ...c, contacted: newStatus } : c))
+      toast.success(newStatus ? "Marcado como contactado" : "Marcado como no contactado")
+    } catch (error: any) {
+      console.error("Error toggling contacted status:", error)
+      toast.error("Error al actualizar estado de contacto")
+    }
+  }
+
   const handleEdit = (car: Car) => {
     setEditingCar(car)
     setIsModalOpen(true)
@@ -446,6 +467,7 @@ export function CarImport({ role }: CarImportProps) {
                   onShare={() => handleShareClick(car)}
                   currentUserId={user?.id}
                   isGodMode={isGodMode}
+                  onToggleContacted={(carId, currentStatus) => toggleContacted(carId, currentStatus)}
                 />
               ))}
             </div>
@@ -462,12 +484,13 @@ export function CarImport({ role }: CarImportProps) {
                       <th className="p-4">Km</th>
                       <th className="p-4">Año</th>
                       <th className="p-4">Ubicación</th>
+                      <th className="p-4 text-center">Contactado</th>
                       <th className="p-4 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {sortedCars.map(car => (
-                      <tr key={car.id} className="hover:bg-muted/50 transition-colors">
+                      <tr key={car.id} className={`hover:bg-muted/50 transition-colors ${car.contacted ? 'bg-emerald-500/5 hover:bg-emerald-500/10' : ''}`}>
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-md bg-muted overflow-hidden relative flex-shrink-0">
@@ -489,6 +512,22 @@ export function CarImport({ role }: CarImportProps) {
                         <td className="p-4">{car.mileage.toLocaleString()} km</td>
                         <td className="p-4">{car.year}</td>
                         <td className="p-4 text-muted-foreground">{car.origin || "-"}</td>
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleContacted(car.id, !!car.contacted);
+                            }}
+                            className={`p-2 rounded-full transition-colors ${
+                              car.contacted
+                                ? "text-emerald-500 hover:bg-emerald-500/10"
+                                : "text-muted-foreground hover:bg-muted"
+                            }`}
+                            title={car.contacted ? "Contactado (Click para desmarcar)" : "Marcar como contactado"}
+                          >
+                            {car.contacted ? <MailOpen className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+                          </button>
+                        </td>
                         <td className="p-4 text-right">
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" size="icon" onClick={() => handleEdit(car)}>
