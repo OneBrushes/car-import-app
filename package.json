@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "start": "next start",
     "test": "vitest run",
+    "build:scrape-worker": "node scripts/build-scrape-worker.mjs",
     "screenshots:garage": "node scripts/garage-screenshots.mjs screenshots"
   },
   "dependencies": {

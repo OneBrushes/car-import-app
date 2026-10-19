@@ -1,10 +1,14 @@
-// Cloudflare Pages Function: lee un anuncio de coche y devuelve sus datos básicos.
+// Lee un anuncio de coche y devuelve sus datos básicos.
 // GET /api/scrape?url=<anuncio>   Header: Authorization: Bearer <access_token de Supabase>
 //
 // Solo acepta portales de coches conocidos (evita que se use como proxy abierto) y
 // exige una sesión válida de Supabase.
 //
-// Variables de entorno en Cloudflare Pages: SUPABASE_URL, SUPABASE_ANON_KEY
+// Se usa de dos formas:
+//  - como Cloudflare Pages Function (si la web se aloja en Cloudflare Pages), y
+//  - como Worker independiente (workers/car-scrape.js, generado con `npm run build:scrape-worker`),
+//    que es lo que usa la web alojada en GitHub Pages.
+// Variables de entorno: SUPABASE_URL, SUPABASE_ANON_KEY
 
 interface Env {
     SUPABASE_URL?: string
@@ -45,7 +49,10 @@ const json = (body: unknown, status = 200) =>
     })
 
 export async function onRequestGet(context: { request: Request; env: Env }) {
-    const { request, env } = context
+    return handleScrape(context.request, context.env)
+}
+
+export async function handleScrape(request: Request, env: Env): Promise<Response> {
     const target = new URL(request.url).searchParams.get('url')
 
     if (!target) return json({ error: 'Falta el parámetro url' }, 400)

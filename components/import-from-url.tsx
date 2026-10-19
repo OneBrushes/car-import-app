@@ -36,8 +36,8 @@ interface ImportFromUrlProps {
 
 /**
  * Pega el enlace de un anuncio (AutoScout24, mobile.de, leboncoin…) y rellena el formulario.
- * Usa la Cloudflare Pages Function /api/scrape, que solo existe en la web desplegada
- * (en `npm run dev` no hay funciones de Cloudflare).
+ * Usa el Worker de Cloudflare car-scrape (NEXT_PUBLIC_SCRAPE_WORKER), porque la web está en GitHub Pages
+ * y allí no hay funciones /api. Sin esa variable prueba /api/scrape (por si se aloja en Cloudflare Pages).
  */
 export function ImportFromUrl({ onImported, className }: ImportFromUrlProps) {
   const [url, setUrl] = useState("")
@@ -51,12 +51,15 @@ export function ImportFromUrl({ onImported, className }: ImportFromUrlProps) {
     setDuplicateWarning(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`/api/scrape?url=${encodeURIComponent(trimmed)}`, {
+      const endpoint = process.env.NEXT_PUBLIC_SCRAPE_WORKER || "/api/scrape"
+      const res = await fetch(`${endpoint}?url=${encodeURIComponent(trimmed)}`, {
         headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
       })
       const contentType = res.headers.get("content-type") || ""
       if (!contentType.includes("application/json")) {
-        throw new Error("La importación por URL solo funciona en la web publicada (Cloudflare), no en local.")
+        throw new Error(process.env.NEXT_PUBLIC_SCRAPE_WORKER
+          ? "El servicio de importación no responde bien. Revisa el Worker car-scrape en Cloudflare."
+          : "Falta configurar el servicio de importación (NEXT_PUBLIC_SCRAPE_WORKER).")
       }
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || "No se pudo leer el anuncio")
