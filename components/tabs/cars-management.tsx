@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Plus, ShoppingBag, TrendingUp, Calendar, Loader2, LayoutList, LayoutDashboard } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Plus, ShoppingBag, TrendingUp, Calendar, Loader2, LayoutList, KanbanSquare } from "lucide-react"
+import { PipelineBoard } from "@/components/tabs/pipeline-board"
+import { Button } from "@/components/ui/button"
 import { BoughtCarCard } from "@/components/cards/bought-car-card"
 import { MarkAsBoughtModal } from "@/components/modals/mark-as-bought-modal"
 import { SellCarModal } from "@/components/modals/sell-car-modal"
@@ -9,7 +11,11 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
-import { Car } from "lucide-react"
+import { markImportedCarAsBought, printInvoiceForCar, sellInventoryCar } from "@/lib/sales"
+import { removePrivateFiles } from "@/lib/private-files"
+import { OPEN_CAR_EVENT, type OpenCarDetail } from "@/components/command-palette"
+import type { MarkAsBoughtData } from "@/components/modals/mark-as-bought-modal"
+import type { SellCarData } from "@/components/modals/sell-car-modal"
 
 interface Expense {
   id: string
@@ -38,17 +44,14 @@ interface BoughtCar {
   expenses: Expense[]
   documents?: any[]
   matriculation_checklist?: any
+  customer_id?: string | null
+  imported_car_id?: string | null
+  invoice_number?: string | null
+  plate?: string | null
+  vin?: string | null
 }
 
-const KANBAN_COLUMNS: { id: LogisticStatus; label: string; color: string }[] = [
-  { id: "purchased", label: "Comprado", color: "bg-blue-500" },
-  { id: "in_transit", label: "En Tránsito / Grúa", color: "bg-orange-500" },
-  { id: "homologation", label: "Trámites / ITV", color: "bg-purple-500" },
-  { id: "detailing", label: "Taller / Limpieza", color: "bg-pink-500" },
-  { id: "ready", label: "En Stock / Listo", color: "bg-emerald-500" },
-]
-
-export function CarsManagement() {
+export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
   const { user, isGodMode, profile } = useAuth()
   const [boughtCars, setBoughtCars] = useState<BoughtCar[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,15 +59,42 @@ export function CarsManagement() {
   const [sellCarModalOpen, setSellCarModalOpen] = useState(false)
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | "inventory" | "sold">("inventory")
-  const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban")
+  const [viewMode, setViewMode] = useState<"list" | "board">("board")
 
   // Delete confirmation state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [carToDelete, setCarToDelete] = useState<string | null>(null)
 
   useEffect(() => {
-    if (user) fetchCars()
-  }, [user])
+    if (user && isActive) fetchCars()
+  }, [user, isActive, viewMode])
+
+  // Abrir un coche concreto desde la búsqueda global (Ctrl+K) o desde el garaje virtual
+  const pendingOpenRef = useRef<string | null>(null)
+  useEffect(() => {
+    const id = pendingOpenRef.current
+    if (!id) return
+    const car = boughtCars.find(c => c.id === id)
+    if (!car) return
+    pendingOpenRef.current = null
+    setFilter(car.status === "sold" ? "sold" : "inventory")
+    setTimeout(() => document.getElementById(`bought-car-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 150)
+  }, [boughtCars])
+
+  useEffect(() => {
+    const onOpenCar = (event: Event) => {
+      const { table, id } = (event as CustomEvent<OpenCarDetail>).detail
+      if (table !== "inventory_cars") return
+      const car = boughtCars.find(c => c.id === id)
+      setViewMode("list")
+      if (!car) { pendingOpenRef.current = id; return }
+      setFilter(car.status === "sold" ? "sold" : "inventory")
+      setViewMode("list")
+      setTimeout(() => document.getElementById(`bought-car-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100)
+    }
+    window.addEventListener(OPEN_CAR_EVENT, onOpenCar)
+    return () => window.removeEventListener(OPEN_CAR_EVENT, onOpenCar)
+  }, [boughtCars])
 
   const fetchCars = async () => {
     try {
@@ -101,7 +131,12 @@ export function CarsManagement() {
           amount: Number(e.amount)
         })),
         documents: car.documents || [],
-        matriculation_checklist: car.matriculation_checklist || {}
+        matriculation_checklist: car.matriculation_checklist || {},
+        customer_id: car.customer_id,
+        imported_car_id: car.imported_car_id,
+        invoice_number: car.invoice_number,
+        plate: car.plate,
+        vin: car.vin
       }))
 
       setBoughtCars(formattedCars)
@@ -113,55 +148,12 @@ export function CarsManagement() {
     }
   }
 
-  const markAsBought = async (data: any) => {
+  const markAsBought = async (data: MarkAsBoughtData) => {
     if (!user) return
 
     try {
-      let carData = {
-        brand: "Desconocido",
-        model: "Desconocido",
-        year: new Date().getFullYear(),
-        price: 0,
-        expenses: 0
-      }
-
-      if (data.carId) {
-        const { data: importedCar } = await supabase
-          .from('imported_cars')
-          .select('*')
-          .eq('id', data.carId)
-          .single()
-
-        if (importedCar) {
-          carData = {
-            brand: importedCar.brand,
-            model: importedCar.model,
-            year: importedCar.year,
-            price: 0,
-            expenses: 0
-          }
-        }
-      }
-
-      const { data: newCar, error } = await supabase
-        .from('inventory_cars')
-        .insert({
-          user_id: user.id,
-          brand: carData.brand,
-          model: carData.model,
-          year: carData.year,
-          initial_price: carData.price,
-          initial_expenses: carData.expenses,
-          date_purchased: data.datePurchased,
-          status: 'inventory',
-          logistic_status: 'purchased'
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      toast.success("Coche añadido al inventario. Frecuencia lo puedes mover en el Kanban.")
+      await markImportedCarAsBought(user.id, data)
+      toast.success("Coche añadido al inventario. Puedes moverlo en el tablero.")
       setMarkAsBoughtModalOpen(false)
       fetchCars()
     } catch (error: any) {
@@ -205,27 +197,27 @@ export function CarsManagement() {
     }
   }
 
-  const markAsSold = async (carId: string, data: any) => {
+  const markAsSold = async (carId: string, data: SellCarData) => {
     try {
-      const { error } = await supabase
-        .from('inventory_cars')
-        .update({
-          status: 'sold',
-          sell_price: data.sellPrice === "" ? null : Number(data.sellPrice),
-          date_sold: data.dateSold === "" ? null : data.dateSold,
-          buyer: data.buyer === "" ? null : data.buyer
-        })
-        .eq('id', carId)
-
-      if (error) throw error
-
+      await sellInventoryCar(carId, data)
       toast.success("¡Coche marcado como vendido!")
       setSellCarModalOpen(false)
       setSelectedCarId(null)
       fetchCars()
-    } catch (error) {
-      toast.error("Error al actualizar estado")
+
+      if (data.generateInvoice) {
+        const problem = await printInvoiceForCar(carId)
+        if (problem) toast.error(problem)
+      }
+    } catch (error: any) {
+      toast.error("Error al registrar la venta: " + (error?.message || ""))
     }
+  }
+
+  const printInvoice = async (carId: string) => {
+    const problem = await printInvoiceForCar(carId)
+    if (problem) toast.error(problem)
+    else fetchCars()
   }
 
   const deleteCar = async (id: string) => {
@@ -236,12 +228,16 @@ export function CarsManagement() {
   const confirmDelete = async () => {
     if (!carToDelete) return
     try {
+      const car = boughtCars.find(c => c.id === carToDelete)
       const { error } = await supabase
         .from('inventory_cars')
         .delete()
         .eq('id', carToDelete)
 
       if (error) throw error
+
+      // Borrar también sus documentos privados
+      if (car?.documents?.length) await removePrivateFiles('car-documents', car.documents.map((d: any) => d.url))
 
       toast.success("Coche eliminado")
       fetchCars()
@@ -256,44 +252,6 @@ export function CarsManagement() {
   const cancelDelete = () => {
     setShowDeleteDialog(false)
     setCarToDelete(null)
-  }
-
-  const updateLogisticStatus = async (carId: string, newStatus: LogisticStatus) => {
-    // Optimistic UI update
-    setBoughtCars(prev => prev.map(c => c.id === carId ? { ...c, logistic_status: newStatus } : c))
-    
-    try {
-      const { error } = await supabase
-        .from('inventory_cars')
-        .update({ logistic_status: newStatus })
-        .eq('id', carId)
-        
-      if (error) throw error
-      
-      toast.success("Fase logística actualizada")
-    } catch(err) {
-      toast.error("Error al actualizar el estado logístico")
-      fetchCars() // Revert UI
-    }
-  }
-
-  const handleDragStart = (e: React.DragEvent, carId: string) => {
-    e.dataTransfer.setData("carId", carId)
-  }
-
-  const handleDrop = (e: React.DragEvent, status: LogisticStatus) => {
-    e.preventDefault()
-    const carId = e.dataTransfer.getData("carId")
-    if (carId) {
-      const car = boughtCars.find(c => c.id === carId)
-      if (car && car.logistic_status !== status) {
-        updateLogisticStatus(carId, status)
-      }
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
   }
 
   const filteredCars = boughtCars.filter((car) => {
@@ -344,145 +302,75 @@ export function CarsManagement() {
   return (
     <div className="space-y-6 animate-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight mb-1">Coches en Patrulla</h2>
-          <p className="text-muted-foreground">Gestiona la logística y los gastos de tu inventario ({boughtCars.length})</p>
+          <h2 className="text-2xl font-semibold tracking-tight mb-1">Comprados</h2>
+          <p className="text-muted-foreground">
+            {viewMode === "board"
+              ? "Todo el proceso: del anuncio encontrado al coche vendido. Arrastra las tarjetas para avanzar."
+              : `Gastos, documentos, matriculación y ventas de tu inventario (${boughtCars.length})`}
+          </p>
         </div>
-        <button
-          onClick={() => setMarkAsBoughtModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
-        >
-          <Plus className="w-5 h-5" />
-          Añadir Coche Comprado
-        </button>
-      </div>
-
-      {/* Estadísticas */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Vendidos" value={stats.totalSold} icon={ShoppingBag} />
-        <StatCard
-          label="Beneficio Total"
-          value={`€${stats.totalProfit.toLocaleString()}`}
-          icon={TrendingUp}
-          highlight={stats.totalProfit > 0}
-        />
-        <StatCard label="Rentabilidad Media" value={`${stats.avgProfitability.toFixed(1)}%`} icon={TrendingUp} />
-        <StatCard label="En Inventario" value={stats.carsInInventory} icon={Calendar} />
-      </div>
-
-      {/* Filtros & Vista Toggle */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex gap-2">
-          {(["all", "inventory", "sold"] as const).map((f) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-lg bg-muted p-1">
             <button
-              key={f}
-              onClick={() => {
-                 setFilter(f)
-                 if (f === "sold") setViewMode("list") // Kanban doesn't make sense for sold cars
-              }}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === f ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground hover:bg-secondary/80"
-                }`}
+              onClick={() => setViewMode("board")}
+              className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${viewMode === "board" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"}`}
             >
-              {f === "all" ? "Todos" : f === "inventory" ? "En Inventario" : "Vendidos"}
+              <KanbanSquare className="h-4 w-4" /> Proceso
             </button>
-          ))}
-        </div>
-
-        {filter !== 'sold' && (
-          <div className="flex bg-secondary p-1 rounded-lg">
-             <button
-                onClick={() => setViewMode("kanban")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === "kanban" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
-             >
-                <LayoutDashboard className="w-4 h-4" /> Tablero Kanban
-             </button>
-             <button
-                onClick={() => setViewMode("list")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === "list" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
-             >
-                <LayoutList className="w-4 h-4" /> Lista Clásica
-             </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${viewMode === "list" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"}`}
+            >
+              <LayoutList className="h-4 w-4" /> Lista y gastos
+            </button>
           </div>
-        )}
+          {viewMode === "list" && (
+            <Button onClick={() => setMarkAsBoughtModalOpen(true)}>
+              <Plus className="h-4 w-4" /> Añadir coche comprado
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* VISTA KANBAN */}
-      {viewMode === "kanban" && filter !== "sold" && (
-         <div className="flex gap-4 overflow-x-auto pb-6 pt-2 snap-x">
-            {KANBAN_COLUMNS.map((column) => {
-               const columnCars = filteredCars.filter(car => (car.logistic_status || 'purchased') === column.id && car.status === 'inventory')
-               
-               return (
-                  <div 
-                     key={column.id}
-                     onDragOver={handleDragOver}
-                     onDrop={(e) => handleDrop(e, column.id)}
-                     className="flex-shrink-0 w-80 bg-secondary/30 rounded-xl border border-border p-3 flex flex-col snap-center"
-                     style={{ minHeight: '500px' }}
-                  >
-                     <div className="flex items-center gap-2 mb-4">
-                        <div className={`w-3 h-3 rounded-full ${column.color}`}></div>
-                        <h3 className="font-bold text-sm uppercase tracking-wider">{column.label}</h3>
-                        <span className="ml-auto bg-background px-2 py-0.5 rounded-full text-xs font-semibold">{columnCars.length}</span>
-                     </div>
-                     
-                     <div className="flex flex-col gap-3 flex-1">
-                        {columnCars.map(car => (
-                           <div 
-                              key={car.id} 
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, car.id)}
-                              className="bg-card cursor-grab active:cursor-grabbing border-l-4 border-y border-r border-border rounded-lg p-3 shadow-sm hover:shadow-md transition-all divide-y divide-border"
-                              style={{ borderLeftColor: `var(--tw-colors-${column.color.split('-')[1]}-500)` }}
-                           >
-                              <div className="pb-2">
-                                 <div className="font-bold text-base leading-tight flex items-center justify-between">
-                                    <span className="truncate">{car.brand} {car.model}</span>
-                                 </div>
-                                 <div className="flex items-center text-xs text-muted-foreground mt-1 gap-1">
-                                    <Calendar className="w-3 h-3" /> {new Date(car.datePurchased).toLocaleDateString()}
-                                 </div>
-                              </div>
-                              <div className="pt-2 flex justify-between items-center mt-2 gap-2">
-                                 <div className="text-sm font-semibold truncate flex-shrink min-w-0">
-                                    €{car.initialPrice.toLocaleString()}
-                                 </div>
-                                 <div className="flex-shrink-0 flex gap-1">
-                                   <button 
-                                      onClick={() => { setSelectedCarId(car.id); setSellCarModalOpen(true); }}
-                                      className="text-xs bg-primary/10 text-primary px-2 py-1 flex items-center justify-center rounded hover:bg-primary/20 transition-colors"
-                                      title="Vender Coche"
-                                   >
-                                     <ShoppingBag className="w-3.5 h-3.5" />
-                                   </button>
-                                   <button 
-                                      onClick={() => setViewMode("list")} // Volver a la lista para editar gastos
-                                      className="text-xs bg-secondary hover:bg-secondary/80 px-2 py-1 flex items-center justify-center rounded"
-                                      title="Ver Detalles y Gastos"
-                                   >
-                                     <LayoutList className="w-3.5 h-3.5" />
-                                   </button>
-                                 </div>
-                              </div>
-                           </div>
-                        ))}
-                        {columnCars.length === 0 && (
-                           <div className="flex-1 border-2 border-dashed border-border/50 rounded-lg flex flex-col items-center justify-center text-muted-foreground/50 italic text-sm">
-                              Arrastra un coche aquí
-                           </div>
-                        )}
-                     </div>
-                  </div>
-               )
-            })}
-         </div>
+      {/* VISTA PROCESO (tablero completo) */}
+      {viewMode === "board" && <PipelineBoard isActive={isActive && viewMode === "board"} embedded />}
+
+      {viewMode === "list" && (
+        <>
+          {/* Estadísticas */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard label="Vendidos" value={stats.totalSold} icon={ShoppingBag} />
+            <StatCard
+              label="Beneficio total"
+              value={`${stats.totalProfit.toLocaleString('es-ES', { maximumFractionDigits: 0 })} €`}
+              icon={TrendingUp}
+              highlight={stats.totalProfit > 0}
+            />
+            <StatCard label="Rentabilidad media" value={`${stats.avgProfitability.toFixed(1)}%`} icon={TrendingUp} />
+            <StatCard label="En inventario" value={stats.carsInInventory} icon={Calendar} />
+          </div>
+
+          {/* Filtros */}
+          <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
+            {(["all", "inventory", "sold"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-all ${filter === f ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"}`}
+              >
+                {f === "all" ? "Todos" : f === "inventory" ? "En inventario" : "Vendidos"}
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {/* VISTA LISTA CLÁSICA */}
-      {(viewMode === "list" || filter === "sold") && (
+      {viewMode === "list" && (
         filteredCars.length === 0 ? (
-          <div className="bg-card border border-border rounded-lg p-12 text-center">
+          <div className="rounded-xl border border-dashed p-12 text-center">
             <p className="text-muted-foreground mb-4">No hay coches registrados en este filtro.</p>
             <button onClick={() => setMarkAsBoughtModalOpen(true)} className="text-primary hover:underline font-medium">
               Marca tu primer coche como comprado
@@ -491,8 +379,8 @@ export function CarsManagement() {
         ) : (
           <div className="space-y-4">
             {filteredCars.map((car) => (
+              <div key={car.id} id={`bought-car-${car.id}`}>
               <BoughtCarCard
-                key={car.id}
                 car={{...car, logistic_status: car.logistic_status || 'purchased'}} // Propagación normal de props
                 onAddExpense={(expense) => addExpense(car.id, expense)}
                 onRemoveExpense={(expenseId) => removeExpense(car.id, expenseId)}
@@ -501,7 +389,9 @@ export function CarsManagement() {
                   setSellCarModalOpen(true)
                 }}
                 onDelete={() => deleteCar(car.id)}
+                onPrintInvoice={() => printInvoice(car.id)}
               />
+              </div>
             ))}
           </div>
         )
@@ -543,7 +433,7 @@ export function CarsManagement() {
 
 function StatCard({ label, value, icon: Icon, highlight }: any) {
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
+    <div className="bg-card border rounded-xl p-4 shadow-xs">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs text-muted-foreground mb-1">{label}</p>

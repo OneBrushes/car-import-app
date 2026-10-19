@@ -1,0 +1,179 @@
+/*
+ * Garaje virtual de NorDrive: paleta y animaciones portadas tal cual del estilo "Illustrated"
+ * de LOOSES & WINS (office-styles.css). Única diferencia: la noche no la activa el modo oscuro
+ * de la app (.dark) sino la hora real, con la clase .mhq-night en el contenedor del garaje.
+ */
+.mhq-office {
+  /* colores de estado y de zona usados por las piezas portadas */
+  --status-good: #22c55e; --status-warning: #f59e0b; --status-critical: #ef4444;
+  --brand: #2b4acb;
+  --chart-1: #2a78d6; --chart-2: #1baf7a; --chart-3: #eb6834; --chart-4: #8b5cf6; --chart-5: #14b8a6; --chart-6: #ec4899; --chart-7: #f2b81e; --chart-8: #64748b;
+}
+/* ---- Marketing HQ / virtual office (scoped: only elements inside .mhq-office) ---- */
+.mhq-office {
+  --mhq-bg: oklch(0.975 0.006 250);
+  --mhq-floor-a: oklch(0.93 0.012 75);
+  --mhq-floor-b: oklch(0.955 0.01 75);
+  --mhq-wall-a: oklch(0.9 0.02 250);
+  --mhq-wall-b: oklch(0.86 0.025 250);
+  --mhq-wall-edge: oklch(0.78 0.03 250);
+  --mhq-desk-top: oklch(0.78 0.07 65);
+  --mhq-desk-side: oklch(0.64 0.07 60);
+  --mhq-desk-front: oklch(0.7 0.07 62);
+  --mhq-monitor: oklch(0.32 0.01 260);
+  --mhq-screen-off: oklch(0.22 0.01 260);
+  --mhq-screen-on: oklch(0.96 0.02 230);
+  --mhq-chair: oklch(0.45 0.03 260);
+  --mhq-skin: oklch(0.8 0.07 60);
+  --mhq-hair: oklch(0.32 0.04 50);
+  --mhq-ink-soft: oklch(0.55 0.02 260);
+}
+.mhq-office.mhq-night {
+  --mhq-bg: oklch(0.2 0.01 260);
+  --mhq-floor-a: oklch(0.3 0.015 260);
+  --mhq-floor-b: oklch(0.33 0.015 260);
+  --mhq-wall-a: oklch(0.27 0.02 260);
+  --mhq-wall-b: oklch(0.24 0.02 260);
+  --mhq-wall-edge: oklch(0.38 0.02 260);
+  --mhq-desk-top: oklch(0.55 0.06 60);
+  --mhq-desk-side: oklch(0.42 0.05 60);
+  --mhq-desk-front: oklch(0.48 0.05 60);
+  --mhq-screen-on: oklch(0.85 0.04 230);
+  --mhq-chair: oklch(0.5 0.02 260);
+  --mhq-ink-soft: oklch(0.6 0.02 260);
+}
+/* pixel-art office (marketing): 16-bit RPG look — colour ramps (light / base / shade), outlines in a darker shade */
+.mhq-pixel {
+  --px-floor-a: #e6b77c; --px-floor-b: #dfae72; --px-floor-c: #eabf86; --px-floor-hi: #f6d49c; --px-floor-sh: #c99560; --px-floor-grain: #cf9c66;
+  --px-seam: #a8733f; --px-floor-edge: #c08a52;
+  --px-paper-a: #fbf3dc; --px-paper-b: #f4ead0; --px-paper-c: #efe5c9; --px-paper-d: #e8ddbf; --px-paper-motif: #e3b8a0; --px-paper-motif-soft: #eed8c4; --px-paper-shade: #e6d9b8;
+  --px-panel: #7cc0a6; --px-panel-hi: #a4dcc4; --px-panel-sh: #4f9480; --px-rail-hi: #c8ecd8; --px-rail-sh: #5aa08a; --px-base: #3f7a68; --px-base-hi: #6aa894;
+  --px-trim: #d9c49a; --px-trim-hi: #f2e2bc; --px-trim-top: #c4ad80; --px-trim-top-b: #b39c70; --px-corner: #d2bf96;
+  --px-frame: #ffffff; --px-frame-hi: #ffffff; --px-sill: #dcd0b6; --px-sill-hi: #fff8e6; --px-rod: #8a5a30; --px-rod-hi: #c08850;
+  --px-curtain: #e8684a; --px-curtain-hi: #f69a74; --px-curtain-sh: #b8452e;
+  --px-frame-dark: #8a5a30; --px-frame-dark-hi: #c08850; --px-poster-sky: #ffe9a8; --px-poster-sky-hi: #fff4cc; --px-poster-sun: #ff8a3d; --px-poster-hill: #6cc455; --px-poster-hill-dark: #3f9a40;
+  --px-cork: #d4a464; --px-cork-dark: #b8864a; --px-ink-soft: #8890a8;
+  --px-sun: rgb(255 246 200 / 0.42); --px-shadow: rgb(70 36 20 / 0.24);
+  --px-wood-top: #eaa456; --px-wood-hi: #ffd391; --px-wood-grain: #d68e44; --px-wood-front: #c4743a; --px-wood-side: #a85e2c; --px-wood-side-hi: #b8682f;
+  --px-wood-shadow: #8e4c22; --px-wood-panel: #98521f; --px-wood-line: #5a2c10; --px-knob: #ffd75e;
+  --px-metal: #5f7088; --px-metal-hi: #8494ac; --px-metal-dark: #3f4c62; --px-metal-line: #2c3446; --px-key: #d6dae6; --px-key-dark: #9aa2b8; --px-key-edge: #7a8298;
+  --px-screen-off: #1e2a3c; --px-screen-glint: #3c5070; --px-screen-on: #dcf4ff; --px-screen-on-hi: #f2fbff; --px-screen-ink: #2f5088; --px-screen-ink-soft: #8ea8cc; --px-scan: #60d0ff;
+  --px-chair: #d64a4a; --px-chair-hi: #f47c6c; --px-chair-dark: #a03030; --px-chair-line: #5e1a22;
+  --px-leaf: #4cb84a; --px-leaf-hi: #9ae05a; --px-leaf-dark: #2e8a3a; --px-leaf-deep: #1f6a30; --px-leaf-line: #164a24;
+  --px-pot: #d06a3a; --px-pot-hi: #f09664; --px-pot-sh: #a24c26; --px-pot-rim: #8a3e1e;
+  --px-water: #8ad8ff; --px-water-dark: #3e9ad8; --px-cooler: #f6f6fc; --px-cooler-shade: #c4c8d8;
+  --px-lamp: #ffe38a; --px-lamp-sh: #e8b850;
+  --px-person-line: #3a2438; --px-ink: #2c2234;
+  --px-plate: #fff7de; --px-plate-hi: #ffffff; --px-plate-shade: #ead8a8; --px-plate-ink: #2c2234; --px-plate-border: #5a2c10; --px-plate-base: #6e3a16; --px-plate-base-hi: #a8642e;
+  --px-rug-base: #f0d8b0; --px-rug-light: #fff6e0; --px-rug-line: rgb(90 44 16 / 0.55);
+  --px-panel-b: #74b89e; --px-path: #ecd193; --px-path-sh: #dcbb78; --px-path-edge: #c39a5a; --px-path-dot: #c9a868; --px-path-hi: #fbe6b4;
+  --px-tree-far: #4fa64a; --px-tree-far-hi: #7cc85a; --px-tree-far-dark: #337a38; --px-mountain: #8a9cc0; --px-mountain-sh: #6f80a6; --px-snow: #f4f8ff;
+  --px-wood-front-line: #ad6430; --px-wood-side-line: #924f22; --px-pot-line: #6a2c14; --px-trunk: #8a5a30; --px-trunk-hi: #b07a44; --px-soil: #6a4426; --px-frame-sh: #c9bfa6; --px-flower-red: #e2483e; --px-flower-yellow: #f2b81e; --px-knob-hi: #fff0a0; --px-lamp-hi: #fff4c0; --px-plate-base-sh: #4a240c;
+}
+.mhq-night .mhq-pixel {
+  --px-floor-a: #8c6440; --px-floor-b: #84603c; --px-floor-c: #946c46; --px-floor-hi: #a8805a; --px-floor-sh: #6a4a2c; --px-floor-grain: #7a5634;
+  --px-seam: #4e341c; --px-floor-edge: #604228;
+  --px-paper-a: #4c4a64; --px-paper-b: #46445e; --px-paper-c: #42405a; --px-paper-d: #3c3a54; --px-paper-motif: #6a5874; --px-paper-motif-soft: #585070; --px-paper-shade: #3e3c56;
+  --px-panel: #3c6c62; --px-panel-hi: #528a7c; --px-panel-sh: #284c44; --px-rail-hi: #6a9c8c; --px-rail-sh: #2e564c; --px-base: #1e3a32; --px-base-hi: #345e52;
+  --px-trim: #6c6484; --px-trim-hi: #8a82a2; --px-trim-top: #5e5676; --px-trim-top-b: #544c6c; --px-corner: #625a7a;
+  --px-frame: #c8cce0; --px-frame-hi: #e0e4f4; --px-sill: #8a8ca4; --px-sill-hi: #a8aac0; --px-rod: #5a3a20; --px-rod-hi: #7a5230;
+  --px-curtain: #a84838; --px-curtain-hi: #c86a54; --px-curtain-sh: #7c3024;
+  --px-frame-dark: #5a3a20; --px-frame-dark-hi: #7a5230; --px-poster-sky: #6c5c84; --px-poster-sky-hi: #7c6c94; --px-poster-sun: #e07838; --px-poster-hill: #3e8248; --px-poster-hill-dark: #2a5e34;
+  --px-cork: #8a6440; --px-cork-dark: #6e4e30; --px-ink-soft: #8088a0;
+  --px-sun: rgb(190 200 255 / 0.10); --px-shadow: rgb(0 0 0 / 0.28);
+  --px-wood-top: #b0743c; --px-wood-hi: #d09458; --px-wood-grain: #9c6430; --px-wood-front: #8a5024; --px-wood-side: #70401c; --px-wood-side-hi: #7c4820;
+  --px-wood-shadow: #5a3214; --px-wood-panel: #643814; --px-wood-line: #1c0e04; --px-knob: #d8b448;
+  --px-metal: #48546a; --px-metal-hi: #5e6c84; --px-metal-dark: #2c3444; --px-metal-line: #12161e; --px-key: #9aa0b2; --px-key-dark: #6a7084; --px-key-edge: #4c5264;
+  --px-screen-off: #0c121c; --px-screen-glint: #24304a; --px-screen-on: #b8e0f0; --px-screen-on-hi: #cceaf6; --px-screen-ink: #284070; --px-screen-ink-soft: #6a84a8;
+  --px-chair: #a43a3a; --px-chair-hi: #c45a50; --px-chair-dark: #742424; --px-chair-line: #2e0c12;
+  --px-leaf: #3a9040; --px-leaf-hi: #6ab048; --px-leaf-dark: #246a30; --px-leaf-deep: #184c22; --px-leaf-line: #0c2a12;
+  --px-pot: #a85030; --px-pot-hi: #c87048; --px-pot-sh: #7c3a20; --px-pot-rim: #5a2810;
+  --px-cooler: #b8bccc; --px-cooler-shade: #8a8ea0; --px-lamp: #ffd86a; --px-lamp-sh: #c89838;
+  --px-person-line: #160c16; --px-ink: #0c0810;
+  --px-plate: #e8dcc0; --px-plate-hi: #f6eedc; --px-plate-shade: #c8b890; --px-plate-ink: #201828; --px-plate-border: #1c0e04; --px-plate-base: #4a2810; --px-plate-base-hi: #6e4220;
+  --px-rug-base: #6a5440; --px-rug-light: #8c7860; --px-rug-line: rgb(0 0 0 / 0.45);
+  --px-panel-b: #36625a; --px-path: #8a744a; --px-path-sh: #7a6440; --px-path-edge: #5e4a2c; --px-path-dot: #6e5a38; --px-path-hi: #a08a5e;
+  --px-tree-far: #2f6a34; --px-tree-far-hi: #46864a; --px-tree-far-dark: #1e4a24; --px-mountain: #4a5678; --px-mountain-sh: #3a4464; --px-snow: #b8c4dc;
+  --px-wood-front-line: #7a4620; --px-wood-side-line: #623816; --px-pot-line: #3a160a; --px-trunk: #5a3a20; --px-trunk-hi: #74502c; --px-soil: #3a2414; --px-frame-sh: #4a4660; --px-flower-red: #b83a32; --px-flower-yellow: #c89418; --px-knob-hi: #e8d070; --px-lamp-hi: #ffe8a0; --px-plate-base-sh: #2a1406;
+}
+.mhq-pixel .mhq-px-hl { opacity: 0; transition: opacity 0.15s; }
+.mhq-pixel .mhq-desk:hover .mhq-px-hl, .mhq-pixel .mhq-desk:focus-visible .mhq-px-hl { opacity: 0.8; }
+.mhq-pixel .mhq-px-hl-on { opacity: 1; }
+.mhq-pixel .mhq-px-sun-warm { filter: sepia(0.6) saturate(1.6); }
+@media (prefers-reduced-motion: no-preference) {
+  /* pixel art moves in whole pixels: hands tap now and then (decoration), eyes blink; scan = a real sync running */
+  .mhq-pixel .mhq-px-type { animation: mhq-px-type 7s steps(1, end) infinite; }
+  .mhq-pixel .mhq-px-type-busy { animation: mhq-px-type-busy 0.36s steps(1, end) infinite; }
+  .mhq-pixel .mhq-px-blink { animation: mhq-px-blink 6s steps(1, end) infinite; }
+  .mhq-pixel .mhq-px-scan { animation: mhq-px-scan 1.6s steps(9, end) infinite; }
+  .mhq-pixel .mhq-px-blink-soft { animation: mhq-px-blink-soft 1.2s steps(1, end) infinite; }
+  .mhq-pixel .mhq-px-led { animation: mhq-px-blink-soft 0.5s steps(1, end) infinite; }
+  /* a walk to the water cooler (decoration): legs and arms swing from the hip / shoulder */
+  .mhq-pixel .mhq-px-leg-a { animation: mhq-px-swing 0.42s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 0; }
+  .mhq-pixel .mhq-px-leg-b { animation: mhq-px-swing 0.42s ease-in-out infinite alternate-reverse; transform-box: fill-box; transform-origin: 50% 0; }
+  .mhq-pixel .mhq-px-arm-a { animation: mhq-px-swing-arm 0.42s ease-in-out infinite alternate-reverse; transform-box: fill-box; transform-origin: 50% 0; }
+  .mhq-pixel .mhq-px-arm-b { animation: mhq-px-swing-arm 0.42s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 0; }
+}
+@keyframes mhq-px-swing { from { transform: rotate(-15deg); } to { transform: rotate(15deg); } }
+@keyframes mhq-px-swing-arm { from { transform: rotate(-12deg); } to { transform: rotate(12deg); } }
+@keyframes mhq-px-blink-soft { 0% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes mhq-px-type { 0%, 70%, 100% { transform: translateY(0); } 72%, 76%, 80%, 84% { transform: translateY(-1px); } 74%, 78%, 82%, 86% { transform: translateY(0); } }
+@keyframes mhq-px-type-busy { 0% { transform: translateY(0); } 50% { transform: translateY(-1px); } }
+@keyframes mhq-px-blink { 0%, 96% { opacity: 1; } 97%, 99% { opacity: 0; } }
+@keyframes mhq-px-scan { from { transform: translateY(0); } to { transform: translateY(18px); } }
+.mhq-desk:focus-visible .mhq-rug { opacity: 0.55; }
+.mhq-desk:hover .mhq-rug { opacity: 0.32; }
+@media (prefers-reduced-motion: no-preference) {
+  /* typing now and then (decoration — not an operation) */
+  .mhq-office .mhq-type { animation: mhq-type 9s ease-in-out infinite; transform-box: fill-box; }
+  .mhq-office .mhq-blink { animation: mhq-blink 9s steps(2) infinite; }
+  /* real activity only: a sync job is running / Claude is working */
+  .mhq-office .mhq-scan { animation: mhq-scan 1.6s linear infinite; }
+  .mhq-office .mhq-pulse { animation: mhq-pulse 1.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .mhq-office .mhq-leg-a { animation: mhq-leg 0.55s ease-in-out infinite alternate; transform-box: view-box; }
+  .mhq-office .mhq-leg-b { animation: mhq-leg 0.55s ease-in-out infinite alternate-reverse; transform-box: view-box; }
+  .mhq-office .mhq-arm-a { animation: mhq-arm 0.55s ease-in-out infinite alternate; transform-box: view-box; }
+  .mhq-office .mhq-arm-b { animation: mhq-arm 0.55s ease-in-out infinite alternate-reverse; transform-box: view-box; }
+  /* idle colleagues (decoration): chatting takes turns (5 s cycle, the partner half a cycle later), ping-pong swings */
+  .mhq-office .mhq-talk { animation: mhq-talk 12s ease-in-out infinite both; }
+  .mhq-office .mhq-gesture { animation: mhq-gesture 12s ease-in-out infinite both; transform-box: view-box; }
+  .mhq-office .mhq-pixel .mhq-gesture { transform-box: fill-box; transform-origin: 50% 0; }
+  .mhq-office .mhq-paddle { animation: mhq-paddle 1.3s ease-in-out infinite; transform-box: view-box; }
+  .mhq-office .mhq-sway { animation: mhq-sway 7s ease-in-out infinite alternate; transform-box: view-box; }
+  .mhq-office .mhq-steam { animation: mhq-steam 2.6s ease-out infinite; transform-box: fill-box; }
+  .mhq-office .mhq-led { animation: mhq-led 2.4s steps(2) infinite; }
+  .mhq-office .mhq-led-fast { animation: mhq-led 0.5s steps(2) infinite; }
+  .mhq-office .mhq-twinkle { animation: mhq-twinkle 4s ease-in-out infinite; }
+  .mhq-office .mhq-cloud { animation-name: mhq-cloud; animation-timing-function: linear; animation-iteration-count: infinite; }
+  .mhq-office .mhq-rain { animation: mhq-rain 0.75s linear infinite; }
+  .mhq-office .mhq-snow { animation-name: mhq-snow; animation-timing-function: linear; animation-iteration-count: infinite; }
+  .mhq-office .mhq-lightning { animation: mhq-lightning 9s linear infinite; }
+  .mhq-office .mhq-door-leaf { transition: transform 0.4s ease; transform-box: fill-box; transform-origin: left center; }
+  .mhq-office .mhq-door:hover .mhq-door-leaf, .mhq-office .mhq-door:focus-visible .mhq-door-leaf { transform: scaleX(0.72) skewY(-10deg); }
+  .mhq-office .mhq-eyes { animation: mhq-eyes 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .mhq-office .mhq-type-busy { animation: mhq-type 1.2s ease-in-out infinite; transform-box: fill-box; }
+  .mhq-office .mhq-step { animation: mhq-step 0.5s ease-in-out infinite alternate; transform-box: fill-box; }
+  .mhq-office .mhq-step-b { animation: mhq-step 0.5s ease-in-out infinite alternate-reverse; transform-box: fill-box; }
+  /* loading dock: boxes going into the truck (only while a confirmed fulfillment is being loaded) */
+  .mhq-office .mhq-load { animation: mhq-load 3.4s ease-in-out infinite both; }
+}
+@keyframes mhq-load { 0% { transform: translate(0, 0); opacity: 0; } 12%, 80% { opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+@keyframes mhq-eyes { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+@keyframes mhq-leg { from { transform: rotate(-20deg); } to { transform: rotate(20deg); } }
+@keyframes mhq-arm { from { transform: rotate(24deg); } to { transform: rotate(-24deg); } }
+@keyframes mhq-talk { 0%, 4% { opacity: 0; } 9%, 36% { opacity: 1; } 42%, 100% { opacity: 0; } }
+@keyframes mhq-gesture { 0%, 12%, 34%, 100% { transform: rotate(0deg); } 18%, 28% { transform: rotate(16deg); } }
+@keyframes mhq-paddle { 0%, 100% { transform: rotate(-18deg); } 50% { transform: rotate(14deg); } }
+@keyframes mhq-sway { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
+@keyframes mhq-steam { 0% { transform: translateY(0); opacity: 0.7; } 100% { transform: translateY(-14px); opacity: 0; } }
+@keyframes mhq-led { 0% { opacity: 1; } 50% { opacity: 0.25; } }
+@keyframes mhq-twinkle { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.3; } }
+@keyframes mhq-cloud { from { transform: translateX(-1400px); } to { transform: translateX(1400px); } }
+@keyframes mhq-rain { from { transform: translate(0, -40px); opacity: 0; } 20% { opacity: 0.8; } to { transform: translate(-14px, 120px); opacity: 0; } }
+@keyframes mhq-snow { from { transform: translate(0, -60px); opacity: 0; } 15% { opacity: 1; } 50% { transform: translate(14px, 80px); } to { transform: translate(-6px, 220px); opacity: 0; } }
+@keyframes mhq-lightning { 0%, 91%, 93%, 95%, 100% { opacity: 0; } 92%, 94% { opacity: 0.55; } }
+@keyframes mhq-step { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+@keyframes mhq-type { 0%, 80%, 100% { transform: translate(0, 0); } 83%, 89%, 95% { transform: translate(-1px, -1.5px); } 86%, 92% { transform: translate(0, 0.5px); } }
+@keyframes mhq-blink { 0%, 85% { opacity: 1; } 86%, 100% { opacity: 0.25; } }
+@keyframes mhq-scan { 0% { transform: translateY(0); opacity: 0.9; } 100% { transform: translateY(26px); opacity: 0.2; } }
+@keyframes mhq-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }

@@ -1,7 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, X, Loader2, LayoutList, LayoutGrid, AlignJustify } from "lucide-react"
+import { Plus, X, Loader2, LayoutList, LayoutGrid, AlignJustify, Scale } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ComparativeCard } from "@/components/cards/comparative-card"
 import { ComparativeCardGrid } from "@/components/cards/comparative-card-grid"
 import { ComparativeCardMinimal } from "@/components/cards/comparative-card-minimal"
@@ -176,118 +179,129 @@ export function ComparativeAnalysis() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight mb-1">Análisis Comparativo</h2>
-          <p className="text-muted-foreground">Compara coches importados vs coches de España ({comparisons.length})</p>
+          <h2 className="text-2xl font-semibold tracking-tight mb-1">Análisis comparativo</h2>
+          <p className="text-muted-foreground">
+            Compara coches importados con coches de España (<span className="tabular">{comparisons.length}</span>)
+          </p>
         </div>
-        <div className="flex items-center justify-between mt-4">
-           {/* View Switcher */}
-           <div className="flex bg-secondary/50 rounded-lg p-1 border border-border">
+        <div className="flex items-center gap-2">
+          {/* View Switcher */}
+          <div className="inline-flex h-9 items-center rounded-md border bg-muted p-0.5">
+            {([
+              { mode: "detailed", icon: LayoutList, title: "Vista detallada" },
+              { mode: "grid", icon: LayoutGrid, title: "Vista compacta" },
+              { mode: "minimal", icon: AlignJustify, title: "Vista minimalista" },
+            ] as const).map(({ mode, icon: Icon, title }) => (
               <button
-                onClick={() => setViewMode("detailed")}
-                className={`p-1.5 rounded-md transition-colors ${viewMode === "detailed" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                title="Vista Detallada"
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-[5px] transition-colors ${
+                  viewMode === mode ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                }`}
+                title={title}
+                aria-pressed={viewMode === mode}
               >
-                <LayoutList className="w-4 h-4" />
+                <Icon className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                title="Vista Compacta"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode("minimal")}
-                className={`p-1.5 rounded-md transition-colors ${viewMode === "minimal" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                title="Vista Minimalista"
-              >
-                <AlignJustify className="w-4 h-4" />
-              </button>
-           </div>
-           <button
-             onClick={() => setShowForm(!showForm)}
-             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium text-sm sm:text-base"
-           >
-             <Plus className="w-5 h-5" />
-             <span className="hidden sm:inline">Nueva Comparación</span>
-           </button>
+            ))}
+          </div>
+          <Button onClick={() => setShowForm(!showForm)}>
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Nueva comparación</span>
+          </Button>
         </div>
       </div>
 
       {/* Formulario de nueva comparación */}
       {showForm && (
-        <div className="bg-card border border-border rounded-lg p-6 space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Nueva Comparación</h3>
-            <button onClick={() => setShowForm(false)} className="p-1 hover:bg-secondary rounded transition-colors">
-              <X className="w-5 h-5" />
-            </button>
+        <div className="rounded-xl border bg-card p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                <Scale className="h-4 w-4 text-primary" />
+              </div>
+              <h3 className="font-semibold">Nueva comparación</h3>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              onClick={() => setShowForm(false)}
+              title="Cerrar"
+            >
+              <X className="w-4 h-4" />
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Coche Importado</label>
-              <select
+            <div className="space-y-1.5">
+              <Label className="text-[13px]">Coche importado</Label>
+              <Select
                 value={newComparison.importedCarId}
-                onChange={(e) => setNewComparison({ ...newComparison, importedCarId: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                onValueChange={(value) => setNewComparison({ ...newComparison, importedCarId: value })}
               >
-                <option value="">Selecciona un coche importado</option>
-                {importedCars.map((car) => (
-                  <option key={car.id} value={car.id}>
-                    {car.brand} {car.model} ({car.year})
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona un coche importado" />
+                </SelectTrigger>
+                <SelectContent>
+                  {importedCars.map((car) => (
+                    <SelectItem key={car.id} value={car.id}>
+                      {car.brand} {car.model} ({car.year})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Coche España</label>
-              <select
+            <div className="space-y-1.5">
+              <Label className="text-[13px]">Coche España</Label>
+              <Select
                 value={newComparison.spainCarId}
-                onChange={(e) => setNewComparison({ ...newComparison, spainCarId: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                onValueChange={(value) => setNewComparison({ ...newComparison, spainCarId: value })}
               >
-                <option value="">Selecciona un coche de España</option>
-                {spainCars.map((car) => (
-                  <option key={car.id} value={car.id}>
-                    {car.brand} {car.model} ({car.year})
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona un coche de España" />
+                </SelectTrigger>
+                <SelectContent>
+                  {spainCars.map((car) => (
+                    <SelectItem key={car.id} value={car.id}>
+                      {car.brand} {car.model} ({car.year})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={() => setShowForm(false)}
-              className="flex-1 px-4 py-2 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-colors font-medium"
-            >
+          <div className="flex justify-end gap-2 border-t pt-4">
+            <Button variant="outline" onClick={() => setShowForm(false)}>
               Cancelar
-            </button>
-            <button
-              onClick={addComparison}
-              className="flex-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
-            >
-              Crear Comparación
-            </button>
+            </Button>
+            <Button onClick={addComparison}>
+              Crear comparación
+            </Button>
           </div>
         </div>
       )}
 
       {/* Comparativas */}
       {comparisons.length === 0 ? (
-        <div className="bg-card border border-border rounded-lg p-12 text-center">
-          <p className="text-muted-foreground mb-4">No hay comparativas aún</p>
-          <button onClick={() => setShowForm(true)} className="text-primary hover:underline font-medium">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-12 text-center">
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+            <Scale className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm text-muted-foreground">No hay comparativas aún</p>
+          <Button size="sm" className="mt-4" onClick={() => setShowForm(true)}>
+            <Plus className="w-4 h-4" />
             Crea tu primera comparación
-          </button>
+          </Button>
         </div>
       ) : (
         <div className={
            viewMode === "grid" 
-             ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" 
-             : "space-y-4"
+             ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+             : viewMode === "minimal" ? "space-y-2" : "space-y-4"
         }>
           {comparisons.map((comp) => {
             if (!comp.importedCar || !comp.spainCar) return null

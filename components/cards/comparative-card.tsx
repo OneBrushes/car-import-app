@@ -1,6 +1,8 @@
 "use client"
 
-import { X, ExternalLink } from "lucide-react"
+import { Trash2, ExternalLink, ArrowRight } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 interface ComparativeCardProps {
   id: string
@@ -9,6 +11,8 @@ interface ComparativeCardProps {
   steringAdjustment: number
   onDelete: () => void
 }
+
+const eur = (value: number) => `${Number(value || 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })} €`
 
 export function ComparativeCard({ id, importedCar, spainCar, steringAdjustment, onDelete }: ComparativeCardProps) {
   // Calcular costes
@@ -24,39 +28,31 @@ export function ComparativeCard({ id, importedCar, spainCar, steringAdjustment, 
 
   // Lógica de valoración
   let status = {
-    label: "MALA OPCIÓN",
-    color: "destructive",
-    icon: "✗",
-    bg: "bg-destructive/10",
-    border: "border-destructive",
+    label: "Mala opción",
+    badge: "bg-destructive/10 text-destructive",
+    border: "border-destructive/30",
     text: "text-destructive",
   }
 
   if (profitPercentage > 50 || difference > 10000) {
     status = {
-      label: "UNICORNIO",
-      color: "purple-500",
-      icon: "🦄",
-      bg: "bg-purple-500/10",
-      border: "border-purple-500",
-      text: "text-purple-500",
+      label: "Unicornio",
+      badge: "bg-success text-success-foreground",
+      border: "border-success/40",
+      text: "text-success",
     }
   } else if (profitPercentage > 20 || difference > 5000) {
     status = {
-      label: "OCASIÓN MUY BUENA",
-      color: "emerald-500",
-      icon: "✓✓",
-      bg: "bg-emerald-500/10",
-      border: "border-emerald-500",
-      text: "text-emerald-500",
+      label: "Ocasión muy buena",
+      badge: "bg-success/15 text-success",
+      border: "border-success/30",
+      text: "text-success",
     }
   } else if (profitPercentage > 10 || difference > 2000) {
     status = {
-      label: "BUENA OPCIÓN",
-      color: "success",
-      icon: "✓",
-      bg: "bg-success/10",
-      border: "border-success",
+      label: "Buena opción",
+      badge: "bg-success/10 text-success",
+      border: "border-success/30",
       text: "text-success",
     }
   } else if (
@@ -64,65 +60,86 @@ export function ComparativeCard({ id, importedCar, spainCar, steringAdjustment, 
     (difference >= 1000 && difference <= 2000)
   ) {
     status = {
-      label: "OPCIÓN VÁLIDA PERO MEJORABLE",
-      color: "blue-500",
-      icon: "!",
-      bg: "bg-blue-500/10",
-      border: "border-blue-500",
-      text: "text-blue-500",
+      label: "Válida pero mejorable",
+      badge: "bg-warning/10 text-warning",
+      border: "border-warning/30",
+      text: "text-warning",
     }
   } else if (
     (profitPercentage >= 0 && profitPercentage < 5) &&
     (difference >= 0 && difference < 1000)
   ) {
     status = {
-      label: "MUY JUSTO",
-      color: "orange-500",
-      icon: "⚠",
-      bg: "bg-orange-500/10",
-      border: "border-orange-500",
-      text: "text-orange-500",
+      label: "Muy justo",
+      badge: "bg-warning/10 text-warning",
+      border: "border-warning/30",
+      text: "text-warning",
     }
   } else if (difference > 0) {
     status = {
-      label: "BUENA OPCIÓN",
-      color: "success",
-      icon: "✓",
-      bg: "bg-success/10",
-      border: "border-success",
+      label: "Buena opción",
+      badge: "bg-success/10 text-success",
+      border: "border-success/30",
       text: "text-success",
     }
   }
 
   return (
-    <div
-      className={`rounded-lg overflow-hidden border-2 transition-all ${status.border} ${status.bg.replace("/10", "/5")
-        } to-transparent bg-gradient-to-r`}
-    >
-      <div className="p-6 space-y-6">
-        {/* Header con botón eliminar */}
-        <div className="flex items-start justify-between">
-          <h3 className="text-lg font-semibold">Comparativa #{id}</h3>
-          <button onClick={onDelete} className="p-1 hover:bg-destructive/10 text-destructive rounded transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+    <div className={`rounded-xl border bg-card shadow-xs transition-all hover:shadow-md ${status.border}`}>
+      <div className="p-5 space-y-4">
+        {/* Encabezado */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={`border-transparent ${status.badge}`}>{status.label}</Badge>
+              {hasRightSteering && (
+                <Badge variant="secondary" className="border-transparent">Volante a la derecha</Badge>
+              )}
+            </div>
+            <p className="mt-2 truncate font-semibold leading-snug">
+              {importedCar.brand} {importedCar.model}
+              <span className="text-muted-foreground font-normal"> vs </span>
+              {spainCar.brand} {spainCar.model}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            onClick={onDelete}
+            title="Eliminar comparativa"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
 
-        {/* Grid de comparación */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-          {/* Coche Importado - Lado Izquierdo */}
-          <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <h4 className="text-sm text-muted-foreground">Coche Importado</h4>
-                <h3 className="text-lg font-bold">
-                  {importedCar.brand} {importedCar.model}
-                </h3>
-                <p className="text-xs text-muted-foreground">{importedCar.year}</p>
-              </div>
-              <span className="text-2xl">🚗</span>
+        {/* Comparación de precios */}
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-stretch">
+          {/* Coche importado */}
+          <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Importado</p>
+              <p className="truncate font-medium">{importedCar.brand} {importedCar.model}</p>
+              <p className="tabular text-xs text-muted-foreground">
+                {[importedCar.year, importedCar.mileage ? `${Number(importedCar.mileage).toLocaleString('es-ES')} km` : null, importedCar.cv ? `${importedCar.cv} CV` : null]
+                  .filter(Boolean)
+                  .join(" · ") || "Sin datos"}
+              </p>
             </div>
-
+            <div className="space-y-1.5 border-t pt-3 text-[13px]">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Precio base</span>
+                <span className="tabular">{eur(importedCar.price)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Gastos totales</span>
+                <span className="tabular">{eur(importedCar.totalExpenses || 0)}</span>
+              </div>
+            </div>
+            <div className="flex items-end justify-between border-t pt-3">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Coste total</span>
+              <span className="tabular text-lg font-semibold tracking-tight">{eur(importedTotal)}</span>
+            </div>
             {importedCar.url && (
               <a
                 href={importedCar.url}
@@ -134,36 +151,39 @@ export function ComparativeCard({ id, importedCar, spainCar, steringAdjustment, 
                 Ver anuncio original
               </a>
             )}
-
-            <div className="pt-2 border-t border-border space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Precio base:</span>
-                <span className="font-semibold">{importedCar.price}€</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Gastos totales:</span>
-                <span className="font-semibold">{importedCar.totalExpenses || 0}€</span>
-              </div>
-              <div className="flex justify-between text-sm pt-2 border-t border-border/50">
-                <span className="font-bold">COSTE TOTAL:</span>
-                <span className="text-lg font-bold text-primary">{importedTotal}€</span>
-              </div>
-            </div>
           </div>
 
-          {/* Coche España - Lado Derecho */}
-          <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <h4 className="text-sm text-muted-foreground">Coche España</h4>
-                <h3 className="text-lg font-bold">
-                  {spainCar.brand} {spainCar.model}
-                </h3>
-                <p className="text-xs text-muted-foreground">{spainCar.year}</p>
-              </div>
-              <span className="text-2xl">🚗</span>
-            </div>
+          <div className="hidden sm:flex items-center justify-center text-muted-foreground">
+            <ArrowRight className="w-4 h-4" />
+          </div>
 
+          {/* Coche España */}
+          <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">España</p>
+              <p className="truncate font-medium">{spainCar.brand} {spainCar.model}</p>
+              <p className="tabular text-xs text-muted-foreground">
+                {[spainCar.year, spainCar.mileage ? `${Number(spainCar.mileage).toLocaleString('es-ES')} km` : null, spainCar.cv ? `${spainCar.cv} CV` : null]
+                  .filter(Boolean)
+                  .join(" · ") || "Sin datos"}
+              </p>
+            </div>
+            <div className="space-y-1.5 border-t pt-3 text-[13px]">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Precio base</span>
+                <span className="tabular">{eur(spainCar.price)}</span>
+              </div>
+              {hasRightSteering && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Ajuste volante derecha</span>
+                  <span className="tabular text-destructive">-{eur(steringAdjustment)}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-end justify-between border-t pt-3">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Precio referencia</span>
+              <span className="tabular text-lg font-semibold tracking-tight">{eur(spainAdjustedPrice)}</span>
+            </div>
             {spainCar.url && (
               <a
                 href={spainCar.url}
@@ -175,71 +195,26 @@ export function ComparativeCard({ id, importedCar, spainCar, steringAdjustment, 
                 Ver anuncio original
               </a>
             )}
-
-            <div className="pt-2 border-t border-border space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Precio base:</span>
-                <span className="font-semibold">{spainCar.price}€</span>
-              </div>
-              {hasRightSteering && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Ajuste volante derecha:</span>
-                  <span className="font-semibold text-destructive">-{steringAdjustment}€</span>
-                </div>
-              )}
-              <div className="flex justify-between text-sm pt-2 border-t border-border/50">
-                <span className="font-bold">PRECIO REFERENCIA:</span>
-                <span className="text-lg font-bold text-success">{spainAdjustedPrice}€</span>
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Resultado central - Rentabilidad */}
-        <div
-          className={`rounded-lg p-6 text-center border-2 ${status.bg} ${status.border}`}
-        >
-          <div className="mb-3">
-            <p className={`text-2xl font-bold ${status.text}`}>
-              {status.icon} {status.label}
+        {/* Resultado */}
+        <div className="grid grid-cols-2 gap-3 border-t pt-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              {difference > 0 ? "Ganancia" : "Pérdida"}
+            </p>
+            <p className={`tabular text-2xl font-semibold tracking-tight ${status.text}`}>
+              {difference > 0 ? "+" : ""}
+              {eur(difference)}
             </p>
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Rentabilidad</p>
-              <p className={`text-2xl font-bold ${status.text}`}>
-                {profitPercentage > 0 ? "+" : ""}
-                {profitPercentage.toFixed(1)}%
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">{difference > 0 ? "Ganancias" : "Pérdida"}</p>
-              <p className={`text-2xl font-bold ${status.text}`}>
-                {difference > 0 ? "+" : ""}
-                {difference.toFixed(0)}€
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Datos adicionales */}
-        <div className="grid grid-cols-4 gap-4 text-center">
-          <div>
-            <p className="text-xs text-muted-foreground">km (imp)</p>
-            <p className="font-semibold">{(importedCar.mileage || 0).toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">km (esp)</p>
-            <p className="font-semibold">{(spainCar.mileage || 0).toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">CV (imp)</p>
-            <p className="font-semibold">{importedCar.cv || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">CV (esp)</p>
-            <p className="font-semibold">{spainCar.cv || "—"}</p>
+          <div className="text-right">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Rentabilidad</p>
+            <p className={`tabular text-2xl font-semibold tracking-tight ${status.text}`}>
+              {profitPercentage > 0 ? "+" : ""}
+              {profitPercentage.toFixed(1)}%
+            </p>
           </div>
         </div>
       </div>

@@ -10,14 +10,14 @@ export function HighlightsSection({ boughtCars }: HighlightsSectionProps) {
   const calculateHighlights = () => {
     const soldCars = boughtCars.filter((car) => car.status === "sold" && car.sellPrice)
 
-    let mostProfitable = null
-    let bestSale = null
-    let fastestSale = null
+    let mostProfitable: { car: any; percentage: number } | null = null
+    let bestSale: { car: any; profit: number } | null = null
+    let fastestSale: { car: any; days: number } | null = null
     let maxProfitability = Number.NEGATIVE_INFINITY
     let maxProfit = Number.NEGATIVE_INFINITY
     let minDays = Number.POSITIVE_INFINITY
 
-    soldCars.forEach((car) => {
+    for (const car of soldCars) {
       const totalInvested =
         car.initialPrice + car.initialExpenses + (car.expenses?.reduce((sum: number, e: any) => sum + e.amount, 0) || 0)
       const profit = car.sellPrice - totalInvested
@@ -40,7 +40,7 @@ export function HighlightsSection({ boughtCars }: HighlightsSectionProps) {
         minDays = days
         fastestSale = { car, days }
       }
-    })
+    }
 
     return { mostProfitable, bestSale, fastestSale }
   }
@@ -95,21 +95,21 @@ interface HighlightCardProps {
 
 function HighlightCard({ icon: Icon, title, car, metric, metricLabel }: HighlightCardProps) {
   return (
-    <div className="bg-gradient-to-br from-primary/10 to-success/10 border border-primary/20 rounded-lg p-6 hover:border-primary/40 transition-colors">
+    <div className="bg-card border rounded-xl p-5 shadow-xs">
       <div className="flex items-start gap-3 mb-4">
-        <div className="p-2 bg-primary/20 rounded-lg">
-          <Icon className="w-5 h-5 text-primary" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+          <Icon className="w-4 h-4 text-primary" />
         </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-lg font-bold">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-muted-foreground">{title}</p>
+          <p className="truncate font-semibold">
             {car.brand} {car.model}
           </p>
         </div>
       </div>
-      <div className="pt-4 border-t border-border/30">
+      <div className="pt-3 border-t">
         <p className="text-xs text-muted-foreground mb-1">{metricLabel}</p>
-        <p className="text-2xl font-bold text-primary">{metric}</p>
+        <p className="tabular text-2xl font-semibold tracking-tight">{metric}</p>
       </div>
     </div>
   )

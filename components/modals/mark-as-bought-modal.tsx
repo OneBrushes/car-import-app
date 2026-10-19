@@ -1,25 +1,40 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
-import { X } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+export interface MarkAsBoughtData {
+  carId: string
+  datePurchased: string
+  price: number
+  expenses: number
+}
 
 interface MarkAsBoughtModalProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (data: any) => void
+  onSubmit: (data: MarkAsBoughtData) => void
+  /** Preseleccionar un coche (p. ej. al arrastrarlo a "Comprado" en el tablero) */
+  initialCarId?: string | null
 }
 
-export function MarkAsBoughtModal({ isOpen, onClose, onSubmit }: MarkAsBoughtModalProps) {
+const today = () => new Date().toISOString().split("T")[0]
+
+export function MarkAsBoughtModal({ isOpen, onClose, onSubmit, initialCarId }: MarkAsBoughtModalProps) {
   const { user, profile } = useAuth()
   const [carId, setCarId] = useState("")
-  const [datePurchased, setDatePurchased] = useState(new Date().toISOString().split("T")[0])
+  const [datePurchased, setDatePurchased] = useState(today())
+  const [price, setPrice] = useState("")
+  const [expenses, setExpenses] = useState("")
   const [importedCars, setImportedCars] = useState<any[]>([])
 
-  // Cargar coches importados desde Supabase
   useEffect(() => {
     const loadCars = async () => {
       if (!isOpen || !user) return
@@ -35,81 +50,95 @@ export function MarkAsBoughtModal({ isOpen, onClose, onSubmit }: MarkAsBoughtMod
       }
 
       const { data, error } = await query
-
-      if (!error && data) {
-        setImportedCars(data)
-      }
+      if (!error && data) setImportedCars(data)
     }
 
     loadCars()
   }, [isOpen, user])
 
-  if (!isOpen) return null
+  // Reiniciar al abrir
+  useEffect(() => {
+    if (!isOpen) return
+    setCarId("")
+    setDatePurchased(today())
+    setPrice("")
+    setExpenses("")
+  }, [isOpen])
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (carId) {
-      onSubmit({ carId, datePurchased })
-    }
+  // Preselección cuando ya están cargados los coches
+  useEffect(() => {
+    if (isOpen && initialCarId && importedCars.some(c => c.id === initialCarId)) selectCar(initialCarId)
+  }, [isOpen, initialCarId, importedCars])
+
+  const selectCar = (id: string) => {
+    setCarId(id)
+    const car = importedCars.find(c => c.id === id)
+    if (!car) return
+    const carPrice = Number(car.price) || 0
+    const totalCost = Number(car.total_cost) || carPrice
+    setPrice(String(carPrice))
+    setExpenses(String(Math.max(0, totalCost - carPrice)))
+  }
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (!carId) return
+    onSubmit({
+      carId,
+      datePurchased,
+      price: Number(price) || 0,
+      expenses: Number(expenses) || 0,
+    })
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-background rounded-lg w-full max-w-md shadow-xl border border-border">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border">
-          <h2 className="text-2xl font-bold">Marcar como Comprado</h2>
-          <button onClick={onClose} className="p-1 hover:bg-secondary rounded-lg transition-colors">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={open => { if (!open) onClose() }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Marcar como comprado</DialogTitle>
+          <DialogDescription>Pasa un coche de Importación a tu inventario.</DialogDescription>
+        </DialogHeader>
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Selecciona coche importado</label>
-            <select
-              value={carId}
-              onChange={(e) => setCarId(e.target.value)}
-              required
-              className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-            >
-              <option value="">Selecciona un coche</option>
-              {importedCars.map((car) => (
-                <option key={car.id} value={car.id}>
-                  {car.brand} {car.model} ({car.year}) - {car.finalPrice}€
-                </option>
-              ))}
-            </select>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-[13px]">Coche</Label>
+            <Select value={carId} onValueChange={selectCar}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecciona un coche" />
+              </SelectTrigger>
+              <SelectContent>
+                {importedCars.map((car) => (
+                  <SelectItem key={car.id} value={car.id}>
+                    {car.brand} {car.model} {car.year ? `(${car.year})` : ""}
+                    {car.total_cost ? ` · ${Number(car.total_cost).toLocaleString('es-ES')} €` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Fecha de compra</label>
-            <input
-              type="date"
-              value={datePurchased}
-              onChange={(e) => setDatePurchased(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-[13px]">Precio de compra (€)</Label>
+              <Input type="number" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[13px]">Gastos iniciales (€)</Label>
+              <Input type="number" inputMode="decimal" value={expenses} onChange={(e) => setExpenses(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[13px]">Fecha de compra</Label>
+            <Input type="date" value={datePurchased} onChange={(e) => setDatePurchased(e.target.value)} />
           </div>
         </form>
 
-        {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-border">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-colors font-medium"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSubmit}
-            className="flex-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
-          >
-            Marcar como Comprado
-          </button>
-        </div>
-      </div>
-    </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={() => handleSubmit()} disabled={!carId}>Marcar como comprado</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

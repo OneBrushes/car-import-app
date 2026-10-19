@@ -6,7 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "test": "vitest run",
+    "screenshots:garage": "node scripts/garage-screenshots.mjs screenshots"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -56,6 +58,7 @@
     "cmdk": "1.0.4",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.5.1",
+    "exceljs": "^4.4.0",
     "framer-motion": "^12.23.26",
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.12.1",
@@ -82,14 +85,18 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.0.3",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.9"
   }
 }

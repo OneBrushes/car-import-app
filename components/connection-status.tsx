@@ -49,16 +49,18 @@ export function ConnectionStatus() {
                     initial={{ y: -100, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: -100, opacity: 0 }}
-                    className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] bg-orange-500 text-white px-6 py-3 rounded-lg shadow-2xl flex items-center gap-3"
+                    role="status"
+                    aria-live="polite"
+                    className={`fixed top-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 rounded-full border bg-card px-3.5 py-1.5 text-sm shadow-md ${isOnline ? "border-warning/30 text-warning" : "border-destructive/30 text-destructive"}`}
                 >
                     {isOnline ? (
                         <>
-                            <RefreshCw className="w-5 h-5 animate-spin" />
-                            <span className="font-medium">Reconectando...</span>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            <span className="font-medium">Reconectando…</span>
                         </>
                     ) : (
                         <>
-                            <WifiOff className="w-5 h-5" />
+                            <WifiOff className="h-3.5 w-3.5" />
                             <span className="font-medium">Sin conexión a internet</span>
                         </>
                     )}

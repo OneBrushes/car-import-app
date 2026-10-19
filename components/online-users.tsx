@@ -6,6 +6,7 @@ import { useAuth } from '@/components/auth-provider'
 import { stringToColor } from '@/components/live-cursors'
 import { Users, MousePointerClick } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
     Popover,
     PopoverContent,
@@ -161,7 +162,7 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
             <Badge variant="secondary" className="h-5 px-1.5 text-xs">
                 {onlineUsers.length}
             </Badge>
-            <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-success rounded-full animate-pulse" />
         </button>
     )
 
@@ -174,30 +175,33 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
             <PopoverTrigger asChild>
                 {badgeContent}
             </PopoverTrigger>
-            <PopoverContent className="w-72 p-3" align="end">
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between border-b pb-2">
+            <PopoverContent className="w-72 p-0" align="end">
+                <div>
+                    <div className="flex items-center justify-between border-b px-3 py-2.5">
                         <div className="flex items-center gap-2">
-                            <h4 className="font-semibold text-sm">Usuarios Online</h4>
-                            <Badge variant="outline" className="text-xs">
+                            <h4 className="text-sm font-semibold">Usuarios conectados</h4>
+                            <Badge variant="secondary" className="tabular text-[11px]">
                                 {onlineUsers.length} {onlineUsers.length === 1 ? 'usuario' : 'usuarios'}
                             </Badge>
                         </div>
                         {role === 'super_admin' && (
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="icon-sm"
                                 onClick={toggleCursors}
                                 title={cursorsVisible ? "Ocultar radares" : "Mostrar radares"}
-                                className={`p-1.5 rounded-md transition-colors ${cursorsVisible ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"}`}
+                                aria-pressed={cursorsVisible}
+                                className={cursorsVisible ? "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary" : "text-muted-foreground"}
                             >
-                                <MousePointerClick className="w-4 h-4" />
-                            </button>
+                                <MousePointerClick className="h-4 w-4" />
+                            </Button>
                         )}
                     </div>
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto pt-1">
+                    <div className="max-h-[300px] space-y-0.5 overflow-y-auto p-1.5 scrollbar-thin">
                         {onlineUsers.map((onlineUser) => (
                             <div
                                 key={onlineUser.id}
-                                className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 transition-colors"
+                                className="flex items-center gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-accent"
                             >
                                 <div className="relative">
                                     <Avatar className="h-8 w-8">
@@ -206,7 +210,7 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
                                             {onlineUser.email.substring(0, 2).toUpperCase()}
                                         </AvatarFallback>
                                     </Avatar>
-                                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
+                                    <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-popover bg-success" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate" style={{ color: role === 'super_admin' ? stringToColor(onlineUser.id) : undefined }}>
@@ -218,7 +222,7 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
                                         <p className="text-xs text-muted-foreground">Tú</p>
                                     ) : (
                                         role === 'super_admin' && (
-                                            <p className="text-[10px] text-success font-semibold">{onlineUser.active_tab ? `Pestaña: ${onlineUser.active_tab.toUpperCase()}` : "Navegando..."}</p>
+                                            <p className="truncate text-xs text-muted-foreground">{onlineUser.active_tab ? `Pestaña: ${onlineUser.active_tab}` : "Navegando…"}</p>
                                         )
                                     )}
                                 </div>

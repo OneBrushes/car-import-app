@@ -20,9 +20,14 @@ import '@xyflow/react/dist/style.css';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Save, Plus, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Save, Plus, Trash2, Loader2 } from 'lucide-react';
 
-const defaultNodeStyle = { backgroundColor: 'hsl(var(--card))', color: 'hsl(var(--foreground))', borderColor: 'hsl(var(--border))' };
+// Los tokens del tema son colores directos (hex), no tripletas HSL: usar var() tal cual.
+const defaultNodeStyle = { backgroundColor: 'var(--card)', color: 'var(--card-foreground)', borderColor: 'var(--border)' };
 
 const initialNodes: Node[] = [
   { 
@@ -164,12 +169,33 @@ export function CompanyRoadmap({ role }: CompanyRoadmapProps) {
     setSelectedNode(null);
   };
 
+  const header = (
+    <div>
+      <h2 className="text-2xl font-semibold tracking-tight mb-1">Roadmap de la empresa</h2>
+      <p className="text-muted-foreground">
+        {isAdmin
+          ? "Flujo de trabajo de la importación. Haz doble clic en un nodo para editarlo."
+          : "Flujo de trabajo de la importación, paso a paso."}
+      </p>
+    </div>
+  );
+
   if (isLoading) {
-    return <div className="p-8 flex items-center justify-center">Cargando Roadmap...</div>;
+    return (
+      <div className="space-y-6 animate-in">
+        {header}
+        <div className="flex h-[60vh] items-center justify-center gap-2 rounded-xl border bg-card text-sm text-muted-foreground shadow-xs">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Cargando roadmap…
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full h-[80vh] border border-border rounded-xl overflow-hidden relative bg-background">
+    <div className="space-y-6 animate-in">
+    {header}
+    <div className="relative h-[75vh] w-full overflow-hidden rounded-xl border bg-card shadow-xs">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -182,64 +208,64 @@ export function CompanyRoadmap({ role }: CompanyRoadmapProps) {
         elementsSelectable={isAdmin}
         colorMode="system"
         fitView
-        className="bg-muted/10 text-foreground"
+        className="bg-background text-foreground"
       >
         <Controls />
         <MiniMap />
         <Background variant={"dots" as any} gap={12} size={1} />
-        
+
         {isAdmin && (
-          <Panel position="top-right" className="flex gap-2 p-2">
-            <Button onClick={handleAddNode} variant="outline" size="sm" className="gap-2">
-              <Plus className="w-4 h-4" /> Nodo
+          <Panel position="top-right" className="flex gap-2">
+            <Button onClick={handleAddNode} variant="outline" size="sm" className="bg-card">
+              <Plus className="h-4 w-4" /> Nodo
             </Button>
-            <Button onClick={handleSave} disabled={isSaving} size="sm" className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white">
-              <Save className="w-4 h-4" /> {isSaving ? "Guardando..." : "Guardar Mapa"}
+            <Button onClick={handleSave} disabled={isSaving} size="sm">
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {isSaving ? "Guardando…" : "Guardar mapa"}
             </Button>
           </Panel>
         )}
       </ReactFlow>
 
       {/* Editor Modal */}
-      {selectedNode && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div className="bg-background border border-border rounded-lg shadow-xl p-6 w-[400px]">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-lg">Editar Nodo</h3>
-              <button onClick={() => setSelectedNode(null)} className="text-muted-foreground hover:text-foreground">
-                <X className="w-5 h-5" />
-              </button>
+      <Dialog open={!!selectedNode} onOpenChange={(open) => { if (!open) setSelectedNode(null) }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Editar nodo</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="roadmap-node-label" className="text-[13px]">Título principal</Label>
+              <Input
+                id="roadmap-node-label"
+                type="text"
+                value={editLabel}
+                onChange={e => setEditLabel(e.target.value)}
+              />
             </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-muted-foreground font-medium mb-1 block">Título principal</label>
-                <input 
-                  type="text" 
-                  value={editLabel}
-                  onChange={e => setEditLabel(e.target.value)}
-                  className="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                />
-              </div>
-              
-              <div>
-                <label className="text-sm text-muted-foreground font-medium mb-1 block">Notas extendidas</label>
-                <textarea 
-                  value={editDesc}
-                  onChange={e => setEditDesc(e.target.value)}
-                  className="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm min-h-[120px]"
-                  placeholder="Instrucciones, consejos operativos o detalles para este paso..."
-                />
-              </div>
-              
-              <div className="flex justify-between items-center mt-6 pt-4 border-t border-border">
-                <Button variant="destructive" size="sm" onClick={handleDeleteNode}>Borrar Nodo</Button>
-                <Button onClick={handleSaveNode} size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700">Actualizar</Button>
-              </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="roadmap-node-desc" className="text-[13px]">Notas extendidas</Label>
+              <Textarea
+                id="roadmap-node-desc"
+                value={editDesc}
+                onChange={e => setEditDesc(e.target.value)}
+                className="min-h-[120px]"
+                placeholder="Instrucciones, consejos operativos o detalles para este paso…"
+              />
             </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter className="flex-row justify-between sm:justify-between border-t pt-4">
+            <Button variant="ghost" size="sm" onClick={handleDeleteNode} className="text-destructive hover:bg-destructive/10 hover:text-destructive">
+              <Trash2 className="h-4 w-4" /> Borrar nodo
+            </Button>
+            <Button onClick={handleSaveNode} size="sm">Actualizar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
     </div>
   );
 }

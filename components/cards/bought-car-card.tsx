@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Trash2, ChevronDown } from "lucide-react"
+import { Plus, Trash2, ChevronDown, Paperclip, FileText } from "lucide-react"
+import { MATRICULATION_STEPS, matriculationProgress } from "@/lib/matriculation"
+import { CarHistoryButton } from "@/components/car-history"
 
 import { DocumentsModal, CarDocument } from "@/components/modals/documents-modal"
 import { supabase } from "@/lib/supabase"
@@ -14,9 +16,10 @@ interface BoughtCarCardProps {
   onMarkAsSold: () => void
   onDelete: () => void
   onUpdateCar?: (carId: string, updates: any) => void
+  onPrintInvoice?: () => void
 }
 
-export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold, onDelete, onUpdateCar }: BoughtCarCardProps) {
+export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold, onDelete, onUpdateCar, onPrintInvoice }: BoughtCarCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isDocsOpen, setIsDocsOpen] = useState(false)
   const [localDocs, setLocalDocs] = useState<CarDocument[]>(car.documents || [])
@@ -73,14 +76,7 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
     "Otro"
   ]
 
-  const matriculationSteps = [
-    { id: "ficha_reducida", label: "Ficha Técnica Reducida (Ingenieros)" },
-    { id: "itv", label: "ITV Pasada y Tarjeta Ficha Técnica Original" },
-    { id: "hacienda", label: "Impuesto Especial (Mod 576) o Exención" },
-    { id: "ayuntamiento", label: "Impuesto de Circulación (Ayto)" },
-    { id: "dgt", label: "Tasas DGT y Matriculación" },
-    { id: "placas", label: "Placas Físicas Fabricadas" },
-  ]
+  const matriculationSteps = MATRICULATION_STEPS
 
   const handleChecklistChange = async (stepId: string, checked: boolean) => {
     const newChecklist = { ...checklist, [stepId]: checked }
@@ -102,54 +98,58 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
     }
   }
 
-  const checklistProgress = Math.round((Object.values(checklist).filter(v => v).length / matriculationSteps.length) * 100) || 0
+  const checklistProgress = matriculationProgress(checklist)
+  const eur = (n: number) => n.toLocaleString('es-ES', { maximumFractionDigits: 0 }) + ' €'
 
   return (
-    <div className="bg-card border border-border rounded-lg overflow-hidden">
+    <div className="bg-card border rounded-xl overflow-hidden shadow-xs">
       {/* Header */}
-      <div className="p-4 flex items-start justify-between border-b border-border">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-lg font-bold">
+      <div className="p-4 flex items-start justify-between border-b">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <h3 className="font-semibold truncate">
               {car.brand} {car.model}
             </h3>
             <span
-              className={`px-2 py-1 rounded-full text-xs font-medium ${car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"
+              className={`px-2 py-0.5 rounded-full text-xs font-medium ${car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"
                 }`}
             >
-              {car.status === "inventory" ? "En Inventario" : "Vendido"}
+              {car.status === "inventory" ? "En inventario" : "Vendido"}
             </span>
+            {car.invoice_number && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">{car.invoice_number}</span>
+            )}
           </div>
-          <p className="text-sm text-muted-foreground">{car.year}</p>
+          <p className="text-xs text-muted-foreground tabular">{[car.year, car.plate].filter(Boolean).join(" · ")}</p>
         </div>
 
-        <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 hover:bg-secondary rounded transition-colors">
+        <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 hover:bg-accent rounded-md transition-colors" aria-label={isExpanded ? "Contraer" : "Expandir"}>
           <ChevronDown className={`w-5 h-5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
         </button>
       </div>
 
       {/* Resumen */}
-      <div className="p-4 bg-background/50 grid grid-cols-2 md:grid-cols-4 gap-4 border-b border-border text-sm">
+      <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 border-b text-sm">
         <div>
-          <p className="text-muted-foreground text-xs mb-1">Inversión Total</p>
-          <p className="font-bold">{totalInvested.toFixed(2)}€</p>
+          <p className="text-muted-foreground text-xs mb-1">Inversión total</p>
+          <p className="font-semibold tabular">{eur(totalInvested)}</p>
         </div>
         {car.status === "sold" && (
           <>
             <div>
-              <p className="text-muted-foreground text-xs mb-1">Precio Venta</p>
-              <p className="font-bold">{(car.sellPrice || 0).toFixed(2)}€</p>
+              <p className="text-muted-foreground text-xs mb-1">Precio de venta</p>
+              <p className="font-semibold tabular">{eur(car.sellPrice || 0)}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs mb-1">Beneficio</p>
-              <p className={`font-bold ${profit > 0 ? "text-success" : "text-destructive"}`}>
+              <p className={`font-semibold tabular ${profit > 0 ? "text-success" : "text-destructive"}`}>
                 {profit > 0 ? "+" : ""}
-                {profit.toFixed(2)}€
+                {eur(profit)}
               </p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs mb-1">Rentabilidad</p>
-              <p className={`font-bold ${profitPercentage > 0 ? "text-success" : "text-destructive"}`}>
+              <p className={`font-semibold tabular ${profitPercentage > 0 ? "text-success" : "text-destructive"}`}>
                 {profitPercentage > 0 ? "+" : ""}
                 {profitPercentage.toFixed(1)}%
               </p>
@@ -158,17 +158,23 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
         )}
       </div>
 
-      <div className="bg-muted/10 grid grid-cols-2 text-sm border-b border-border">
-          <button onClick={() => setIsDocsOpen(true)} className="py-2.5 flex items-center justify-center gap-2 hover:bg-secondary/50 font-medium transition-colors border-r border-border">
-            <span className="text-xl">📎</span> Documentos ({localDocs.length})
+      <div className={`grid ${car.status === "sold" && onPrintInvoice ? "grid-cols-3" : "grid-cols-2"} text-sm border-b`}>
+          <button onClick={() => setIsDocsOpen(true)} className="py-2.5 flex items-center justify-center gap-2 hover:bg-accent font-medium transition-colors border-r">
+            <Paperclip className="h-4 w-4 text-muted-foreground" /> Documentos ({localDocs.length})
           </button>
-          
+
           <div className="py-2.5 flex items-center justify-center gap-2 font-medium text-muted-foreground relative" title="Progreso de matriculación">
-            <div className="w-full max-w-[100px] h-2.5 bg-border rounded-full overflow-hidden">
-               <div className="h-full bg-blue-500 transition-all" style={{ width: `${checklistProgress}%` }}></div>
+            <div className="w-full max-w-[100px] h-1.5 bg-muted rounded-full overflow-hidden">
+               <div className="h-full bg-primary transition-all" style={{ width: `${checklistProgress}%` }}></div>
             </div>
-            <span className="text-xs">{checklistProgress}%</span>
+            <span className="text-xs tabular">{checklistProgress}%</span>
           </div>
+
+          {car.status === "sold" && onPrintInvoice && (
+            <button onClick={onPrintInvoice} className="py-2.5 flex items-center justify-center gap-2 hover:bg-accent font-medium transition-colors border-l">
+              <FileText className="h-4 w-4 text-muted-foreground" /> {car.invoice_number ? "Ver factura" : "Facturar"}
+            </button>
+          )}
       </div>
 
       {/* Contenido expandible */}
@@ -177,19 +183,19 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
 
           {/* Checklist Matriculación (Solo visible si no está vendido)*/}
           {car.status !== "sold" && (
-            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+            <div className="border rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
-                <h4 className="font-semibold text-blue-500 flex items-center gap-2">Trámites de Matriculación España</h4>
-                <span className="text-xs font-semibold bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-full">{checklistProgress}%</span>
+                <h4 className="font-semibold text-sm flex items-center gap-2">Trámites de matriculación en España</h4>
+                <span className="text-xs font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full tabular">{checklistProgress}%</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                  {matriculationSteps.map(step => (
-                    <label key={step.id} className="flex items-center gap-2 p-2 hover:bg-background/50 rounded-md cursor-pointer transition-colors border border-transparent hover:border-border">
+                    <label key={step.id} className="flex items-center gap-2 p-2 hover:bg-accent rounded-md cursor-pointer transition-colors border border-transparent hover:border-border">
                        <input 
                          type="checkbox" 
                          checked={!!checklist[step.id]} 
                          onChange={(e) => handleChecklistChange(step.id, e.target.checked)}
-                         className="w-4 h-4 rounded text-blue-500 bg-background border-border"
+                         className="w-4 h-4 rounded accent-[var(--primary)]"
                        />
                        <span className={checklist[step.id] ? "line-through text-muted-foreground" : "text-foreground"}>{step.label}</span>
                     </label>
@@ -218,7 +224,7 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span>{expense.amount}€</span>
+                    <span className="tabular">{eur(Number(expense.amount) || 0)}</span>
                     <button
                       onClick={() => onRemoveExpense(expense.id)}
                       className="p-1 hover:bg-destructive/10 text-destructive rounded text-xs"
@@ -232,14 +238,14 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
           </div>
 
           {/* Añadir gasto */}
-          <div className="bg-background/50 rounded-lg p-4 space-y-3">
+          <div className="bg-muted/50 rounded-lg p-4 space-y-3">
             <h4 className="font-semibold text-sm">Añadir Gasto</h4>
             <input
               type="text"
               placeholder="Concepto"
               value={newExpense.concept}
               onChange={(e) => setNewExpense({ ...newExpense, concept: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <input
@@ -247,18 +253,18 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
                 placeholder="Cantidad (€)"
                 value={newExpense.amount}
                 onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                className="px-3 py-2 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="px-3 py-2 rounded-md bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
               <input
                 type="date"
                 value={newExpense.date}
                 onChange={(e) => setNewExpense({ ...newExpense, date: e.target.value })}
-                className="px-3 py-2 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="px-3 py-2 rounded-md bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
               <select
                 value={newExpense.category}
                 onChange={(e) => setNewExpense({ ...newExpense, category: e.target.value })}
-                className="px-3 py-2 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="px-3 py-2 rounded-md bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               >
                 {expenseCategories.map((cat) => (
                   <option key={cat} value={cat}>
@@ -301,12 +307,19 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
 
           {/* Botones de acción */}
           <div className="flex gap-2 pt-2">
+            <CarHistoryButton
+              label
+              className="flex-1 h-auto py-2 border"
+              inventoryId={car.id}
+              importedId={car.imported_car_id}
+              title={`${car.brand} ${car.model}${car.year ? ` (${car.year})` : ""}`}
+            />
             {car.status === "inventory" && (
               <button
                 onClick={onMarkAsSold}
                 className="flex-1 px-3 py-2 bg-success text-success-foreground rounded-lg hover:bg-success/90 transition-colors text-sm font-medium"
               >
-                Marcar como Vendido
+                Marcar como vendido
               </button>
             )}
             <button

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { CarImport } from "@/components/tabs/car-import"
@@ -20,10 +20,18 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { CompanyRoadmap } from "@/components/tabs/company-roadmap"
 import { GlobalExpenses } from "@/components/tabs/global-expenses"
 import { getNavGroups } from "@/components/navigation"
+import { ImportCalculator } from "@/components/tabs/import-calculator"
+import { CustomersTab } from "@/components/tabs/customers-tab"
+import { FiscalSummary } from "@/components/tabs/fiscal-summary"
+import { DonationsTab } from "@/components/tabs/donations-tab"
+import { RemindersTab } from "@/components/tabs/reminders-tab"
+import { exportToExcel } from "@/lib/excel-export"
+import { toast } from "sonner"
+import { CommandPalette, CommandPaletteTrigger, OPEN_CAR_EVENT } from "@/components/command-palette"
 import { ConnectionStatus } from "@/components/connection-status"
 import { LiveCursors } from "@/components/live-cursors"
 import { useAuth } from "@/components/auth-provider"
-import { Loader2, LogOut, User as UserIcon, Shield, Menu } from "lucide-react"
+import { Loader2, LogOut, User as UserIcon, Shield, Menu, FileSpreadsheet } from "lucide-react"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import {
@@ -39,7 +47,7 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-type TabType = "dashboard" | "import" | "spain" | "comparison" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations" | "map" | "roadmap" | "expenses"
+type TabType = "dashboard" | "import" | "spain" | "comparison" | "calculator" | "customers" | "fiscal" | "reminders" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations" | "map" | "roadmap" | "expenses"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
@@ -76,6 +84,34 @@ export default function Home() {
       observer.disconnect()
     }
   }, [])
+
+  // ?tab=…&car=…&table=… (enlaces desde el garaje virtual)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tab = params.get("tab")
+    const valid: TabType[] = ["dashboard", "import", "spain", "comparison", "calculator", "customers", "fiscal", "reminders", "management", "report", "profitable", "admin", "checklist", "donations", "map", "roadmap", "expenses"]
+    if (tab && (valid as string[]).includes(tab)) setActiveTab(tab as TabType)
+    const car = params.get("car")
+    const table = params.get("table")
+    if (car && (table === "inventory_cars" || table === "imported_cars" || table === "spain_cars")) {
+      pendingCarRef.current = { table, id: car }
+    }
+    if (tab || car) window.history.replaceState(null, "", window.location.pathname)
+  }, [])
+
+  // El coche se abre cuando las pestañas ya están montadas (tras comprobar la sesión)
+  const pendingCarRef = useRef<{ table: string; id: string } | null>(null)
+  useEffect(() => {
+    if (loading || !user || !pendingCarRef.current) return
+    const detail = pendingCarRef.current
+    pendingCarRef.current = null
+    const timer = setTimeout(() => window.dispatchEvent(new CustomEvent(OPEN_CAR_EVENT, { detail })), 300)
+    return () => clearTimeout(timer)
+  }, [loading, user])
+
+  useEffect(() => {
+    try { sessionStorage.setItem("nordrive-return-path", `/?tab=${activeTab}`) } catch { }
+  }, [activeTab])
 
   const toggleSidebar = () => {
     setSidebarCollapsed(prev => {
@@ -186,6 +222,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background text-foreground flex relative w-full overflow-x-hidden">
       <LiveCursors />
+      <CommandPalette navGroups={navGroups} onNavigate={(tab) => handleTabSelect(tab as TabType)} />
       {/* Connection Status Indicator */}
       <ConnectionStatus />
 
@@ -245,6 +282,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <CommandPaletteTrigger />
             <OnlineUsers activeTab={activeTab} />
             <NotificationsCenter />
             <ThemeToggle isDark={isDark} onToggle={handleToggleTheme} />
@@ -273,6 +311,15 @@ export default function Home() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    const promise = exportToExcel({ includeGlobalExpenses: role === 'importador' || role === 'admin' || role === 'super_admin' })
+                    toast.promise(promise, { loading: "Preparando Excel…", success: "Excel descargado", error: "No se pudo exportar" })
+                  }}
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  <span>Exportar a Excel</span>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push("/profile")}>
                   <UserIcon className="mr-2 h-4 w-4" />
                   <span>Perfil</span>
@@ -313,8 +360,20 @@ export default function Home() {
             <div className={activeTab === "comparison" ? "block animate-in fade-in duration-300" : "hidden"}>
               <ComparativeAnalysis />
             </div>
+            <div className={activeTab === "calculator" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <ImportCalculator />
+            </div>
+            <div className={activeTab === "customers" && (role === 'gestor' || role === 'importador' || role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
+              <CustomersTab role={role} />
+            </div>
+            <div className={activeTab === "fiscal" && (role === 'importador' || role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
+              <FiscalSummary isActive={activeTab === "fiscal"} />
+            </div>
+            <div className={activeTab === "reminders" ? "block animate-in fade-in duration-300" : "hidden"}>
+              <RemindersTab isActive={activeTab === "reminders"} />
+            </div>
             <div className={activeTab === "management" && (role === 'gestor' || role === 'importador' || role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
-              <CarsManagement />
+              <CarsManagement isActive={activeTab === "management"} />
             </div>
             <div className={activeTab === "report" && (role === 'importador' || role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
               <ReportGenerator />
@@ -326,7 +385,7 @@ export default function Home() {
               <ChecklistTab />
             </div>
             <div className={activeTab === "donations" ? "block animate-in fade-in duration-300" : "hidden"}>
-              {/* <DonationsTab /> */}
+              {(donationsEnabled || role === "admin" || role === "super_admin") && <DonationsTab />}
             </div>
             <div className={activeTab === "roadmap" ? "block animate-in fade-in duration-300" : "hidden"}>
               <CompanyRoadmap role={role} />

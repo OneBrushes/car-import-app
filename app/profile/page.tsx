@@ -4,12 +4,11 @@ import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ArrowLeft, Loader2, Shield, Camera, Upload } from "lucide-react"
+import { ArrowLeft, Loader2, Shield, Camera, User, Mail, Lock } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import { compressProfileImage } from "@/lib/image-compression"
@@ -177,133 +176,153 @@ export default function ProfilePage() {
 
     if (loading || !user) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
         )
     }
 
     const firstName = user.user_metadata?.first_name || ""
     const lastName = user.user_metadata?.last_name || ""
-    const fullName = firstName || lastName ? `${firstName} ${lastName}`.trim() : "Mi Perfil"
+    const fullName = firstName || lastName ? `${firstName} ${lastName}`.trim() : "Mi perfil"
     const initials = firstName || lastName
         ? `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase()
         : user.email?.substring(0, 2).toUpperCase()
 
     return (
-        <div className="min-h-screen bg-background p-4 sm:p-8">
-            <div className="max-w-4xl mx-auto space-y-6">
+        <div className="min-h-screen bg-background px-4 py-6 sm:px-8 sm:py-10">
+            <div className="mx-auto max-w-3xl space-y-6">
                 <Button
                     variant="ghost"
-                    className="gap-2 pl-0 hover:bg-transparent hover:text-primary"
+                    size="sm"
+                    className="-ml-2 gap-1.5 text-muted-foreground hover:text-foreground"
                     onClick={() => router.push("/")}
                 >
                     <ArrowLeft className="h-4 w-4" />
-                    Volver al Dashboard
+                    Volver al panel
                 </Button>
 
-                <div className="flex items-center gap-6">
-                    <div className="relative group">
-                        <Avatar className="h-24 w-24 border-4 border-background shadow-xl">
-                            <AvatarImage src={avatarUrl || ""} />
-                            <AvatarFallback className="text-2xl bg-primary/10 text-primary">
-                                {initials}
-                            </AvatarFallback>
-                        </Avatar>
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="absolute bottom-0 right-0 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-colors"
-                            disabled={isUploading}
-                        >
-                            {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-                        </button>
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            className="hidden"
-                            accept="image/*"
-                            onChange={handleAvatarUpload}
-                        />
-                    </div>
+                {/* Cabecera del perfil */}
+                <div className="rounded-xl border bg-card p-5 shadow-xs">
+                    <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                        <div className="relative w-fit">
+                            <Avatar className="h-20 w-20 border">
+                                <AvatarImage src={avatarUrl || ""} />
+                                <AvatarFallback className="bg-primary/10 text-xl font-medium text-primary">
+                                    {initials}
+                                </AvatarFallback>
+                            </Avatar>
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-primary text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 disabled:opacity-60"
+                                disabled={isUploading}
+                                aria-label="Cambiar foto de perfil"
+                                title="Cambiar foto de perfil"
+                            >
+                                {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                            </button>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                className="hidden"
+                                accept="image/*"
+                                onChange={handleAvatarUpload}
+                            />
+                        </div>
 
-                    <div>
-                        <h1 className="text-3xl font-bold">{fullName}</h1>
-                        <div className="flex items-center gap-2 mt-2">
-                            <Badge variant="outline" className="capitalize gap-1">
-                                <Shield className="h-3 w-3" />
-                                {isLoadingData ? "..." : role}
-                            </Badge>
-                            <span className="text-muted-foreground text-sm">{user.email}</span>
+                        <div className="min-w-0">
+                            <h1 className="text-2xl font-semibold tracking-tight mb-1 truncate">{fullName}</h1>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline" className="capitalize gap-1 border-transparent bg-primary/10 text-primary">
+                                    <Shield className="h-3 w-3" />
+                                    {isLoadingData ? "..." : role}
+                                </Badge>
+                                <span className="truncate text-sm text-muted-foreground">{user.email}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <Tabs defaultValue="general" className="w-full">
+                <Tabs defaultValue="general" className="w-full gap-4">
                     <TabsList>
                         <TabsTrigger value="general">General</TabsTrigger>
                         <TabsTrigger value="security">Seguridad</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="general">
-                        <div className="grid gap-6">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Información Personal</CardTitle>
-                                    <CardDescription>Actualiza tu nombre y apellido.</CardDescription>
-                                </CardHeader>
-                                <form onSubmit={handleUpdateName}>
-                                    <CardContent className="space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="grid gap-2">
-                                                <Label>Nombre</Label>
-                                                <Input
-                                                    value={profileFirstName}
-                                                    onChange={(e) => setProfileFirstName(e.target.value)}
-                                                    placeholder="Tu nombre"
-                                                    required
-                                                />
-                                            </div>
-                                            <div className="grid gap-2">
-                                                <Label>Apellido</Label>
-                                                <Input
-                                                    value={profileLastName}
-                                                    onChange={(e) => setProfileLastName(e.target.value)}
-                                                    placeholder="Tu apellido"
-                                                    required
-                                                />
-                                            </div>
+                        <section className="rounded-xl border bg-card shadow-xs">
+                            <div className="flex items-start gap-3 border-b p-5">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                                    <User className="h-4 w-4 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold">Información personal</h3>
+                                    <p className="text-sm text-muted-foreground">Actualiza tu nombre y apellido.</p>
+                                </div>
+                            </div>
+                            <form onSubmit={handleUpdateName}>
+                                <div className="space-y-4 p-5">
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="profile-first-name" className="text-[13px]">Nombre</Label>
+                                            <Input
+                                                id="profile-first-name"
+                                                value={profileFirstName}
+                                                onChange={(e) => setProfileFirstName(e.target.value)}
+                                                placeholder="Tu nombre"
+                                                required
+                                            />
                                         </div>
-                                        <div className="grid gap-2">
-                                            <Label>Email Actual</Label>
-                                            <Input value={user.email} disabled />
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="profile-last-name" className="text-[13px]">Apellido</Label>
+                                            <Input
+                                                id="profile-last-name"
+                                                value={profileLastName}
+                                                onChange={(e) => setProfileLastName(e.target.value)}
+                                                placeholder="Tu apellido"
+                                                required
+                                            />
                                         </div>
-                                        <div className="grid gap-2">
-                                            <Label>Rol</Label>
-                                            <Input value={role} disabled className="capitalize" />
+                                    </div>
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="profile-email" className="text-[13px]">Email actual</Label>
+                                            <Input id="profile-email" value={user.email} disabled />
                                         </div>
-                                    </CardContent>
-                                    <CardFooter>
-                                        <Button type="submit" disabled={isUpdatingName}>
-                                            {isUpdatingName ? "Actualizando..." : "Actualizar Nombre"}
-                                        </Button>
-                                    </CardFooter>
-                                </form>
-                            </Card>
-                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="profile-role" className="text-[13px]">Rol</Label>
+                                            <Input id="profile-role" value={role} disabled className="capitalize" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end rounded-b-xl border-t bg-muted/40 px-5 py-3">
+                                    <Button type="submit" disabled={isUpdatingName}>
+                                        {isUpdatingName && <Loader2 className="h-4 w-4 animate-spin" />}
+                                        {isUpdatingName ? "Actualizando..." : "Actualizar nombre"}
+                                    </Button>
+                                </div>
+                            </form>
+                        </section>
                     </TabsContent>
 
                     <TabsContent value="security">
-                        <div className="grid gap-6">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Cambiar Email</CardTitle>
-                                    <CardDescription>Actualiza tu dirección de correo electrónico.</CardDescription>
-                                </CardHeader>
+                        <div className="grid gap-4">
+                            <section className="rounded-xl border bg-card shadow-xs">
+                                <div className="flex items-start gap-3 border-b p-5">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                                        <Mail className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold">Cambiar email</h3>
+                                        <p className="text-sm text-muted-foreground">Actualiza tu dirección de correo electrónico.</p>
+                                    </div>
+                                </div>
                                 <form onSubmit={handleUpdateEmail}>
-                                    <CardContent className="space-y-4">
-                                        <div className="grid gap-2">
-                                            <Label>Nuevo Email</Label>
+                                    <div className="p-5">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="new-email" className="text-[13px]">Nuevo email</Label>
                                             <Input
+                                                id="new-email"
                                                 type="email"
                                                 placeholder="nuevo@email.com"
                                                 value={newEmail}
@@ -311,44 +330,53 @@ export default function ProfilePage() {
                                                 required
                                             />
                                         </div>
-                                    </CardContent>
-                                    <CardFooter>
-                                        <Button type="submit">Actualizar Email</Button>
-                                    </CardFooter>
+                                    </div>
+                                    <div className="flex justify-end rounded-b-xl border-t bg-muted/40 px-5 py-3">
+                                        <Button type="submit">Actualizar email</Button>
+                                    </div>
                                 </form>
-                            </Card>
+                            </section>
 
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Cambiar Contraseña</CardTitle>
-                                    <CardDescription>Asegura tu cuenta con una contraseña fuerte.</CardDescription>
-                                </CardHeader>
+                            <section className="rounded-xl border bg-card shadow-xs">
+                                <div className="flex items-start gap-3 border-b p-5">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                                        <Lock className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold">Cambiar contraseña</h3>
+                                        <p className="text-sm text-muted-foreground">Asegura tu cuenta con una contraseña fuerte.</p>
+                                    </div>
+                                </div>
                                 <form onSubmit={handleUpdatePassword}>
-                                    <CardContent className="space-y-4">
-                                        <div className="grid gap-2">
-                                            <Label>Nueva Contraseña</Label>
+                                    <div className="grid gap-4 p-5 sm:grid-cols-2">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="new-password" className="text-[13px]">Nueva contraseña</Label>
                                             <Input
+                                                id="new-password"
                                                 type="password"
+                                                placeholder="••••••••"
                                                 value={newPassword}
                                                 onChange={(e) => setNewPassword(e.target.value)}
                                                 required
                                             />
                                         </div>
-                                        <div className="grid gap-2">
-                                            <Label>Confirmar Contraseña</Label>
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="confirm-password" className="text-[13px]">Confirmar contraseña</Label>
                                             <Input
+                                                id="confirm-password"
                                                 type="password"
+                                                placeholder="••••••••"
                                                 value={confirmPassword}
                                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                                 required
                                             />
                                         </div>
-                                    </CardContent>
-                                    <CardFooter>
-                                        <Button type="submit">Actualizar Contraseña</Button>
-                                    </CardFooter>
+                                    </div>
+                                    <div className="flex justify-end rounded-b-xl border-t bg-muted/40 px-5 py-3">
+                                        <Button type="submit">Actualizar contraseña</Button>
+                                    </div>
                                 </form>
-                            </Card>
+                            </section>
                         </div>
                     </TabsContent>
                 </Tabs>

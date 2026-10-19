@@ -2,12 +2,16 @@
 
 import type React from "react"
 import { useState, useRef } from "react"
-import { X, Upload, File as FileIcon, FileText, Trash2, Download, Loader2, Image as ImageIcon } from "lucide-react"
+import { Upload, File as FileIcon, FileText, Trash2, Download, Loader2, Image as ImageIcon, Lock } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { openPrivateFile, removePrivateFiles } from "@/lib/private-files"
 
 export interface CarDocument {
   name: string
+  /** Ruta dentro del bucket privado car-documents (los documentos antiguos guardan aquí la URL pública) */
   url: string
   type: string
   size?: number
@@ -24,14 +28,13 @@ interface DocumentsModalProps {
 
 export function DocumentsModal({ isOpen, onClose, carId, carName, documents, onDocumentsUpdate }: DocumentsModalProps) {
   const [isUploading, setIsUploading] = useState(false)
+  const [openingIndex, setOpeningIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  if (!isOpen) return null
-
   const getFileIcon = (type: string) => {
-    if (type.includes("pdf")) return <FileText className="w-8 h-8 text-red-500" />
-    if (type.includes("image")) return <ImageIcon className="w-8 h-8 text-blue-500" />
-    return <FileIcon className="w-8 h-8 text-gray-500" />
+    if (type.includes("pdf")) return <FileText className="w-6 h-6 text-destructive" />
+    if (type.includes("image")) return <ImageIcon className="w-6 h-6 text-primary" />
+    return <FileIcon className="w-6 h-6 text-muted-foreground" />
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,7 +47,7 @@ export function DocumentsModal({ isOpen, onClose, carId, carName, documents, onD
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        const fileExt = file.name.split('.').pop()
+        // El nombre empieza por el id del coche: las reglas de Storage lo usan para dar acceso
         const fileName = `${carId}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-]/g, "_")}`
 
         const { error: uploadError } = await supabase.storage
@@ -57,19 +60,14 @@ export function DocumentsModal({ isOpen, onClose, carId, carName, documents, onD
           continue
         }
 
-        const { data } = supabase.storage
-          .from('car-documents')
-          .getPublicUrl(fileName)
-
         newDocs.push({
           name: file.name,
-          url: data.publicUrl,
+          url: fileName,
           type: file.type || "unknown",
           size: file.size
         })
       }
 
-      // Actualizar Base de Datos
       const { error: dbError } = await supabase
         .from('inventory_cars')
         .update({ documents: newDocs })
@@ -79,7 +77,6 @@ export function DocumentsModal({ isOpen, onClose, carId, carName, documents, onD
 
       onDocumentsUpdate(newDocs)
       toast.success("Documento(s) subido(s) correctamente")
-
     } catch (error) {
       console.error("Error global de subida:", error)
       toast.error("Error al actualizar la base de datos")
@@ -89,19 +86,18 @@ export function DocumentsModal({ isOpen, onClose, carId, carName, documents, onD
     }
   }
 
+  const handleOpen = async (doc: CarDocument, index: number) => {
+    setOpeningIndex(index)
+    const ok = await openPrivateFile('car-documents', doc.url)
+    setOpeningIndex(null)
+    if (!ok) toast.error("No se pudo abrir el documento")
+  }
+
   const handleDelete = async (docToDelete: CarDocument) => {
     if (!confirm(`¿Seguro que quieres borrar el documento "${docToDelete.name}"?`)) return
 
     try {
-      // Extraer el nombre del archivo de la URL
-      const urlParts = docToDelete.url.split('/car-documents/')
-      const filePath = urlParts.length > 1 ? urlParts[1] : null
-
-      if (filePath) {
-        await supabase.storage
-          .from('car-documents')
-          .remove([filePath])
-      }
+      await removePrivateFiles('car-documents', [docToDelete.url])
 
       const newDocs = documents.filter(d => d.url !== docToDelete.url)
 
@@ -121,45 +117,41 @@ export function DocumentsModal({ isOpen, onClose, carId, carName, documents, onD
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-background rounded-xl w-full max-w-3xl shadow-xl border border-border flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-border bg-muted/20">
-          <div>
-            <h2 className="text-xl font-bold">Documentos del Vehículo</h2>
-            <p className="text-sm text-muted-foreground">{carName}</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-secondary rounded-lg transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={open => { if (!open) onClose() }}>
+      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col gap-0 p-0">
+        <DialogHeader className="border-b p-5">
+          <DialogTitle>Documentos del vehículo</DialogTitle>
+          <DialogDescription>{carName}</DialogDescription>
+        </DialogHeader>
 
-        {/* Cesta de Archivos */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5">
           {documents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border-2 border-dashed border-border rounded-xl bg-muted/10">
-              <FileIcon className="w-12 h-12 mb-3 opacity-50" />
-              <p className="font-medium">No hay documentos todavía</p>
-              <p className="text-sm opacity-80 mt-1">Sube la documentación aquí para tenerla siempre a mano.</p>
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center text-muted-foreground">
+              <FileIcon className="mb-3 h-10 w-10 opacity-50" />
+              <p className="font-medium text-foreground">No hay documentos todavía</p>
+              <p className="mt-1 text-sm">Sube la documentación aquí para tenerla siempre a mano.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
               {documents.map((doc, idx) => (
-                <div key={idx} className="group relative border border-border bg-card rounded-xl p-4 hover:border-primary/50 hover:shadow-md transition-all flex flex-col items-center text-center">
-                  <div className="mb-3">
-                    {getFileIcon(doc.type)}
+                <div key={idx} className="flex flex-col rounded-xl border bg-card p-4 shadow-xs">
+                  <div className="mb-3 flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      {getFileIcon(doc.type)}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="line-clamp-2 text-sm font-medium" title={doc.name}>{doc.name}</h4>
+                      {doc.size ? <span className="tabular text-xs text-muted-foreground">{(doc.size / 1024 / 1024).toFixed(2)} MB</span> : null}
+                    </div>
                   </div>
-                  <h4 className="text-sm font-medium line-clamp-2 w-full mb-1" title={doc.name}>{doc.name}</h4>
-                  {doc.size && <span className="text-[10px] text-muted-foreground mb-4">{(doc.size / 1024 / 1024).toFixed(2)} MB</span>}
-                  
-                  <div className="flex gap-2 w-full mt-auto">
-                    <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex-1 bg-primary/10 text-primary py-1.5 rounded-lg text-xs font-semibold hover:bg-primary/20 flex items-center justify-center gap-1 transition-colors">
-                      <Download className="w-3.5 h-3.5" /> Abrir
-                    </a>
-                    <button onClick={() => handleDelete(doc)} className="px-2.5 bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 transition-colors">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+
+                  <div className="mt-auto flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleOpen(doc, idx)} disabled={openingIndex === idx}>
+                      {openingIndex === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Abrir
+                    </Button>
+                    <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDelete(doc)} title="Eliminar">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -167,32 +159,24 @@ export function DocumentsModal({ isOpen, onClose, carId, carName, documents, onD
           )}
         </div>
 
-        {/* Footer Upload */}
-        <div className="p-5 border-t border-border bg-muted/20 flex flex-col sm:flex-row gap-3 items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Sube PDFs, Facturas CMR o contratos.
-          </div>
-          <div>
-            <input 
-              type="file" 
-              ref={fileInputRef}
-              className="hidden" 
-              multiple 
-              onChange={handleFileUpload}
-              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-            />
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="px-6 py-2.5 bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2 w-full sm:w-auto justify-center disabled:opacity-50"
-            >
-              {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {isUploading ? "Subiendo..." : "Subir Archivo"}
-            </button>
-          </div>
+        <div className="flex flex-col items-center justify-between gap-3 border-t p-5 sm:flex-row">
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Lock className="h-3.5 w-3.5" /> Privados: solo los ve quien tiene acceso al coche.
+          </p>
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            multiple
+            onChange={handleFileUpload}
+            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+          />
+          <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-full sm:w-auto">
+            {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {isUploading ? "Subiendo..." : "Subir archivo"}
+          </Button>
         </div>
-
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

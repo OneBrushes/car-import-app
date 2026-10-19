@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { Plus, TrendingUp, TrendingDown, Minus, Loader2, Trash2, Edit, BarChart3 } from "lucide-react"
+import { Plus, TrendingUp, TrendingDown, Minus, Loader2, Trash2, Edit, BarChart3, Search } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 interface ProfitableCar {
@@ -122,7 +121,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        if (role !== 'admin' && role !== 'moderador') {
+        if (role !== 'admin' && role !== 'super_admin' && role !== 'moderador') {
             toast.error("No tienes permisos para añadir coches")
             return
         }
@@ -171,7 +170,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
     }
 
     const handleEdit = (car: ProfitableCar) => {
-        if (role !== 'admin' && role !== 'moderador') return
+        if (role !== 'admin' && role !== 'super_admin' && role !== 'moderador') return
 
         setEditingCar(car)
         setFormData({
@@ -192,7 +191,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
     }
 
     const handleDelete = async (id: string) => {
-        if (role !== 'admin' && role !== 'moderador') return
+        if (role !== 'admin' && role !== 'super_admin' && role !== 'moderador') return
 
         try {
             const { error } = await supabase
@@ -227,9 +226,9 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
     }
 
     const getProfitBadge = (margin: number) => {
-        if (margin >= 30) return <Badge className="bg-green-600"><TrendingUp className="w-3 h-3 mr-1" /> {margin.toFixed(1)}%</Badge>
-        if (margin >= 15) return <Badge className="bg-yellow-600"><Minus className="w-3 h-3 mr-1" /> {margin.toFixed(1)}%</Badge>
-        return <Badge variant="destructive"><TrendingDown className="w-3 h-3 mr-1" /> {margin.toFixed(1)}%</Badge>
+        if (margin >= 30) return <Badge className="tabular border-transparent bg-success/10 text-success"><TrendingUp className="w-3 h-3" /> {margin.toFixed(1)}%</Badge>
+        if (margin >= 15) return <Badge className="tabular border-transparent bg-warning/10 text-warning"><Minus className="w-3 h-3" /> {margin.toFixed(1)}%</Badge>
+        return <Badge className="tabular border-transparent bg-destructive/10 text-destructive"><TrendingDown className="w-3 h-3" /> {margin.toFixed(1)}%</Badge>
     }
 
     const avgProfit = filteredCars.length > 0
@@ -241,212 +240,226 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
     const maxProfit = Math.max(...chartData.map(c => c.profit_margin), 0)
 
     if (loading) {
-        return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
+        return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
     }
 
     return (
         <div className="space-y-6 animate-in">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h2 className="text-2xl font-semibold tracking-tight mb-1">Coches rentables</h2>
+                    <p className="text-muted-foreground">Base de datos de rentabilidad por modelo</p>
+                </div>
+                {(role === 'super_admin' || role === 'admin' || role === 'moderador') && (
+                    <Button onClick={() => { resetForm(); setEditingCar(null); setIsModalOpen(true) }}>
+                        <Plus className="w-4 h-4" /> Añadir coche
+                    </Button>
+                )}
+            </div>
+
             {/* Stats Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Coches</CardTitle>
-                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{filteredCars.length}</div>
-                        <p className="text-xs text-muted-foreground">de {cars.length} totales</p>
-                    </CardContent>
-                </Card>
+            <div className="grid gap-4 sm:grid-cols-3">
+                <div className="rounded-xl border bg-card p-5 shadow-xs">
+                    <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Total coches</p>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                            <BarChart3 className="h-4 w-4 text-primary" />
+                        </div>
+                    </div>
+                    <p className="tabular text-2xl font-semibold tracking-tight">{filteredCars.length}</p>
+                    <p className="tabular text-xs text-muted-foreground">de {cars.length} totales</p>
+                </div>
 
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Rentabilidad Media</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{avgProfit.toFixed(1)}%</div>
-                        <p className="text-xs text-muted-foreground">margen promedio</p>
-                    </CardContent>
-                </Card>
+                <div className="rounded-xl border bg-card p-5 shadow-xs">
+                    <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Rentabilidad media</p>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                            <TrendingUp className="h-4 w-4 text-primary" />
+                        </div>
+                    </div>
+                    <p className="tabular text-2xl font-semibold tracking-tight">{avgProfit.toFixed(1)}%</p>
+                    <p className="text-xs text-muted-foreground">margen promedio</p>
+                </div>
 
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Más Rentable</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-green-600" />
-                    </CardHeader>
-                    <CardContent>
-                        {filteredCars.length > 0 ? (
-                            <>
-                                <div className="text-lg font-bold">{filteredCars[0].brand} {filteredCars[0].model}</div>
-                                <p className="text-xs text-muted-foreground">{filteredCars[0].profit_margin.toFixed(1)}% margen</p>
-                            </>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">Sin datos</p>
-                        )}
-                    </CardContent>
-                </Card>
+                <div className="rounded-xl border bg-card p-5 shadow-xs">
+                    <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Más rentable</p>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/10">
+                            <TrendingUp className="h-4 w-4 text-success" />
+                        </div>
+                    </div>
+                    {filteredCars.length > 0 ? (
+                        <>
+                            <p className="truncate text-lg font-semibold tracking-tight">{filteredCars[0].brand} {filteredCars[0].model}</p>
+                            <p className="tabular text-xs text-success">{filteredCars[0].profit_margin.toFixed(1)}% margen</p>
+                        </>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">Sin datos</p>
+                    )}
+                </div>
             </div>
 
             {/* Gráfico de Rentabilidad */}
             {chartData.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Top 10 Más Rentables</CardTitle>
-                        <CardDescription>Comparativa de márgenes de beneficio</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            {chartData.map((car, index) => (
-                                <div key={car.id} className="space-y-1">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="font-medium">
-                                            {index + 1}. {car.brand} {car.model} ({car.year_from})
-                                        </span>
-                                        <span className="text-muted-foreground">{car.profit_margin.toFixed(1)}%</span>
-                                    </div>
-                                    <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full transition-all ${car.profit_margin >= 30 ? 'bg-green-600' :
-                                                car.profit_margin >= 15 ? 'bg-yellow-600' : 'bg-red-600'
-                                                }`}
-                                            style={{ width: `${(car.profit_margin / maxProfit) * 100}%` }}
-                                        />
-                                    </div>
+                <div className="rounded-xl border bg-card p-5 shadow-xs">
+                    <div className="mb-4">
+                        <h3 className="font-semibold">Top 10 más rentables</h3>
+                        <p className="text-sm text-muted-foreground">Comparativa de márgenes de beneficio</p>
+                    </div>
+                    <div className="space-y-3">
+                        {chartData.map((car, index) => (
+                            <div key={car.id} className="space-y-1">
+                                <div className="flex items-center justify-between gap-2 text-[13px]">
+                                    <span className="truncate font-medium">
+                                        <span className="tabular text-muted-foreground">{index + 1}.</span> {car.brand} {car.model} <span className="tabular text-muted-foreground">({car.year_from})</span>
+                                    </span>
+                                    <span className="tabular shrink-0 text-muted-foreground">{car.profit_margin.toFixed(1)}%</span>
                                 </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
+                                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                    <div
+                                        className={`h-full rounded-full transition-all ${car.profit_margin >= 30 ? 'bg-success' :
+                                            car.profit_margin >= 15 ? 'bg-warning' : 'bg-destructive'
+                                            }`}
+                                        style={{ width: `${(car.profit_margin / maxProfit) * 100}%` }}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             )}
 
-            {/* Filters and Add Button */}
-            <Card>
-                <CardHeader>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div>
-                            <CardTitle>Coches Rentables</CardTitle>
-                            <CardDescription>Base de datos de rentabilidad por modelo</CardDescription>
-                        </div>
-                        {(role === 'super_admin' || role === 'admin' || role === 'moderador') && (
-                            <Button onClick={() => { resetForm(); setEditingCar(null); setIsModalOpen(true) }}>
-                                <Plus className="w-4 h-4 mr-2" /> Añadir Coche
-                            </Button>
-                        )}
+            {/* Filtros */}
+            <div className="flex flex-col sm:flex-row gap-2">
+                <Select value={filterCountry} onValueChange={setFilterCountry}>
+                    <SelectTrigger className="w-full sm:w-44" aria-label="País">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todos los países</SelectItem>
+                        {COUNTRIES.map(c => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar marca..."
+                        value={filterBrand}
+                        onChange={(e) => setFilterBrand(e.target.value)}
+                        className="pl-9"
+                        aria-label="Marca"
+                    />
+                </div>
+                <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar modelo..."
+                        value={filterModel}
+                        onChange={(e) => setFilterModel(e.target.value)}
+                        className="pl-9"
+                        aria-label="Modelo"
+                    />
+                </div>
+            </div>
+
+            {/* Tabla */}
+            {filteredCars.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-12 text-center">
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                        <BarChart3 className="h-5 w-5 text-muted-foreground" />
                     </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {/* Filtros */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <Label>País</Label>
-                            <Select value={filterCountry} onValueChange={setFilterCountry}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todos</SelectItem>
-                                    {COUNTRIES.map(c => (
-                                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div>
-                            <Label>Marca</Label>
-                            <Input
-                                placeholder="Buscar marca..."
-                                value={filterBrand}
-                                onChange={(e) => setFilterBrand(e.target.value)}
-                            />
-                        </div>
-
-                        <div>
-                            <Label>Modelo</Label>
-                            <Input
-                                placeholder="Buscar modelo..."
-                                value={filterModel}
-                                onChange={(e) => setFilterModel(e.target.value)}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Tabla */}
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>País</TableHead>
-                                    <TableHead>Marca</TableHead>
-                                    <TableHead>Modelo</TableHead>
-                                    <TableHead>Años</TableHead>
-                                    <TableHead>Motor</TableHead>
-                                    <TableHead>KM</TableHead>
-                                    <TableHead>CV</TableHead>
-                                    <TableHead>Trans.</TableHead>
-                                    <TableHead className="text-right">Precio Final</TableHead>
-                                    <TableHead className="text-right">Precio España</TableHead>
-                                    <TableHead>Rentabilidad</TableHead>
-                                    {(role === 'super_admin' || role === 'admin' || role === 'moderador') && <TableHead>Acciones</TableHead>}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredCars.map((car) => (
-                                    <TableRow key={car.id}>
-                                        <TableCell className="whitespace-nowrap">{car.country}</TableCell>
-                                        <TableCell className="font-medium">{car.brand}</TableCell>
-                                        <TableCell>{car.model}</TableCell>
-                                        <TableCell className="whitespace-nowrap">
-                                            {car.year_from}{car.year_to ? ` - ${car.year_to}` : '+'}
+                    <p className="text-sm text-muted-foreground">
+                        {cars.length === 0 ? "Todavía no hay coches rentables registrados" : "No se encontraron coches con los filtros aplicados"}
+                    </p>
+                    {cars.length === 0 && (role === 'super_admin' || role === 'admin' || role === 'moderador') && (
+                        <Button size="sm" className="mt-4" onClick={() => { resetForm(); setEditingCar(null); setIsModalOpen(true) }}>
+                            <Plus className="w-4 h-4" /> Añadir coche
+                        </Button>
+                    )}
+                </div>
+            ) : (
+                <div className="overflow-x-auto rounded-xl border bg-card shadow-xs">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>País</TableHead>
+                                <TableHead>Marca</TableHead>
+                                <TableHead>Modelo</TableHead>
+                                <TableHead>Años</TableHead>
+                                <TableHead>Motor</TableHead>
+                                <TableHead>KM</TableHead>
+                                <TableHead>CV</TableHead>
+                                <TableHead>Trans.</TableHead>
+                                <TableHead className="text-right">Precio final</TableHead>
+                                <TableHead className="text-right">Precio España</TableHead>
+                                <TableHead>Rentabilidad</TableHead>
+                                {(role === 'super_admin' || role === 'admin' || role === 'moderador') && <TableHead className="text-right">Acciones</TableHead>}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredCars.map((car) => (
+                                <TableRow key={car.id}>
+                                    <TableCell className="whitespace-nowrap">{car.country}</TableCell>
+                                    <TableCell className="font-medium">{car.brand}</TableCell>
+                                    <TableCell>{car.model}</TableCell>
+                                    <TableCell className="tabular whitespace-nowrap">
+                                        {car.year_from}{car.year_to ? ` - ${car.year_to}` : '+'}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">{car.motor_type}</TableCell>
+                                    <TableCell className="tabular whitespace-nowrap text-sm">{car.avg_mileage ? `${car.avg_mileage.toLocaleString('es-ES')} km` : '-'}</TableCell>
+                                    <TableCell className="tabular text-sm">{car.avg_cv || '-'}</TableCell>
+                                    <TableCell className="text-sm">{car.transmission || '-'}</TableCell>
+                                    <TableCell className="tabular whitespace-nowrap text-right">{car.avg_import_cost.toLocaleString('es-ES', { maximumFractionDigits: 0 })} €</TableCell>
+                                    <TableCell className="tabular whitespace-nowrap text-right">{car.avg_spain_price.toLocaleString('es-ES', { maximumFractionDigits: 0 })} €</TableCell>
+                                    <TableCell>{getProfitBadge(car.profit_margin)}</TableCell>
+                                    {(role === 'super_admin' || role === 'admin' || role === 'moderador') && (
+                                        <TableCell>
+                                            <div className="flex justify-end gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent"
+                                                    onClick={() => handleEdit(car)}
+                                                    title="Editar"
+                                                >
+                                                    <Edit className="w-4 h-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                    onClick={() => handleDelete(car.id)}
+                                                    title="Eliminar"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </div>
                                         </TableCell>
-                                        <TableCell className="text-sm text-muted-foreground">{car.motor_type}</TableCell>
-                                        <TableCell className="text-sm">{car.avg_mileage ? `${car.avg_mileage.toLocaleString()} km` : '-'}</TableCell>
-                                        <TableCell className="text-sm">{car.avg_cv || '-'}</TableCell>
-                                        <TableCell className="text-sm">{car.transmission || '-'}</TableCell>
-                                        <TableCell className="text-right">{car.avg_import_cost.toLocaleString()}€</TableCell>
-                                        <TableCell className="text-right">{car.avg_spain_price.toLocaleString()}€</TableCell>
-                                        <TableCell>{getProfitBadge(car.profit_margin)}</TableCell>
-                                        {(role === 'super_admin' || role === 'admin' || role === 'moderador') && (
-                                            <TableCell>
-                                                <div className="flex gap-2">
-                                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(car)}>
-                                                        <Edit className="w-4 h-4" />
-                                                    </Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(car.id)}>
-                                                        <Trash2 className="w-4 h-4 text-destructive" />
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
-                                        )}
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-
-                        {filteredCars.length === 0 && (
-                            <div className="text-center py-8 text-muted-foreground">
-                                No se encontraron coches con los filtros aplicados
-                            </div>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
+                                    )}
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
 
             {/* Modal Añadir/Editar */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle>{editingCar ? "Editar" : "Añadir"} Coche Rentable</DialogTitle>
+                        <DialogTitle>{editingCar ? "Editar" : "Añadir"} coche rentable</DialogTitle>
                         <DialogDescription>
                             Datos de rentabilidad para análisis de importación
                         </DialogDescription>
                     </DialogHeader>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <Label>País *</Label>
+                                <Label className="text-[13px]">País *</Label>
                                 <Select value={formData.country} onValueChange={(val) => setFormData({ ...formData, country: val })} required>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Selecciona..." />
@@ -460,7 +473,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Marca *</Label>
+                                <Label className="text-[13px]">Marca *</Label>
                                 <Input
                                     value={formData.brand}
                                     onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
@@ -469,7 +482,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Modelo *</Label>
+                                <Label className="text-[13px]">Modelo *</Label>
                                 <Input
                                     value={formData.model}
                                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
@@ -478,7 +491,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Motor *</Label>
+                                <Label className="text-[13px]">Motor *</Label>
                                 <Input
                                     placeholder="ej: 2.0 TDI"
                                     value={formData.motor_type}
@@ -488,7 +501,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Año Desde *</Label>
+                                <Label className="text-[13px]">Año Desde *</Label>
                                 <Input
                                     type="number"
                                     value={formData.year_from}
@@ -498,7 +511,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Año Hasta</Label>
+                                <Label className="text-[13px]">Año Hasta</Label>
                                 <Input
                                     type="number"
                                     value={formData.year_to}
@@ -507,7 +520,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Kilómetros (promedio)</Label>
+                                <Label className="text-[13px]">Kilómetros (promedio)</Label>
                                 <Input
                                     type="number"
                                     placeholder="ej: 150000"
@@ -517,7 +530,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>CV (promedio)</Label>
+                                <Label className="text-[13px]">CV (promedio)</Label>
                                 <Input
                                     type="number"
                                     placeholder="ej: 150"
@@ -527,7 +540,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Transmisión</Label>
+                                <Label className="text-[13px]">Transmisión</Label>
                                 <Select value={formData.transmission} onValueChange={(val) => setFormData({ ...formData, transmission: val })}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Selecciona..." />
@@ -541,7 +554,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Precio Final Importado (€) *</Label>
+                                <Label className="text-[13px]">Precio Final Importado (€) *</Label>
                                 <Input
                                     type="number"
                                     step="0.01"
@@ -553,7 +566,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                             </div>
 
                             <div>
-                                <Label>Precio España (€) *</Label>
+                                <Label className="text-[13px]">Precio España (€) *</Label>
                                 <Input
                                     type="number"
                                     step="0.01"
@@ -565,7 +578,7 @@ export function ProfitableCars({ role }: ProfitableCarModalProps) {
                         </div>
 
                         <div>
-                            <Label>Notas</Label>
+                            <Label className="text-[13px]">Notas</Label>
                             <Input
                                 placeholder="Observaciones adicionales..."
                                 value={formData.notes}

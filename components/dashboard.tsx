@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Zap, Loader2 } from
 import { RecentSalesSection } from "@/components/dashboard/recent-sales"
 import { HighlightsSection } from "@/components/dashboard/highlights"
 import { DashboardCharts } from "@/components/dashboard/charts"
+import { RemindersWidget } from "@/components/tabs/reminders-tab"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 
@@ -248,6 +249,8 @@ export function Dashboard({ isActive = true }: DashboardProps) {
       </div>
 
       {/* Sección de Destacados */}
+      <RemindersWidget isActive={isActive} />
+
       <HighlightsSection boughtCars={boughtCars} />
 
       {/* Sección de Últimas Ventas */}

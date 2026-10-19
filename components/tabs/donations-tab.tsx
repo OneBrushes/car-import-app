@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase'
 import confetti from 'canvas-confetti'
 
@@ -200,22 +200,22 @@ export function DonationsTab() {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, type: "spring" }}
-                className="flex flex-col items-center justify-center p-12 text-center"
+                className="mx-auto flex max-w-md flex-col items-center justify-center rounded-xl border bg-card p-10 text-center shadow-xs"
             >
                 <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                    className="w-32 h-32 bg-gradient-to-br from-green-400 to-emerald-600 dark:from-green-500 dark:to-emerald-700 rounded-full flex items-center justify-center mb-8 shadow-2xl shadow-green-500/50"
+                    className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-success/10"
                 >
-                    <CheckCircle className="w-16 h-16 text-white" strokeWidth={3} />
+                    <CheckCircle className="h-7 w-7 text-success" />
                 </motion.div>
 
                 <motion.h2
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="text-4xl font-bold mb-4 bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent"
+                    className="mb-2 text-2xl font-semibold tracking-tight"
                 >
                     ¡Pago completado!
                 </motion.h2>
@@ -224,7 +224,7 @@ export function DonationsTab() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
-                    className="text-lg text-muted-foreground max-w-md mb-2"
+                    className="mb-1 text-muted-foreground"
                 >
                     Tu contribución ayuda a mantener y mejorar esta aplicación.
                 </motion.p>
@@ -233,9 +233,9 @@ export function DonationsTab() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5 }}
-                    className="text-2xl font-semibold text-green-600 dark:text-green-400 mb-8"
+                    className="mb-6 font-medium text-success"
                 >
-                    ¡Eres increíble! 🎉
+                    ¡Muchas gracias!
                 </motion.p>
 
                 <motion.div
@@ -244,14 +244,14 @@ export function DonationsTab() {
                     transition={{ delay: 0.6 }}
                 >
                     <Button
+                        variant="outline"
                         onClick={() => {
                             setPaymentSuccess(false)
                             setClientSecret('')
                             setSelectedAmount(5)
                         }}
-                        className="bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 text-white shadow-lg hover:shadow-xl hover:shadow-green-500/30 transition-all duration-300 hover:scale-105 active:scale-95 px-8 py-6 text-lg font-semibold"
                     >
-                        <Heart className="mr-2" size={20} />
+                        <Heart className="h-4 w-4" />
                         Hacer otra donación
                     </Button>
                 </motion.div>
@@ -260,29 +260,30 @@ export function DonationsTab() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-4 sm:p-6">
-            <div className="text-center mb-10">
-                <h2 className="text-3xl font-bold flex items-center justify-center gap-3">
-                    <Heart className="w-8 h-8 text-red-500 fill-red-500 animate-pulse" />
-                    Apoya el Proyecto
-                </h2>
-                <p className="text-muted-foreground mt-2 max-w-xl mx-auto">
+        <div className="mx-auto max-w-4xl space-y-6 animate-in">
+            <div>
+                <h2 className="text-2xl font-semibold tracking-tight mb-1">Apoya el proyecto</h2>
+                <p className="text-muted-foreground max-w-xl">
                     Si esta herramienta te es útil, considera hacer una pequeña donación para ayudar con los costes del servidor y el desarrollo continuo.
                 </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6 md:gap-8 items-start">
-                <Card className="border-2 shadow-xl">
-                    <CardHeader>
-                        <CardTitle>Selecciona cantidad</CardTitle>
-                        <CardDescription>Elige cuánto quieres aportar hoy</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-6 items-start">
+                <section className="rounded-xl border bg-card p-5 shadow-xs space-y-5">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                            <Heart className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-semibold">Selecciona cantidad</h3>
+                            <p className="text-xs text-muted-foreground">Elige cuánto quieres aportar hoy</p>
+                        </div>
+                    </div>
                         {subscriptionsEnabled && (
-                            <div className="flex items-center justify-between bg-secondary/50 p-3 rounded-lg border">
-                                <Label htmlFor="monthly-mode" className="flex flex-col cursor-pointer">
-                                    <span className="font-medium">Suscripción Mensual</span>
-                                    <span className="text-xs text-muted-foreground">Apoyo recurrente</span>
+                            <div className="flex items-center justify-between rounded-lg border p-3">
+                                <Label htmlFor="monthly-mode" className="flex flex-col items-start gap-0.5 cursor-pointer">
+                                    <span className="text-sm font-medium">Suscripción mensual</span>
+                                    <span className="text-xs font-normal text-muted-foreground">Apoyo recurrente</span>
                                 </Label>
                                 <Switch
                                     id="monthly-mode"
@@ -295,30 +296,34 @@ export function DonationsTab() {
                             </div>
                         )}
 
-                        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                        <div className="grid grid-cols-3 gap-2">
                             {AMOUNTS.map((amount) => (
                                 <button
                                     key={amount}
+                                    type="button"
+                                    aria-pressed={selectedAmount === amount}
                                     onClick={() => {
                                         setSelectedAmount(amount)
                                         setClientSecret('')
                                     }}
-                                    className={`py-3 px-2 rounded-xl border-2 font-bold text-sm transition-all duration-200 ${selectedAmount === amount
-                                        ? 'border-primary bg-primary/10 text-primary shadow-sm scale-105'
-                                        : 'border-border bg-card hover:border-primary/50 hover:bg-secondary'
+                                    className={`tabular h-10 rounded-lg border text-sm font-medium transition-colors ${selectedAmount === amount
+                                        ? 'border-primary bg-primary/10 text-primary'
+                                        : 'bg-card hover:bg-accent'
                                         }`}
                                 >
-                                    {amount}€
+                                    {amount} €
                                 </button>
                             ))}
                             <button
+                                type="button"
+                                aria-pressed={selectedAmount === 'custom'}
                                 onClick={() => {
                                     setSelectedAmount('custom')
                                     setClientSecret('')
                                 }}
-                                className={`py-3 px-2 rounded-xl border-2 font-bold text-sm transition-all duration-200 ${selectedAmount === 'custom'
-                                    ? 'border-primary bg-primary/10 text-primary shadow-sm scale-105'
-                                    : 'border-border bg-card hover:border-primary/50 hover:bg-secondary'
+                                className={`h-10 rounded-lg border text-sm font-medium transition-colors ${selectedAmount === 'custom'
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'bg-card hover:bg-accent'
                                     }`}
                             >
                                 Otro
@@ -331,19 +336,19 @@ export function DonationsTab() {
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
-                                    className="pt-2"
+                                    className="space-y-1.5"
                                 >
-                                    <Label>Cantidad personalizada (€)</Label>
+                                    <Label className="text-[13px]">Cantidad personalizada (€)</Label>
                                     <Input
                                         type="number"
                                         min="1"
-                                        placeholder="Ej: 12.50"
+                                        placeholder="Ej: 12,50"
                                         value={customAmount}
                                         onChange={(e) => {
                                             setCustomAmount(e.target.value)
                                             setClientSecret('')
                                         }}
-                                        className="mt-1 text-lg"
+                                        className="tabular"
                                     />
                                 </motion.div>
                             )}
@@ -353,18 +358,18 @@ export function DonationsTab() {
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                className="space-y-3 pt-2"
+                                className="space-y-3"
                             >
-                                <div>
-                                    <Label>Nombre</Label>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[13px]">Nombre</Label>
                                     <Input
                                         placeholder="Tu nombre"
                                         value={name}
                                         onChange={(e) => setName(e.target.value)}
                                     />
                                 </div>
-                                <div>
-                                    <Label>Email (para recibos)</Label>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[13px]">Email (para recibos)</Label>
                                     <Input
                                         type="email"
                                         placeholder="tu@email.com"
@@ -377,16 +382,15 @@ export function DonationsTab() {
 
                         {!clientSecret && (
                             <Button
-                                className="w-full h-12 text-lg mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg"
+                                className="w-full"
                                 onClick={handleInitiatePayment}
                                 disabled={loading || getFinalAmount() < 1 || (isMonthly && !email)}
                             >
-                                {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CreditCard className="w-5 h-5 mr-2" />}
-                                {loading ? 'Procesando...' : `Donar ${getFinalAmount() > 0 ? getFinalAmount() + '€' : ''} ${isMonthly ? '/ mes' : ''}`}
+                                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                                {loading ? 'Procesando…' : `Donar ${getFinalAmount() > 0 ? getFinalAmount() + ' €' : ''} ${isMonthly ? '/ mes' : ''}`}
                             </Button>
                         )}
-                    </CardContent>
-                </Card>
+                </section>
 
                 {/* Payment Form Column */}
                 <div className="relative">
@@ -398,43 +402,45 @@ export function DonationsTab() {
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
                             >
-                                <Card className="border-2 border-primary/20 shadow-2xl overflow-hidden">
-                                    <div className="bg-secondary/50 p-4 border-b flex justify-between items-center">
-                                        <div className="font-semibold">Completar pago</div>
-                                        <div className="text-xs font-mono bg-background px-2 py-1 rounded border">Seguro con Stripe</div>
+                                <section className="overflow-hidden rounded-xl border bg-card shadow-xs">
+                                    <div className="flex items-center justify-between border-b px-5 py-3">
+                                        <h3 className="text-sm font-semibold">Completar pago</h3>
+                                        <Badge variant="secondary" className="text-[11px]">Seguro con Stripe</Badge>
                                     </div>
-                                    <CardContent className="p-6">
+                                    <div className="p-5">
                                         <Elements stripe={stripePromise} options={{
                                             clientSecret,
                                             appearance: { theme: 'stripe' },
                                             locale: 'es'
                                         }}>
                                             <header className="mb-6 text-center">
-                                                <div className="text-3xl font-bold">{getFinalAmount()}€</div>
+                                                <div className="tabular text-3xl font-semibold tracking-tight">{getFinalAmount()} €</div>
                                                 <div className="text-sm text-muted-foreground">{isMonthly ? 'cada mes' : 'pago único'}</div>
                                             </header>
                                             <CheckoutForm onSuccess={() => setPaymentSuccess(true)} />
                                         </Elements>
                                         <Button
                                             variant="ghost"
-                                            className="w-full mt-4"
+                                            className="w-full mt-3 text-muted-foreground"
                                             onClick={() => setClientSecret('')}
                                         >
-                                            Cancelar / Cambiar cantidad
+                                            Cancelar / cambiar cantidad
                                         </Button>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </section>
                             </motion.div>
                         ) : (
                             <motion.div
                                 key="placeholder"
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                className="h-full min-h-[400px] flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed rounded-xl bg-secondary/20 p-8 text-center"
+                                className="flex h-full min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center"
                             >
-                                <CreditCard className="w-16 h-16 mb-4 opacity-20" />
-                                <p className="text-lg font-medium">Selecciona una cantidad para continuar</p>
-                                <p className="text-sm mt-2">El formulario de pago seguro aparecerá aquí</p>
+                                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                                    <CreditCard className="h-5 w-5 text-muted-foreground" />
+                                </div>
+                                <p className="font-medium">Selecciona una cantidad para continuar</p>
+                                <p className="mt-1 text-sm text-muted-foreground">El formulario de pago seguro aparecerá aquí</p>
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -491,58 +497,32 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
             <PaymentElement />
 
             {message && (
-                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm border border-red-100 dark:border-red-800">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
                     {message}
                 </div>
             )}
 
             <Button
                 disabled={isProcessing || !stripe || !elements}
-                className={`
-                    w-full h-14 text-lg font-bold relative overflow-hidden
-                    transition-all duration-700 transform
-                    ${!stripe || !elements
-                        ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                        : hasError
-                            ? 'bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white shadow-lg shadow-red-500/50 dark:shadow-red-400/30'
-                            : 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 text-white shadow-lg hover:shadow-2xl hover:shadow-green-500/50 dark:hover:shadow-green-400/30 hover:scale-[1.02] active:scale-[0.98]'
-                    }
-                    disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
-                `}
+                variant={hasError ? 'destructive' : 'default'}
+                className="w-full"
             >
-                {/* Efecto de brillo animado cuando está activo */}
-                {stripe && elements && !isProcessing && (
-                    <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                        animate={{
-                            x: ['-100%', '100%'],
-                        }}
-                        transition={{
-                            duration: 3,
-                            repeat: Infinity,
-                            ease: 'linear',
-                        }}
-                    />
+                {isProcessing ? (
+                    <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Procesando pago…
+                    </>
+                ) : !stripe || !elements ? (
+                    <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Cargando formulario…
+                    </>
+                ) : (
+                    <>
+                        <CreditCard className="h-4 w-4" />
+                        Pagar ahora
+                    </>
                 )}
-
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                    {isProcessing ? (
-                        <>
-                            <Loader2 className="animate-spin" size={20} />
-                            Procesando pago...
-                        </>
-                    ) : !stripe || !elements ? (
-                        <>
-                            <Loader2 className="animate-spin" size={20} />
-                            Cargando formulario...
-                        </>
-                    ) : (
-                        <>
-                            <CreditCard size={20} />
-                            Pagar ahora
-                        </>
-                    )}
-                </span>
             </Button>
         </form>
     )

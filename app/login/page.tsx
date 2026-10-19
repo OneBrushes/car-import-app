@@ -7,7 +7,28 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Loader2, Car, Lock, Mail, ArrowRight, User } from "lucide-react"
+import { Loader2, Lock, Mail, ArrowRight, ArrowLeft, User } from "lucide-react"
+
+function AuthBackground() {
+    return (
+        <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(var(--border)_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]"
+        />
+    )
+}
+
+function BrandLogo() {
+    return (
+        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-white p-1.5 shadow-xs">
+            <img
+                src={`${process.env.__NEXT_ROUTER_BASEPATH || ''}/NorDrive.png`}
+                alt="NorDrive Logo"
+                className="h-full w-full object-contain"
+            />
+        </div>
+    )
+}
 
 export default function LoginPage() {
     const [email, setEmail] = useState("")
@@ -164,85 +185,81 @@ export default function LoginPage() {
 
     if (resetMode) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#0f172a] to-black p-4 overflow-hidden relative">
-                <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in duration-500">
-                    <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
-                        <h2 className="text-xl font-semibold text-white mb-4">Recuperar Contraseña</h2>
-                        <p className="text-sm text-slate-400 mb-6">Introduce tu email y te enviaremos un enlace para restablecerla.</p>
+            <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
+                <AuthBackground />
+                <div className="relative z-10 w-full max-w-sm animate-in fade-in duration-300">
+                    <div className="flex flex-col items-center text-center mb-6">
+                        <BrandLogo />
+                        <h1 className="text-2xl font-semibold tracking-tight mb-1">Recuperar contraseña</h1>
+                        <p className="text-sm text-muted-foreground">
+                            Introduce tu email y te enviaremos un enlace para restablecerla.
+                        </p>
+                    </div>
 
+                    <div className="rounded-xl border bg-card p-6 shadow-xs">
                         <form onSubmit={handleResetPassword} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="reset-email" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Email</Label>
-                                <Input
-                                    id="reset-email"
-                                    type="email"
-                                    placeholder="nombre@empresa.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                    className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
-                                />
+                            <div className="space-y-1.5">
+                                <Label htmlFor="reset-email" className="text-[13px]">Email</Label>
+                                <div className="relative">
+                                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        id="reset-email"
+                                        type="email"
+                                        placeholder="nombre@empresa.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required
+                                        className="pl-9"
+                                    />
+                                </div>
                             </div>
-                            <Button className="w-full bg-primary" type="submit" disabled={loading}>
-                                {loading ? <Loader2 className="animate-spin" /> : "Enviar enlace"}
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="w-full text-slate-400 hover:text-white"
-                                onClick={() => setResetMode(false)}
-                            >
-                                Volver al login
+                            <Button className="w-full" type="submit" disabled={loading}>
+                                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar enlace"}
                             </Button>
                         </form>
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setResetMode(false)}
+                        className="mx-auto mt-5 flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                        Volver al inicio de sesión
+                    </button>
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#0f172a] to-black p-4 overflow-hidden relative">
+        <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
+            <AuthBackground />
 
-            {/* Background Effects */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-                <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-blue-600/20 rounded-full blur-[120px]" />
-                <div className="absolute top-[40%] -right-[10%] w-[40%] h-[40%] bg-purple-600/10 rounded-full blur-[100px]" />
-            </div>
-
-            <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in duration-500">
+            <div className="relative z-10 w-full max-w-sm animate-in fade-in duration-300">
                 {/* Logo / Brand */}
-                <div className="flex flex-col items-center mb-8 text-center">
-                    <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-900/50 mb-4 p-2">
-                        <img
-                            src={`${process.env.__NEXT_ROUTER_BASEPATH || ''}/NorDrive.png`}
-                            alt="NorDrive Logo"
-                            className="w-full h-full object-contain"
-                        />
-                    </div>
-                    <h1 className="text-3xl font-bold text-white tracking-tight">NorDrive Manager</h1>
-                    <p className="text-slate-400 mt-2 text-sm">Gestión profesional de importación de vehículos</p>
+                <div className="flex flex-col items-center text-center mb-6">
+                    <BrandLogo />
+                    <h1 className="text-2xl font-semibold tracking-tight mb-1">
+                        {isSignUp ? "Crear cuenta nueva" : "Bienvenido de nuevo"}
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                        {isSignUp
+                            ? "Introduce tus datos para registrarte en NorDrive Manager"
+                            : "Accede a tu panel de NorDrive Manager"}
+                    </p>
                 </div>
 
                 {/* Login Card */}
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl transition-all duration-300 ease-in-out" style={{ minHeight: '400px' }}>
-                    <div className={`transition-all duration-300 ease-in-out ${isAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
-                        <div className="mb-6">
-                            <h2 className="text-xl font-semibold text-white mb-1">
-                                {isSignUp ? "Crear cuenta nueva" : "Bienvenido de nuevo"}
-                            </h2>
-                            <p className="text-sm text-slate-400">
-                                {isSignUp ? "Introduce tus datos para registrarte" : "Accede a tu panel de control"}
-                            </p>
-                        </div>
-
+                <div className="rounded-xl border bg-card p-6 shadow-xs">
+                    <div className={`transition-all duration-300 ease-in-out ${isAnimating ? 'opacity-0 scale-[0.98]' : 'opacity-100 scale-100'}`}>
                         <form onSubmit={handleAuth} className="space-y-4">
                             {isSignUp && (
-                                <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-bottom-4 duration-300">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="firstName" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Nombre</Label>
+                                <div className="grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="firstName" className="text-[13px]">Nombre</Label>
                                         <div className="relative">
-                                            <User className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                            <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                             <Input
                                                 id="firstName"
                                                 type="text"
@@ -250,12 +267,12 @@ export default function LoginPage() {
                                                 value={firstName}
                                                 onChange={(e) => setFirstName(e.target.value)}
                                                 required={isSignUp}
-                                                className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                                className="pl-9"
                                             />
                                         </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="lastName" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Apellido</Label>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="lastName" className="text-[13px]">Apellido</Label>
                                         <Input
                                             id="lastName"
                                             type="text"
@@ -263,18 +280,15 @@ export default function LoginPage() {
                                             value={lastName}
                                             onChange={(e) => setLastName(e.target.value)}
                                             required={isSignUp}
-                                            className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
                                         />
                                     </div>
                                 </div>
                             )}
 
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="email" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Email</Label>
-                                </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="email" className="text-[13px]">Email</Label>
                                 <div className="relative">
-                                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                     <Input
                                         id="email"
                                         type="email"
@@ -282,25 +296,25 @@ export default function LoginPage() {
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         required
-                                        className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                        className="pl-9"
                                     />
                                 </div>
                             </div>
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                    <Label htmlFor="password" className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Contraseña</Label>
+                                    <Label htmlFor="password" className="text-[13px]">Contraseña</Label>
                                     {!isSignUp && (
                                         <button
                                             type="button"
                                             onClick={() => setResetMode(true)}
-                                            className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                                            className="text-xs text-muted-foreground transition-colors hover:text-primary"
                                         >
                                             ¿Olvidaste tu contraseña?
                                         </button>
                                     )}
                                 </div>
                                 <div className="relative">
-                                    <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                    <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                     <Input
                                         id="password"
                                         type="password"
@@ -308,55 +322,54 @@ export default function LoginPage() {
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
-                                        className="pl-10 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all"
+                                        className="pl-9"
                                     />
                                 </div>
                             </div>
 
-                            <Button
-                                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium py-5 shadow-lg shadow-blue-900/20 border-0 mt-2 transition-all hover:scale-[1.02]"
-                                type="submit"
-                                disabled={loading}
-                            >
+                            <Button className="w-full mt-2" type="submit" disabled={loading}>
                                 {loading ? (
-                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                    <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                    <span className="flex items-center justify-center gap-2">
-                                        {isSignUp ? "Registrarse" : "Iniciar Sesión"} <ArrowRight className="w-4 h-4" />
-                                    </span>
+                                    <>
+                                        {isSignUp ? "Registrarse" : "Iniciar sesión"}
+                                        <ArrowRight className="h-4 w-4" />
+                                    </>
                                 )}
                             </Button>
                         </form>
-
-                        {(registrationsEnabled || isSignUp) && (
-                            <div className="mt-6 pt-6 border-t border-white/5 text-center">
-                                {registrationsEnabled && (
-                                    <button
-                                        type="button"
-                                        onClick={toggleMode}
-                                        className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group"
-                                    >
-                                        {isSignUp
-                                            ? "¿Ya tienes cuenta? Inicia sesión"
-                                            : "¿No tienes cuenta? Regístrate gratis"}
-                                    </button>
-                                )}
-                                {isSignUp && !registrationsEnabled && (
-                                    <button
-                                        type="button"
-                                        onClick={toggleMode}
-                                        className="text-sm text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1 mx-auto group mt-2"
-                                    >
-                                        Volver al inicio de sesión
-                                    </button>
-                                )}
-                            </div>
-                        )}
                     </div>
                 </div>
 
-                <p className="text-center text-xs text-slate-600 mt-8">
-                    &copy; {new Date().getFullYear()} NorDrive Manager. Todos los derechos reservados.
+                {(registrationsEnabled || isSignUp) && (
+                    <div className="mt-5 text-center">
+                        {registrationsEnabled && (
+                            <button
+                                type="button"
+                                onClick={toggleMode}
+                                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                            >
+                                {isSignUp ? (
+                                    <>¿Ya tienes cuenta? <span className="font-medium text-primary">Inicia sesión</span></>
+                                ) : (
+                                    <>¿No tienes cuenta? <span className="font-medium text-primary">Regístrate</span></>
+                                )}
+                            </button>
+                        )}
+                        {isSignUp && !registrationsEnabled && (
+                            <button
+                                type="button"
+                                onClick={toggleMode}
+                                className="mt-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                            >
+                                Volver al inicio de sesión
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                <p className="mt-8 text-center text-xs text-muted-foreground/70">
+                    &copy; {new Date().getFullYear()} NorDrive Manager · Gestión de importación de vehículos
                 </p>
             </div>
         </div>

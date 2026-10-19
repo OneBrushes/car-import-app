@@ -1,6 +1,7 @@
 "use client"
 
 import { Trash2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface ComparativeCardMinimalProps {
   id: string
@@ -10,42 +11,51 @@ interface ComparativeCardMinimalProps {
   onDelete: () => void
 }
 
+const eur = (value: number) => `${Number(value || 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })} €`
+
 export function ComparativeCardMinimal({ id, importedCar, spainCar, steringAdjustment, onDelete }: ComparativeCardMinimalProps) {
   const importedTotal = (importedCar.price || 0) + (importedCar.totalExpenses || 0)
   const hasRightSteering = importedCar.steering === "Volante a la derecha"
   const spainAdjustedPrice = spainCar.price - (hasRightSteering ? steringAdjustment : 0)
 
   const difference = spainAdjustedPrice - importedTotal
-  
+
   let color = "text-destructive"
-  if (difference > 5000) color = "text-emerald-500"
+  if (difference > 5000) color = "text-success"
   else if (difference > 2000) color = "text-success"
-  else if (difference > 0) color = "text-blue-500"
+  else if (difference > 0) color = "text-warning"
 
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-card border border-border rounded-lg hover:border-primary/30 transition-colors gap-4">
-      <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6 w-full">
-         <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground">Importación</span>
-            <p className="text-sm font-semibold truncate max-w-[200px]">{importedCar.brand} {importedCar.model}</p>
-         </div>
-         <span className="hidden sm:inline text-muted-foreground">vs</span>
-         <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground">España</span>
-            <p className="text-sm font-semibold truncate max-w-[200px]">{spainCar.brand} {spainCar.model}</p>
-         </div>
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 shadow-xs transition-colors hover:border-foreground/15">
+      <div className="grid w-full flex-1 grid-cols-2 gap-4 sm:max-w-xl">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Importado</p>
+          <p className="truncate text-sm font-medium">{importedCar.brand} {importedCar.model}</p>
+          <p className="tabular text-xs text-muted-foreground">{eur(importedTotal)}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">España</p>
+          <p className="truncate text-sm font-medium">{spainCar.brand} {spainCar.model}</p>
+          <p className="tabular text-xs text-muted-foreground">{eur(spainAdjustedPrice)}</p>
+        </div>
       </div>
-      
-      <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end">
-         <div className="text-left sm:text-right">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground">Margen Bruto</span>
-            <p className={`font-black text-lg ${color}`}>
-              {difference > 0 ? "+" : ""}{difference.toLocaleString()}€
-            </p>
-         </div>
-         <button onClick={onDelete} className="p-2 hover:bg-destructive/10 hover:text-destructive text-muted-foreground rounded transition-colors">
-            <Trash2 className="w-4 h-4" />
-         </button>
+
+      <div className="flex w-full sm:w-auto items-center justify-between sm:justify-end gap-4">
+        <div className="text-left sm:text-right">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Margen bruto</p>
+          <p className={`tabular text-lg font-semibold tracking-tight ${color}`}>
+            {difference > 0 ? "+" : ""}{eur(difference)}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          onClick={onDelete}
+          title="Eliminar comparativa"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
       </div>
     </div>
   )

@@ -2,16 +2,42 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { X, Plus, Trash2, ChevronUp, ChevronDown, ImageIcon, FileText, Gauge, ClipboardCheck, Euro, Settings, Tag } from "lucide-react"
+import {
+  X,
+  Plus,
+  Trash2,
+  ImageIcon,
+  FileText,
+  Gauge,
+  ClipboardCheck,
+  Euro,
+  Settings,
+  Tag,
+  Link2,
+  Car,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  AlertTriangle,
+  ExternalLink,
+  Loader2,
+  StickyNote,
+} from "lucide-react"
 import { toast } from "sonner"
 import { ImageUpload } from "../image-upload"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Users, Eye } from "lucide-react"
-import { convertCurrency, getCurrencySymbol } from "@/lib/currency"
+import { convertCurrency } from "@/lib/currency"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { usePageVisibility } from "@/hooks/use-page-visibility"
+import { ImportFromUrl, type ScrapedCar } from "@/components/import-from-url"
+import { cn } from "@/lib/utils"
 
 interface AddCarModalProps {
   isOpen: boolean
@@ -40,11 +66,84 @@ const steeringOptions = ["Volante a la izquierda", "Volante a la derecha"]
 const colors = ["Blanco", "Negro", "Gris", "Plata", "Azul", "Rojo", "Verde", "Marrón", "Beige", "Naranja", "Amarillo", "Violeta", "Oro"]
 const doorsOptions = ["2", "3", "4", "5", "6", "7"]
 
+const STEPS = [
+  { id: "listing", label: "Anuncio", icon: Link2 },
+  { id: "vehicle", label: "Vehículo", icon: Car },
+  { id: "technical", label: "Técnico", icon: Gauge },
+  { id: "costs", label: "Costes", icon: Euro },
+  { id: "media", label: "Fotos y notas", icon: ImageIcon },
+] as const
+
+const MAX_IMAGES = 10
+
+/* ---------- Normalización de datos importados desde un anuncio ---------- */
+
+const firstMatch = (value: string, rules: [string[], string][]) => {
+  const lower = value.toLowerCase()
+  for (const [needles, result] of rules) {
+    if (needles.some((n) => lower.includes(n))) return result
+  }
+  return value
+}
+
+export const normalisePlatform = (value: string) =>
+  firstMatch(value, [
+    [["autoscout24"], "AutoScout24"],
+    [["mobile.de"], "Mobile.de"],
+    [["coches.net"], "Coches.net"],
+    [["milanuncios"], "Milanuncios"],
+  ])
+
+export const normaliseFuel = (value: string) =>
+  firstMatch(value, [
+    [["hybr", "híbr", "hibr"], "Híbrido"],
+    [["diesel", "diésel", "gasoil", "gasóleo"], "Diésel"],
+    [["elect", "elekt", "élect"], "Eléctrico"],
+    [["benzin", "petrol", "gasolin", "essence", "super"], "Gasolina"],
+    [["lpg", "cng", "gpl", "glp", "gas"], "Gas"],
+  ])
+
+export const normaliseTransmission = (value: string) =>
+  firstMatch(value, [
+    [["cvt"], "CVT"],
+    [["sequen", "secuen", "séquen"], "Secuencial"],
+    [["auto"], "Automática"],
+    [["manu", "schalt"], "Manual"],
+  ])
+
+export const normaliseColor = (value: string) =>
+  firstMatch(value, [
+    [["silver", "silber", "argent", "plata"], "Plata"],
+    [["white", "weiß", "weiss", "blanc"], "Blanco"],
+    [["black", "schwarz", "noir", "negro"], "Negro"],
+    [["grey", "gray", "grau", "gris"], "Gris"],
+    [["blue", "blau", "bleu", "azul"], "Azul"],
+    [["red", "rot", "rouge", "rojo"], "Rojo"],
+    [["green", "grün", "gruen", "vert", "verde"], "Verde"],
+    [["brown", "braun", "marron", "marrón"], "Marrón"],
+    [["beige"], "Beige"],
+    [["orange", "naranja"], "Naranja"],
+    [["yellow", "gelb", "jaune", "amarillo"], "Amarillo"],
+    [["violet", "purple", "lila", "violeta"], "Violeta"],
+    [["gold", "oro"], "Oro"],
+  ])
+
+const currencyFromCode: Record<string, string> = { EUR: "€", GBP: "£", USD: "$", CHF: "CHF" }
+
+const money = (value: number) => `${value.toLocaleString("es-ES", { maximumFractionDigits: 0 })} €`
+
+/** Lista de opciones + el valor actual si no está en ella (p. ej. un valor importado). */
+const withCurrent = (options: readonly string[], current: string) =>
+  current && !options.includes(current) ? [...options, current] : [...options]
+
+const selectClass =
+  "h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+
 export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarModalProps) {
   const { user } = useAuth()
   const [isSharedCar, setIsSharedCar] = useState(false)
   const [ownerName, setOwnerName] = useState<string>("")
-  const [activeMobileTab, setActiveMobileTab] = useState("photos")
+  const [step, setStep] = useState(0)
   const [convertedPrice, setConvertedPrice] = useState<number | null>(null)
   const [isConverting, setIsConverting] = useState(false)
   const [formData, setFormData] = useState({
@@ -100,9 +199,12 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     newEquipment: "",
   })
 
-  const [activeSection, setActiveSection] = useState("basic")
   const [newExpense, setNewExpense] = useState({ type: expenseTypes[0], amount: "" })
-  const [expandedSection, setExpandedSection] = useState<string | null>("basic")
+
+  // Volver al primer paso cada vez que se abre el modal
+  useEffect(() => {
+    if (isOpen) setStep(0)
+  }, [isOpen])
 
   // Dialog states
   const [showRestoreDialog, setShowRestoreDialog] = useState(false)
@@ -434,6 +536,50 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
     }))
   }
 
+  // Rellenar desde un anuncio: solo campos presentes y, al editar, solo campos vacíos
+  const handleImported = (car: ScrapedCar) => {
+    const isNew = !initialData
+    setFormData((prev) => {
+      const next = { ...prev }
+      const canSet = (current: unknown) => isNew || current === "" || current === null || current === undefined
+      const put = <K extends keyof typeof prev>(key: K, value: (typeof prev)[K] | undefined | null) => {
+        if (value === undefined || value === null || value === "") return
+        if (!canSet(prev[key])) return
+        next[key] = value
+      }
+
+      put("url", car.url)
+      put("platform", car.platform ? normalisePlatform(car.platform) : undefined)
+      put("location", car.location)
+      put("brand", car.brand)
+      put("model", car.model)
+      put("year", car.year)
+      put("month", car.month)
+      put("mileage", car.mileage != null ? String(car.mileage) : undefined)
+      put("cv", car.cv != null ? String(car.cv) : undefined)
+      put("fuelType", car.fuelType ? normaliseFuel(car.fuelType) : undefined)
+      put("transmission", car.transmission ? normaliseTransmission(car.transmission) : undefined)
+      put("color", car.color ? normaliseColor(car.color) : undefined)
+      put("co2", car.co2 != null ? String(car.co2) : undefined)
+
+      if (car.price != null && canSet(prev.price)) {
+        next.price = String(car.price)
+        const symbol = car.currency ? currencyFromCode[car.currency.toUpperCase()] : undefined
+        if (symbol && currencies.includes(symbol)) next.currency = symbol
+      }
+
+      if (car.images?.length) {
+        const merged = [...prev.images]
+        for (const img of car.images) {
+          if (img && !merged.includes(img)) merged.push(img)
+        }
+        next.images = merged.slice(0, Math.max(MAX_IMAGES, prev.images.length))
+      }
+
+      return next
+    })
+  }
+
   const calculateTotalExpenses = () => {
     const expensesSum = formData.expenses.reduce((sum, e) => sum + e.amount, 0)
     const transfer = Number.parseFloat(formData.transferCost || "0")
@@ -510,677 +656,738 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
 
   if (!isOpen) return null
 
-  const sections = [
-    { id: "basic", label: "Básica" },
-    { id: "technical", label: "Técnica" },
-    { id: "itv", label: "ITV" },
-    { id: "pricing", label: "Precio" },
-    { id: "equipment", label: "Equipamiento" },
-    { id: "tags", label: "Etiquetas" },
-    { id: "notes", label: "Notas" },
-    { id: "photos", label: "Fotos" },
-  ]
-
-  const mobileTabs = [
-    { id: "photos", label: "Fotos", icon: ImageIcon },
-    { id: "basic", label: "Básica", icon: FileText },
-    { id: "technical", label: "Técnica", icon: Gauge },
-    { id: "itv", label: "Estado", icon: ClipboardCheck },
-    { id: "pricing", label: "Costes", icon: Euro },
-    { id: "equipment", label: "Extras", icon: Settings },
-    { id: "tags", label: "Notas", icon: Tag },
-  ]
+  const isLastStep = step === STEPS.length - 1
+  const totalExpenses = calculateTotalExpenses()
+  const finalPrice = calculateFinalPrice()
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-background rounded-lg w-full max-w-6xl shadow-xl border border-border flex flex-col max-h-[90vh]">
+      <div className="bg-background w-full max-w-4xl rounded-xl border shadow-xl flex flex-col max-h-[92vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border bg-background rounded-t-lg">
-          <h2 className="text-xl font-bold">{initialData ? "Editar Coche" : "Añadir Coche"}</h2>
-          <button onClick={handleClose} className="p-1 hover:bg-secondary rounded-lg transition-colors">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        {/* Warning Banner for New Cars */}
-        {!initialData && (
-          <div className="bg-orange-500/10 border-b border-orange-500/20 px-4 py-3">
-            <p className="text-sm text-orange-600 dark:text-orange-400">
-              ⚠️ <strong>Importante:</strong> Si quieres guardar este coche, rellena la marca y/o el modelo y dale a "Añadir Coche". Después podrás modificarlo editándolo. Si cierras sin guardar, se perderán los datos.
+        <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4 border-b">
+          <div className="min-w-0">
+            <h2 className="text-xl font-semibold tracking-tight">{initialData ? "Editar coche" : "Añadir coche"}</h2>
+            <p className="text-sm text-muted-foreground">
+              {initialData
+                ? [formData.brand, formData.model].filter(Boolean).join(" ") || "Modifica los datos del coche"
+                : "Rellena los datos por pasos o impórtalos desde un anuncio"}
             </p>
           </div>
-        )}
+          <Button type="button" variant="ghost" size="icon-sm" onClick={handleClose} aria-label="Cerrar">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
 
-        {/* Read-Only Banner for Shared Cars */}
-        {isSharedCar && (
-          <div className="bg-blue-500/10 border-b border-blue-500/20 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500/20 rounded-lg">
-                <Eye className="w-5 h-5 text-blue-400" />
+        {/* Step indicator */}
+        <nav className="border-b px-3 sm:px-5 py-3 overflow-x-auto no-scrollbar" aria-label="Pasos del formulario">
+          <ol className="flex items-center gap-1 min-w-max">
+            {STEPS.map((s, i) => {
+              const isActive = i === step
+              const isDone = i < step
+              return (
+                <li key={s.id} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setStep(i)}
+                    aria-current={isActive ? "step" : undefined}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors",
+                      isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs tabular",
+                        isActive && "border-primary bg-primary text-primary-foreground",
+                        isDone && "border-primary/40 bg-primary/10 text-primary",
+                      )}
+                    >
+                      {isDone ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                    </span>
+                    <span className={cn(!isActive && "hidden sm:inline")}>{s.label}</span>
+                  </button>
+                  {i < STEPS.length - 1 && <span className="h-px w-4 sm:w-6 bg-border" aria-hidden />}
+                </li>
+              )
+            })}
+          </ol>
+        </nav>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto bg-muted/30 px-4 sm:px-5 py-5 space-y-4">
+          {/* Warning Banner for New Cars */}
+          {!initialData && (
+            <div className="flex items-start gap-3 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning" />
+              <p className="text-sm text-foreground">
+                <strong className="font-medium">Importante:</strong> para guardar este coche, rellena al menos la marca y el modelo y pulsa «Guardar coche». Después podrás modificarlo editándolo. Si cierras sin guardar, se perderán los datos.
+              </p>
+            </div>
+          )}
+
+          {/* Read-Only Banner for Shared Cars */}
+          {isSharedCar && (
+            <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <Eye className="h-4 w-4 text-primary" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-blue-400 flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Coche compartido - Solo lectura
+                <h3 className="font-medium text-primary flex items-center gap-2 text-sm">
+                  <Users className="h-4 w-4" />
+                  Coche compartido · Solo lectura
                 </h3>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-muted-foreground mt-0.5">
                   Este coche ha sido compartido contigo por <span className="font-medium text-foreground">{ownerName}</span>. Puedes ver toda la información pero no editarla.
                 </p>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Mobile Tabs Navigation */}
-        <div className="lg:hidden flex overflow-x-auto border-b border-border bg-muted/5 p-2 gap-2 no-scrollbar">
-          {mobileTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveMobileTab(tab.id)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${activeMobileTab === tab.id
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "bg-background text-muted-foreground border border-border"
-                }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
+          <form id="car-form" onSubmit={handleSubmit} className="space-y-4">
+            {/* ---------- Paso 1: Anuncio ---------- */}
+            <div className={cn("space-y-4", step !== 0 && "hidden")}>
+              <ImportFromUrl onImported={handleImported} className="bg-card" />
 
-        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
-          {/* Columna Izquierda: Imágenes (4 cols) */}
-          <div className={`lg:col-span-4 p-6 border-r border-border overflow-y-auto bg-muted/5 ${activeMobileTab === 'photos' ? 'block' : 'hidden lg:block'}`}>
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <ImageIcon className="w-5 h-5" />
-              Galería de Fotos
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Sube las fotos del coche aquí. La primera foto será la principal.
-            </p>
-            <ImageUpload images={formData.images} onImagesChange={handleImagesChange} />
-          </div>
-
-          {/* Columna Derecha: Formulario (8 cols) */}
-          <div className={`lg:col-span-8 p-6 overflow-y-auto bg-background ${activeMobileTab !== 'photos' ? 'block' : 'hidden lg:block'}`}>
-            <form id="car-form" onSubmit={handleSubmit} className="space-y-6">
-              {/* Información Básica */}
-              <div className={activeMobileTab === 'basic' ? 'block' : 'hidden lg:block'}>
-                <CollapsibleSection
-                  title="Información Básica"
-                  id="basic"
-                  expanded={expandedSection}
-                  onToggle={setExpandedSection}
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <input
-                      type="text"
-                      name="brand"
-                      placeholder="Marca"
-                      value={formData.brand}
+              <FormSection icon={Link2} title="Anuncio" description="De dónde sale el coche">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="URL del anuncio" htmlFor="car-url" className="sm:col-span-2">
+                    <Input
+                      id="car-url"
+                      type="url"
+                      name="url"
+                      placeholder="https://…"
+                      value={formData.url}
                       onChange={handleChange}
-                      required
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                     />
-                    <input
-                      type="text"
-                      name="model"
-                      placeholder="Modelo"
-                      value={formData.model}
-                      onChange={handleChange}
-                      required
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                    />
-                    <select
-                      name="vehicleType"
-                      value={formData.vehicleType}
-                      onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                    >
-                      <option value="">Tipo de vehículo</option>
-                      {vehicleTypes.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        name="year"
-                        placeholder="Año"
-                        value={formData.year}
-                        onChange={handleChange}
-                        className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                      />
-                      <select
-                        name="month"
-                        value={formData.month}
-                        onChange={handleChange}
-                        className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    {formData.url && (
+                      <a
+                        href={formData.url.startsWith("http") ? formData.url : `https://${formData.url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                       >
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                          <option key={m} value={m}>
-                            {new Date(0, m - 1).toLocaleString("es-ES", { month: "long" })}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                        <ExternalLink className="h-3 w-3" />
+                        Abrir anuncio
+                      </a>
+                    )}
+                  </Field>
+                  <Field label="Plataforma" htmlFor="car-platform">
                     <select
+                      id="car-platform"
                       name="platform"
                       value={formData.platform}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className={selectClass}
                     >
-                      <option value="">Plataforma</option>
-                      {platforms.map((p) => (
+                      <option value="">Selecciona…</option>
+                      {withCurrent(platforms, formData.platform).map((p) => (
                         <option key={p} value={p}>
                           {p}
                         </option>
                       ))}
                     </select>
-                    <input
-                      type="url"
-                      name="url"
-                      placeholder="URL del anuncio"
-                      value={formData.url}
-                      onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                    />
-                    <input
+                  </Field>
+                  <Field label="Ubicación" htmlFor="car-location">
+                    <Input
+                      id="car-location"
                       type="text"
                       name="location"
-                      placeholder="Ubicación"
+                      placeholder="Ciudad, región"
                       value={formData.location}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                     />
-                    <input
+                  </Field>
+                  <Field label="País de origen" htmlFor="car-origin">
+                    <Input
+                      id="car-origin"
                       type="text"
                       name="origin"
-                      placeholder="País de origen"
+                      placeholder="Alemania, Francia…"
                       value={formData.origin}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                     />
-                  </div>
-                </CollapsibleSection>
-              </div>
+                  </Field>
+                </div>
+              </FormSection>
+            </div>
 
-              {/* Especificaciones Técnicas */}
-              <div className={activeMobileTab === 'technical' ? 'block' : 'hidden lg:block'}>
-                <CollapsibleSection
-                  title="Especificaciones Técnicas"
-                  id="technical"
-                  expanded={expandedSection}
-                  onToggle={setExpandedSection}
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2 grid grid-cols-2 gap-4">
-                      <select
-                        name="color"
-                        value={formData.color}
-                        onChange={handleChange}
-                        className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                      >
-                        <option value="">Color</option>
-                        {colors.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        name="doors"
-                        value={formData.doors}
-                        onChange={handleChange}
-                        className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                      >
-                        <option value="">Puertas</option>
-                        {doorsOptions.map((d) => (
-                          <option key={d} value={d}>
-                            {d} puertas
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <input
+            {/* ---------- Paso 2: Vehículo ---------- */}
+            <div className={cn("space-y-4", step !== 1 && "hidden")}>
+              <FormSection icon={Car} title="Vehículo" description="Identificación y carrocería">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Marca" htmlFor="car-brand">
+                    <Input
+                      id="car-brand"
                       type="text"
-                      name="motorType"
-                      placeholder="Tipo de Motor (ej: V6, I4, Híbrido...)"
-                      value={formData.motorType}
+                      name="brand"
+                      placeholder="BMW"
+                      value={formData.brand}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      required
                     />
-                    <input
+                  </Field>
+                  <Field label="Modelo" htmlFor="car-model">
+                    <Input
+                      id="car-model"
                       type="text"
-                      name="displacement"
-                      placeholder="Cilindrada (cc)"
-                      value={formData.displacement}
+                      name="model"
+                      placeholder="M3 Competition"
+                      value={formData.model}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      required
                     />
-                    <input
-                      type="text"
-                      name="co2"
-                      placeholder="Emisiones CO2 (g/km)"
-                      value={formData.co2}
+                  </Field>
+                  <Field label="Año" htmlFor="car-year">
+                    <Input
+                      id="car-year"
+                      type="number"
+                      name="year"
+                      placeholder="Año"
+                      value={formData.year}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className="tabular"
                     />
-                    <input
+                  </Field>
+                  <Field label="Mes de matriculación" htmlFor="car-month">
+                    <select
+                      id="car-month"
+                      name="month"
+                      value={formData.month}
+                      onChange={handleChange}
+                      className={cn(selectClass, "capitalize")}
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                        <option key={m} value={m}>
+                          {new Date(0, m - 1).toLocaleString("es-ES", { month: "long" })}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Tipo de vehículo" htmlFor="car-vehicle-type">
+                    <select
+                      id="car-vehicle-type"
+                      name="vehicleType"
+                      value={formData.vehicleType}
+                      onChange={handleChange}
+                      className={selectClass}
+                    >
+                      <option value="">Selecciona…</option>
+                      {withCurrent(vehicleTypes, formData.vehicleType).map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Color" htmlFor="car-color">
+                    <select
+                      id="car-color"
+                      name="color"
+                      value={formData.color}
+                      onChange={handleChange}
+                      className={selectClass}
+                    >
+                      <option value="">Selecciona…</option>
+                      {withCurrent(colors, formData.color).map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Puertas" htmlFor="car-doors">
+                    <select
+                      id="car-doors"
+                      name="doors"
+                      value={formData.doors}
+                      onChange={handleChange}
+                      className={selectClass}
+                    >
+                      <option value="">Selecciona…</option>
+                      {withCurrent(doorsOptions, formData.doors).map((d) => (
+                        <option key={d} value={d}>
+                          {d} puertas
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+              </FormSection>
+            </div>
+
+            {/* ---------- Paso 3: Técnico ---------- */}
+            <div className={cn("space-y-4", step !== 2 && "hidden")}>
+              <FormSection icon={Gauge} title="Especificaciones técnicas" description="Motor, potencia y transmisión">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Potencia (CV)" htmlFor="car-cv">
+                    <Input
+                      id="car-cv"
                       type="number"
                       name="cv"
-                      placeholder="Potencia (CV)"
+                      placeholder="0"
                       value={formData.cv}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className="tabular"
                     />
-                    <input
+                  </Field>
+                  <Field label="Kilometraje (km)" htmlFor="car-mileage">
+                    <Input
+                      id="car-mileage"
                       type="number"
                       name="mileage"
-                      placeholder="Kilometraje"
+                      placeholder="0"
                       value={formData.mileage}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className="tabular"
                     />
+                  </Field>
+                  <Field label="Combustible" htmlFor="car-fuel">
                     <select
+                      id="car-fuel"
                       name="fuelType"
                       value={formData.fuelType}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className={selectClass}
                     >
-                      <option value="">Combustible</option>
-                      {fuelTypes.map((f) => (
+                      <option value="">Selecciona…</option>
+                      {withCurrent(fuelTypes, formData.fuelType).map((f) => (
                         <option key={f} value={f}>
                           {f}
                         </option>
                       ))}
                     </select>
+                  </Field>
+                  <Field label="Transmisión" htmlFor="car-transmission">
                     <select
+                      id="car-transmission"
                       name="transmission"
                       value={formData.transmission}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className={selectClass}
                     >
-                      <option value="">Transmisión</option>
-                      {transmissionTypes.map((t) => (
+                      <option value="">Selecciona…</option>
+                      {withCurrent(transmissionTypes, formData.transmission).map((t) => (
                         <option key={t} value={t}>
                           {t}
                         </option>
                       ))}
                     </select>
+                  </Field>
+                  <Field label="Tracción" htmlFor="car-traction">
                     <select
+                      id="car-traction"
                       name="traction"
                       value={formData.traction}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className={selectClass}
                     >
-                      <option value="">Tracción</option>
-                      {tractionTypes.map((t) => (
+                      <option value="">Selecciona…</option>
+                      {withCurrent(tractionTypes, formData.traction).map((t) => (
                         <option key={t} value={t}>
                           {t}
                         </option>
                       ))}
                     </select>
+                  </Field>
+                  <Field label="Dirección" htmlFor="car-steering">
                     <select
+                      id="car-steering"
                       name="steering"
                       value={formData.steering}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className={selectClass}
                     >
-                      {steeringOptions.map((option) => (
+                      {withCurrent(steeringOptions, formData.steering).map((option) => (
                         <option key={option} value={option}>
                           {option}
                         </option>
                       ))}
                     </select>
-                  </div>
-                </CollapsibleSection>
-              </div>
+                  </Field>
+                  <Field label="Tipo de motor" htmlFor="car-motor">
+                    <Input
+                      id="car-motor"
+                      type="text"
+                      name="motorType"
+                      placeholder="V6, I4, Híbrido…"
+                      value={formData.motorType}
+                      onChange={handleChange}
+                    />
+                  </Field>
+                  <Field label="Cilindrada (cc)" htmlFor="car-displacement">
+                    <Input
+                      id="car-displacement"
+                      type="text"
+                      name="displacement"
+                      placeholder="2998"
+                      value={formData.displacement}
+                      onChange={handleChange}
+                      className="tabular"
+                    />
+                  </Field>
+                  <Field label="Emisiones CO₂ (g/km)" htmlFor="car-co2">
+                    <Input
+                      id="car-co2"
+                      type="text"
+                      name="co2"
+                      placeholder="0"
+                      value={formData.co2}
+                      onChange={handleChange}
+                      className="tabular"
+                    />
+                  </Field>
+                </div>
+              </FormSection>
 
-              {/* Estado e ITV */}
-              <div className={activeMobileTab === 'itv' ? 'block' : 'hidden lg:block'}>
-                <CollapsibleSection
-                  title="Estado e ITV"
-                  id="itv"
-                  expanded={expandedSection}
-                  onToggle={setExpandedSection}
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <input
+              <FormSection icon={ClipboardCheck} title="Inspección / ITV" description="Estado de la inspección técnica en origen">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Nombre de la inspección" htmlFor="car-inspection-name">
+                    <Input
+                      id="car-inspection-name"
                       type="text"
                       name="inspectionName"
-                      placeholder="Nombre Inspección (ej: TÜV)"
+                      placeholder="TÜV, Contrôle technique…"
                       value={formData.inspectionName}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                     />
+                  </Field>
+                  <Field label="Estado" htmlFor="car-inspection-status">
                     <select
+                      id="car-inspection-status"
                       name="inspectionStatus"
                       value={formData.inspectionStatus}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className={selectClass}
                     >
                       <option value="aprobada">Aprobada</option>
                       <option value="pendiente">Pendiente</option>
                       <option value="caducada">Caducada</option>
                     </select>
-                    <input
+                  </Field>
+                  <Field label="Fecha de caducidad" htmlFor="car-inspection-expiry">
+                    <Input
+                      id="car-inspection-expiry"
                       type="date"
                       name="inspectionExpiry"
-                      placeholder="Fecha caducidad"
                       value={formData.inspectionExpiry}
                       onChange={handleChange}
-                      className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      className="tabular"
                     />
-                    <div className="sm:col-span-2">
-                      <input
-                        type="url"
-                        name="itv_link"
-                        placeholder="Enlace ITV (https://...)"
-                        value={formData.itv_link}
+                  </Field>
+                  <Field label="Enlace ITV" htmlFor="car-itv-link">
+                    <Input
+                      id="car-itv-link"
+                      type="url"
+                      name="itv_link"
+                      placeholder="https://…"
+                      value={formData.itv_link}
+                      onChange={handleChange}
+                    />
+                    {formData.itv_link && (
+                      <a
+                        href={formData.itv_link.startsWith("http") ? formData.itv_link : `https://${formData.itv_link}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Abrir enlace ITV
+                      </a>
+                    )}
+                  </Field>
+                </div>
+              </FormSection>
+            </div>
+
+            {/* ---------- Paso 4: Costes ---------- */}
+            <div className={cn("space-y-4", step !== 3 && "hidden")}>
+              <FormSection icon={Euro} title="Precio" description="Precio de compra en origen">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Precio base" htmlFor="car-price">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                          {formData.currency}
+                        </span>
+                        <Input
+                          id="car-price"
+                          type="number"
+                          name="price"
+                          placeholder="0"
+                          value={formData.price}
+                          onChange={handleChange}
+                          step="0.01"
+                          className={cn("tabular", formData.currency.length > 1 ? "pl-12" : "pl-8")}
+                        />
+                      </div>
+                      <select
+                        name="currency"
+                        aria-label="Moneda"
+                        value={formData.currency}
                         onChange={handleChange}
-                        className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                      />
-                      {formData.itv_link && (
-                        <a
-                          href={formData.itv_link.startsWith('http') ? formData.itv_link : `https://${formData.itv_link}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline mt-1 inline-block"
-                        >
-                          🔗 Abrir enlace ITV
-                        </a>
-                      )}
+                        className={cn(selectClass, "w-24")}
+                      >
+                        {currencies.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <textarea
+                    {/* Conversion indicator */}
+                    {formData.price && formData.currency !== '€' && (
+                      <div className="flex items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-xs text-muted-foreground">
+                        {isConverting ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                            Convirtiendo…
+                          </span>
+                        ) : convertedPrice ? (
+                          <>
+                            <span className="tabular font-medium text-foreground">≈ {money(convertedPrice)}</span>
+                            <span className="text-[11px]">Tasa en tiempo real</span>
+                          </>
+                        ) : null}
+                      </div>
+                    )}
+                  </Field>
+                  <Field label="Coste de transferencia" htmlFor="car-transfer">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>
+                      <Input
+                        id="car-transfer"
+                        type="number"
+                        name="transferCost"
+                        placeholder="0"
+                        value={formData.transferCost}
+                        onChange={handleChange}
+                        className="pl-8 tabular"
+                      />
+                    </div>
+                  </Field>
+                </div>
+              </FormSection>
+
+              <FormSection icon={FileText} title="Gastos adicionales" description="Importación, matriculación, impuestos…">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      aria-label="Tipo de gasto"
+                      value={newExpense.type}
+                      onChange={(e) => setNewExpense({ ...newExpense, type: e.target.value })}
+                      className={cn(selectClass, "w-auto flex-1 min-w-[10rem]")}
+                    >
+                      {expenseTypes.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="relative w-32">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>
+                      <Input
+                        type="number"
+                        aria-label="Importe"
+                        placeholder="0"
+                        value={newExpense.amount}
+                        onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
+                        className="pl-8 tabular"
+                      />
+                    </div>
+                    <Button type="button" variant="outline" onClick={handleAddExpense}>
+                      <Plus className="h-4 w-4" />
+                      Añadir
+                    </Button>
+                  </div>
+
+                  {formData.expenses.length > 0 ? (
+                    <ul className="divide-y rounded-lg border">
+                      {formData.expenses.map((expense) => (
+                        <li key={expense.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                          <span>{expense.type}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="tabular font-medium">{money(expense.amount)}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleRemoveExpense(expense.id)}
+                              className="text-muted-foreground hover:text-destructive"
+                              aria-label={`Eliminar gasto ${expense.type}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
+                      Aún no hay gastos añadidos
+                    </p>
+                  )}
+                </div>
+              </FormSection>
+
+              {/* Totales */}
+              <div className="rounded-xl border bg-card p-5 shadow-xs space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Precio base</span>
+                  <span className="tabular">{money(Number(formData.price || 0))}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Gastos totales</span>
+                  <span className="tabular">{money(totalExpenses)}</span>
+                </div>
+                <div className="flex items-baseline justify-between border-t pt-3">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Precio final</span>
+                  <span className="tabular text-xl font-semibold">{money(finalPrice)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ---------- Paso 5: Fotos y notas ---------- */}
+            <div className={cn("space-y-4", step !== 4 && "hidden")}>
+              <FormSection icon={ImageIcon} title="Fotos" description="La primera foto será la principal">
+                <ImageUpload images={formData.images} onImagesChange={handleImagesChange} />
+              </FormSection>
+
+              <FormSection icon={StickyNote} title="Estado y notas">
+                <div className="space-y-4">
+                  <Field label="Defectos o daños conocidos" htmlFor="car-defects">
+                    <Textarea
+                      id="car-defects"
                       name="defects"
-                      placeholder="Defectos o daños conocidos..."
+                      placeholder="Arañazos, golpes, testigos encendidos…"
                       value={formData.defects}
                       onChange={handleChange}
                       rows={3}
-                      className="sm:col-span-2 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
+                      className="resize-none"
                     />
+                  </Field>
+                  <Field label="Notas privadas" htmlFor="car-notes">
+                    <Textarea
+                      id="car-notes"
+                      name="notes"
+                      placeholder="Notas internas sobre el coche…"
+                      value={formData.notes}
+                      onChange={handleChange}
+                      rows={4}
+                      className="resize-none"
+                    />
+                  </Field>
+                </div>
+              </FormSection>
+
+              <FormSection icon={Tag} title="Etiquetas">
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      aria-label="Nueva etiqueta"
+                      placeholder="Nueva etiqueta…"
+                      value={formData.newTag}
+                      onChange={(e) => setFormData({ ...formData, newTag: e.target.value })}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
+                    />
+                    <Button type="button" variant="outline" size="icon" onClick={handleAddTag} aria-label="Añadir etiqueta">
+                      <Plus className="h-4 w-4" />
+                    </Button>
                   </div>
-                </CollapsibleSection>
-              </div>
-
-              {/* Precio y Costes */}
-              <div className={activeMobileTab === 'pricing' ? 'block' : 'hidden lg:block'}>
-                <CollapsibleSection
-                  title="Precio y Costes"
-                  id="pricing"
-                  expanded={expandedSection}
-                  onToggle={setExpandedSection}
-                >
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs text-muted-foreground mb-1 block">Precio Base</label>
-                        <div className="space-y-2">
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <input
-                                type="number"
-                                name="price"
-                                placeholder="0"
-                                value={formData.price}
-                                onChange={handleChange}
-                                step="0.01"
-                                className="w-full pl-8 pr-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                              />
-                              <span className="absolute left-3 top-2 text-muted-foreground">{formData.currency}</span>
-                            </div>
-                            <select
-                              name="currency"
-                              value={formData.currency}
-                              onChange={handleChange}
-                              className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                            >
-                              {currencies.map((c) => (
-                                <option key={c} value={c}>
-                                  {c}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          {/* Conversion indicator */}
-                          {formData.price && formData.currency !== '€' && (
-                            <div className="text-xs text-muted-foreground bg-blue-500/10 border border-blue-500/20 rounded-lg p-2">
-                              {isConverting ? (
-                                <span className="flex items-center gap-2">
-                                  <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                                  Convirtiendo...
-                                </span>
-                              ) : convertedPrice ? (
-                                <span className="flex items-center justify-between">
-                                  <span>≈ {convertedPrice.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</span>
-                                  <span className="text-[10px] opacity-70">Tasa en tiempo real</span>
-                                </span>
-                              ) : null}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted-foreground mb-1 block">Coste Transferencia</label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            name="transferCost"
-                            placeholder="0"
-                            value={formData.transferCost}
-                            onChange={handleChange}
-                            className="w-full pl-8 pr-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                          />
-                          <span className="absolute left-3 top-2 text-muted-foreground">€</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Lista de Gastos */}
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Gastos Adicionales</label>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <select
-                          value={newExpense.type}
-                          onChange={(e) => setNewExpense({ ...newExpense, type: e.target.value })}
-                          className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        >
-                          {expenseTypes.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          placeholder="€"
-                          value={newExpense.amount}
-                          onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                          className="w-24 px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleAddExpense}
-                          className="px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                        >
-                          <Plus className="w-5 h-5" />
-                        </button>
-                      </div>
-
-                      {formData.expenses.length > 0 && (
-                        <div className="bg-muted/30 rounded-lg p-2 space-y-1">
-                          {formData.expenses.map((expense) => (
-                            <div key={expense.id} className="flex justify-between items-center text-sm p-1 hover:bg-muted/50 rounded">
-                              <span>{expense.type}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{expense.amount}€</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveExpense(expense.id)}
-                                  className="text-destructive hover:text-destructive/80"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Totales */}
-                    <div className="bg-primary/5 p-4 rounded-lg space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Precio Base:</span>
-                        <span>{Number(formData.price || 0).toLocaleString()}€</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Gastos Totales:</span>
-                        <span>{calculateTotalExpenses().toLocaleString()}€</span>
-                      </div>
-                      <div className="flex justify-between font-bold text-lg pt-2 border-t border-primary/10">
-                        <span>Precio Final:</span>
-                        <span className="text-primary">{calculateFinalPrice().toLocaleString()}€</span>
-                      </div>
-                    </div>
-                  </div>
-                </CollapsibleSection>
-              </div>
-
-              {/* Equipamiento */}
-              <div className={activeMobileTab === 'equipment' ? 'block' : 'hidden lg:block'}>
-                <CollapsibleSection
-                  title="Equipamiento"
-                  id="equipment"
-                  expanded={expandedSection}
-                  onToggle={setExpandedSection}
-                >
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Añadir equipamiento..."
-                        value={formData.newEquipment}
-                        onChange={(e) => setFormData({ ...formData, newEquipment: e.target.value })}
-                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddEquipment())}
-                        className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddEquipment}
-                        className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
-                      >
-                        <Plus className="w-5 h-5" />
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {formData.equipment.map((item) => (
-                        <span
-                          key={item}
-                          className="px-2 py-1 bg-secondary/50 text-secondary-foreground rounded-md text-sm flex items-center gap-1"
-                        >
-                          {item}
-                          <button onClick={() => handleRemoveEquipment(item)} className="hover:text-destructive">
-                            <X className="w-3 h-3" />
+                  {formData.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {formData.tags.map((tag) => (
+                        <Badge key={tag} variant="outline" className="gap-1 border-transparent bg-primary/10 text-primary">
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTag(tag)}
+                            className="rounded-sm hover:text-destructive"
+                            aria-label={`Quitar etiqueta ${tag}`}
+                          >
+                            <X className="h-3 w-3" />
                           </button>
-                        </span>
+                        </Badge>
                       ))}
                     </div>
-                  </div>
-                </CollapsibleSection>
-              </div>
+                  )}
+                </div>
+              </FormSection>
 
-              {/* Etiquetas y Notas */}
-              <div className={activeMobileTab === 'tags' ? 'block' : 'hidden lg:block'}>
-                <CollapsibleSection
-                  title="Etiquetas y Notas"
-                  id="tags"
-                  expanded={expandedSection}
-                  onToggle={setExpandedSection}
-                >
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Etiquetas</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Nueva etiqueta..."
-                          value={formData.newTag}
-                          onChange={(e) => setFormData({ ...formData, newTag: e.target.value })}
-                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
-                          className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleAddTag}
-                          className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
-                        >
-                          <Plus className="w-5 h-5" />
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {formData.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="px-2 py-1 bg-success/20 text-success rounded-md text-sm flex items-center gap-1"
+              <FormSection icon={Settings} title="Equipamiento">
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      aria-label="Nuevo equipamiento"
+                      placeholder="Añadir equipamiento…"
+                      value={formData.newEquipment}
+                      onChange={(e) => setFormData({ ...formData, newEquipment: e.target.value })}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddEquipment())}
+                    />
+                    <Button type="button" variant="outline" size="icon" onClick={handleAddEquipment} aria-label="Añadir equipamiento">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {formData.equipment.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {formData.equipment.map((item) => (
+                        <Badge key={item} variant="secondary" className="gap-1">
+                          {item}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEquipment(item)}
+                            className="rounded-sm hover:text-destructive"
+                            aria-label={`Quitar ${item}`}
                           >
-                            {tag}
-                            <button onClick={() => handleRemoveTag(tag)} className="hover:text-destructive">
-                              <X className="w-3 h-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
                     </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Notas Privadas</label>
-                      <textarea
-                        name="notes"
-                        placeholder="Notas internas sobre el coche..."
-                        value={formData.notes}
-                        onChange={handleChange}
-                        rows={4}
-                        className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
-                      />
-                    </div>
-                  </div>
-                </CollapsibleSection>
-              </div>
-            </form>
-          </div>
+                  )}
+                </div>
+              </FormSection>
+            </div>
+          </form>
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-border bg-background rounded-b-lg flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
+        <div className="sticky bottom-0 flex items-center justify-between gap-2 border-t bg-background px-4 sm:px-5 py-3">
+          <Button type="button" variant="ghost" onClick={handleClose} className="hidden sm:inline-flex">
             Cancelar
-          </button>
-          <button
-            onClick={() => document.getElementById('car-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))}
-            disabled={isSharedCar}
-            className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${isSharedCar
-              ? 'bg-muted text-muted-foreground cursor-not-allowed'
-              : 'bg-primary text-primary-foreground hover:bg-primary/90'
-              }`}
-            title={isSharedCar ? 'No puedes editar coches compartidos' : ''}
-          >
-            {isSharedCar ? (
-              <span className="flex items-center gap-2">
-                <Eye className="w-4 h-4" />
-                Solo lectura
-              </span>
-            ) : (
-              initialData ? "Guardar Cambios" : "Añadir Coche"
+          </Button>
+          <span className="text-xs text-muted-foreground tabular sm:hidden">
+            Paso {step + 1} de {STEPS.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Atrás</span>
+            </Button>
+            {!isLastStep && (
+              <Button type="button" variant="outline" onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}>
+                <span className="hidden sm:inline">Siguiente</span>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             )}
-          </button>
+            <span title={isSharedCar ? 'No puedes editar coches compartidos' : undefined}>
+              <Button
+                type="button"
+                onClick={() => document.getElementById('car-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))}
+                disabled={isSharedCar}
+              >
+                {isSharedCar ? (
+                  <>
+                    <Eye className="h-4 w-4" />
+                    Solo lectura
+                  </>
+                ) : (
+                  initialData ? "Guardar cambios" : "Guardar coche"
+                )}
+              </Button>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -1199,27 +1406,50 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
   )
 }
 
-function CollapsibleSection({
+function FormSection({
+  icon: Icon,
   title,
-  id,
-  expanded,
-  onToggle,
+  description,
   children,
 }: {
+  icon: React.ComponentType<{ className?: string }>
   title: string
-  id: string
-  expanded: string | null
-  onToggle: (id: string | null) => void
+  description?: string
   children: React.ReactNode
 }) {
   return (
-    <div className="h-full">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-primary">
-        {title}
-      </h3>
-      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-        {children}
+    <section className="rounded-xl border bg-card p-5 shadow-xs">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+          <Icon className="h-4 w-4 text-primary" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold leading-tight">{title}</h3>
+          {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        </div>
       </div>
+      {children}
+    </section>
+  )
+}
+
+function Field({
+  label,
+  htmlFor,
+  className,
+  children,
+}: {
+  label: string
+  htmlFor?: string
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <Label htmlFor={htmlFor} className="text-[13px]">
+        {label}
+      </Label>
+      {children}
     </div>
   )
 }

@@ -1,6 +1,8 @@
 "use client"
 
-import { X } from "lucide-react"
+import { Trash2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 interface ComparativeCardGridProps {
   id: string
@@ -10,6 +12,8 @@ interface ComparativeCardGridProps {
   onDelete: () => void
 }
 
+const eur = (value: number) => `${Number(value || 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })} €`
+
 export function ComparativeCardGrid({ id, importedCar, spainCar, steringAdjustment, onDelete }: ComparativeCardGridProps) {
   const importedTotal = (importedCar.price || 0) + (importedCar.totalExpenses || 0)
   const hasRightSteering = importedCar.steering === "Volante a la derecha"
@@ -18,59 +22,65 @@ export function ComparativeCardGrid({ id, importedCar, spainCar, steringAdjustme
   const difference = spainAdjustedPrice - importedTotal
   const profitPercentage = (difference / importedTotal) * 100
 
-  let status = { color: "destructive", bg: "bg-destructive/10", border: "border-destructive", text: "text-destructive" }
+  let status = { label: "Mala opción", badge: "bg-destructive/10 text-destructive", border: "border-destructive/30", text: "text-destructive" }
   if (profitPercentage > 50 || difference > 10000) {
-    status = { color: "purple-500", bg: "bg-purple-500/10", border: "border-purple-500", text: "text-purple-500" }
+    status = { label: "Unicornio", badge: "bg-success text-success-foreground", border: "border-success/40", text: "text-success" }
   } else if (profitPercentage > 20 || difference > 5000) {
-    status = { color: "emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500", text: "text-emerald-500" }
+    status = { label: "Ocasión muy buena", badge: "bg-success/15 text-success", border: "border-success/30", text: "text-success" }
   } else if (profitPercentage > 10 || difference > 2000) {
-    status = { color: "success", bg: "bg-success/10", border: "border-success", text: "text-success" }
+    status = { label: "Buena opción", badge: "bg-success/10 text-success", border: "border-success/30", text: "text-success" }
   } else if ((profitPercentage >= 5 && profitPercentage <= 10) && (difference >= 1000 && difference <= 2000)) {
-    status = { color: "blue-500", bg: "bg-blue-500/10", border: "border-blue-500", text: "text-blue-500" }
+    status = { label: "Mejorable", badge: "bg-warning/10 text-warning", border: "border-warning/30", text: "text-warning" }
   } else if ((profitPercentage >= 0 && profitPercentage < 5) && (difference >= 0 && difference < 1000)) {
-    status = { color: "orange-500", bg: "bg-orange-500/10", border: "border-orange-500", text: "text-orange-500" }
+    status = { label: "Muy justo", badge: "bg-warning/10 text-warning", border: "border-warning/30", text: "text-warning" }
   } else if (difference > 0) {
-    status = { color: "success", bg: "bg-success/10", border: "border-success", text: "text-success" }
+    status = { label: "Buena opción", badge: "bg-success/10 text-success", border: "border-success/30", text: "text-success" }
   }
 
   return (
-    <div className={`rounded-xl border ${status.border} ${status.bg} p-4 relative transition-colors`}>
-      <button onClick={onDelete} className="absolute top-2 right-2 p-1 hover:bg-black/10 rounded transition-colors">
-        <X className="w-4 h-4 text-muted-foreground" />
-      </button>
+    <div className={`rounded-xl border bg-card p-4 shadow-xs transition-all hover:shadow-md hover:-translate-y-0.5 ${status.border}`}>
+      <div className="flex items-center justify-between gap-2">
+        <Badge className={`border-transparent ${status.badge}`}>{status.label}</Badge>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          onClick={onDelete}
+          title="Eliminar comparativa"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
 
-      <div className="space-y-4 pt-2">
-        <div className="flex justify-between items-center text-sm">
-          <div className="flex-1 truncate pr-2">
-            <span className="text-xs text-muted-foreground block">Importación</span>
-            <span className="font-semibold">{importedCar.brand} {importedCar.model}</span>
-          </div>
-          <div className="text-right">
-            <span className="text-xs text-muted-foreground block">Coste Total</span>
-            <span className="font-bold">{importedTotal.toLocaleString()}€</span>
-          </div>
+      {/* Importado vs España */}
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Importado</p>
+          <p className="truncate text-sm font-medium">{importedCar.brand} {importedCar.model}</p>
+          <p className="tabular mt-1 font-semibold">{eur(importedTotal)}</p>
         </div>
-
-        <div className="flex justify-between items-center text-sm border-t border-black/10 dark:border-white/10 pt-3">
-          <div className="flex-1 truncate pr-2">
-            <span className="text-xs text-muted-foreground block">Mercado Nacional</span>
-            <span className="font-semibold">{spainCar.brand} {spainCar.model}</span>
-          </div>
-          <div className="text-right">
-            <span className="text-xs text-muted-foreground block">Ref. España</span>
-            <span className="font-bold">{spainAdjustedPrice.toLocaleString()}€</span>
-          </div>
+        <div className="min-w-0 text-right">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">España</p>
+          <p className="truncate text-sm font-medium">{spainCar.brand} {spainCar.model}</p>
+          <p className="tabular mt-1 font-semibold">{eur(spainAdjustedPrice)}</p>
         </div>
+      </div>
 
-        <div className="pt-3 border-t border-black/10 dark:border-white/10 flex justify-between items-center bg-background/50 rounded-lg p-2">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-muted-foreground">ROI</span>
-            <p className={`font-black ${status.text}`}>{profitPercentage > 0 ? "+" : ""}{profitPercentage.toFixed(1)}%</p>
-          </div>
-          <div className="text-right">
-             <span className="text-[10px] uppercase font-bold text-muted-foreground">Ganancia</span>
-             <p className={`font-black text-lg ${status.text}`}>{difference > 0 ? "+" : ""}{difference.toFixed(0)}€</p>
-          </div>
+      {/* Resultado */}
+      <div className="mt-3 flex items-end justify-between border-t pt-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            {difference > 0 ? "Ganancia" : "Pérdida"}
+          </p>
+          <p className={`tabular text-xl font-semibold tracking-tight ${status.text}`}>
+            {difference > 0 ? "+" : ""}{eur(difference)}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">ROI</p>
+          <p className={`tabular font-semibold ${status.text}`}>
+            {profitPercentage > 0 ? "+" : ""}{profitPercentage.toFixed(1)}%
+          </p>
         </div>
       </div>
     </div>

@@ -2,9 +2,10 @@
 
 import {
   Car, MapPin, Scale, Archive, Home, FileText, TrendingUp, CheckSquare, Heart,
-  Map as MapIcon, Network, Wallet, EyeOff, Eye, Shield, PanelLeftClose, PanelLeftOpen,
+  Map as MapIcon, Network, Wallet, EyeOff, Eye, Shield, PanelLeftClose, PanelLeftOpen, Calculator, Users, BellRing, Landmark, Warehouse,
   type LucideIcon,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "./auth-provider"
 import { EasterEggs } from "./easter-eggs"
 import { cn } from "@/lib/utils"
@@ -34,6 +35,7 @@ export function getNavGroups(role: string | null | undefined, donationsVisible: 
       label: "General",
       items: [
         { id: "dashboard", label: "Dashboard", icon: Home, roles: ALL_ROLES },
+        { id: "reminders", label: "Recordatorios", icon: BellRing, roles: MANAGER_ROLES },
       ],
     },
     {
@@ -42,6 +44,7 @@ export function getNavGroups(role: string | null | undefined, donationsVisible: 
         { id: "import", label: "Importación", icon: Car, roles: ALL_ROLES },
         { id: "spain", label: "España", icon: MapPin, roles: ALL_ROLES },
         { id: "comparison", label: "Comparativa", icon: Scale, roles: ALL_ROLES },
+        { id: "calculator", label: "Calculadora", icon: Calculator, roles: ALL_ROLES },
         { id: "profitable", label: "Rentables", icon: TrendingUp, roles: ALL_ROLES },
         { id: "map", label: "Mapa", icon: MapIcon, roles: ALL_ROLES },
       ],
@@ -50,7 +53,9 @@ export function getNavGroups(role: string | null | undefined, donationsVisible: 
       label: "Operaciones",
       items: [
         { id: "management", label: "Comprados", icon: Archive, roles: MANAGER_ROLES },
+        { id: "customers", label: "Clientes", icon: Users, roles: MANAGER_ROLES },
         { id: "expenses", label: "Gastos", icon: Wallet, roles: IMPORTER_ROLES },
+        { id: "fiscal", label: "Fiscal", icon: Landmark, roles: IMPORTER_ROLES },
         { id: "checklist", label: "Checklist", icon: CheckSquare, roles: IMPORTER_ROLES },
         { id: "report", label: "Informe", icon: FileText, roles: IMPORTER_ROLES },
       ],
@@ -90,8 +95,15 @@ export function Navigation({
   onToggleCollapsed,
 }: NavigationProps) {
   const { isGodMode, toggleGodMode, profile } = useAuth()
+  const router = useRouter()
   const isSuperAdmin = profile?.role === 'super_admin'
   const groups = getNavGroups(role, donationsVisible)
+
+  const openGarage = () => {
+    // Al salir del garaje se vuelve exactamente a esta pestaña
+    try { sessionStorage.setItem("nordrive-return-path", `/?tab=${activeTab}`) } catch { }
+    router.push("/garage")
+  }
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -153,6 +165,17 @@ export function Navigation({
 
       {/* Pie */}
       <div className="shrink-0 space-y-1 border-t border-sidebar-border p-2">
+        <button
+          onClick={openGarage}
+          title="Garaje virtual"
+          className={cn(
+            "flex h-9 w-full items-center gap-3 rounded-md text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+            collapsed ? "justify-center px-0" : "px-3"
+          )}
+        >
+          <Warehouse className="h-4 w-4 shrink-0 text-sidebar-primary" />
+          {!collapsed && <span>Garaje virtual</span>}
+        </button>
         {isSuperAdmin && (
           <button
             onClick={toggleGodMode}

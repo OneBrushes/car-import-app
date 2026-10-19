@@ -2,12 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { Loader2, Save, CheckCircle2, AlertCircle } from "lucide-react"
 
@@ -203,18 +201,25 @@ export function ChecklistTab() {
     }
 
     if (loading && cars.length === 0) {
-        return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
+        return (
+            <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando…
+            </div>
+        )
     }
 
+    const progress = calculateProgress()
+
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="space-y-6 animate-in">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
-                    <h2 className="text-2xl font-semibold tracking-tight">Checklist de Inspección</h2>
+                    <h2 className="text-2xl font-semibold tracking-tight mb-1">Checklist de inspección</h2>
                     <p className="text-muted-foreground">Verifica el estado de los vehículos importados.</p>
                 </div>
 
-                <div className="flex items-center gap-4 w-full md:w-auto">
+                <div className="flex items-center gap-2 w-full md:w-auto">
                     <Select value={selectedCarId} onValueChange={setSelectedCarId}>
                         <SelectTrigger className="w-full md:w-[300px]">
                             <SelectValue placeholder="Seleccionar coche..." />
@@ -229,8 +234,8 @@ export function ChecklistTab() {
                     </Select>
 
                     {selectedCarId && (
-                        <Button onClick={saveChecklist} disabled={saving}>
-                            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                        <Button onClick={saveChecklist} disabled={saving} className="shrink-0">
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                             Guardar
                         </Button>
                     )}
@@ -239,71 +244,85 @@ export function ChecklistTab() {
 
             {selectedCarId ? (
                 <>
-                    <Card className="bg-primary/5 border-primary/20">
-                        <CardContent className="pt-6 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-primary/10 rounded-full">
-                                    <CheckCircle2 className="w-8 h-8 text-primary" />
+                    <div className="rounded-xl border bg-card p-5 shadow-xs">
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${progress === 100 ? "bg-success/10" : "bg-primary/10"}`}>
+                                    <CheckCircle2 className={`h-4 w-4 ${progress === 100 ? "text-success" : "text-primary"}`} />
                                 </div>
                                 <div>
-                                    <p className="text-lg font-bold">Progreso de Inspección</p>
-                                    <p className="text-sm text-muted-foreground">{calculateProgress()}% completado</p>
+                                    <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Progreso de inspección</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        {progress === 100 ? "Inspección completada" : `${progress}% completado`}
+                                    </p>
                                 </div>
                             </div>
-                            <div className="text-3xl font-bold text-primary">{calculateProgress()}%</div>
-                        </CardContent>
-                    </Card>
+                            <p className={`tabular text-2xl font-semibold tracking-tight ${progress === 100 ? "text-success" : "text-foreground"}`}>{progress}%</p>
+                        </div>
+                        <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                                className={`h-full rounded-full transition-all ${progress === 100 ? "bg-success" : "bg-primary"}`}
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                    </div>
 
                     <div className="grid gap-6 md:grid-cols-2">
-                        {Object.entries(CHECKLIST_SECTIONS).map(([key, section]) => (
-                            <Card key={key}>
-                                <CardHeader>
-                                    <CardTitle>{section.title}</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
+                        {Object.entries(CHECKLIST_SECTIONS).map(([key, section]) => {
+                            const doneCount = section.items.filter((_, idx) => checklistData[`${key}-${idx}`]?.checked).length
+                            return (
+                            <section key={key} className="rounded-xl border bg-card p-5 shadow-xs">
+                                <div className="mb-4 flex items-center justify-between gap-2">
+                                    <h3 className="text-sm font-semibold">{section.title}</h3>
+                                    <span className="tabular text-xs text-muted-foreground">{doneCount}/{section.items.length}</span>
+                                </div>
+                                <div className="space-y-3">
                                     {section.items.map((item, idx) => {
                                         const itemKey = `${key}-${idx}`
                                         const isChecked = checklistData[itemKey]?.checked || false
                                         const note = checklistData[itemKey]?.note || ""
 
                                         return (
-                                            <div key={idx} className="space-y-2 pb-4 border-b last:border-0 last:pb-0">
-                                                <div className="flex items-start space-x-3">
+                                            <div key={idx} className="pb-3 border-b last:border-0 last:pb-0">
+                                                <div className="flex items-start gap-3">
                                                     <Checkbox
                                                         id={itemKey}
                                                         checked={isChecked}
                                                         onCheckedChange={(checked) => handleCheck(itemKey, checked as boolean)}
-                                                        className="w-6 h-6 mt-0.5 border-2 border-primary data-[state=checked]:bg-primary data-[state=checked]:border-primary bg-white"
+                                                        className="mt-0.5 h-5 w-5"
                                                     />
-                                                    <div className="grid gap-1.5 leading-none w-full">
+                                                    <div className="grid w-full gap-2">
                                                         <label
                                                             htmlFor={itemKey}
-                                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                                            className={`cursor-pointer text-[13px] font-medium leading-5 peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${isChecked ? "text-muted-foreground" : ""}`}
                                                         >
                                                             {item}
                                                         </label>
 
                                                         <Input
-                                                            placeholder="Notas / Observaciones..."
+                                                            placeholder="Notas / observaciones…"
                                                             value={note}
                                                             onChange={(e) => handleNote(itemKey, e.target.value)}
-                                                            className="h-8 text-xs mt-1 bg-muted/50"
+                                                            className="h-8 text-xs"
                                                         />
                                                     </div>
                                                 </div>
                                             </div>
                                         )
                                     })}
-                                </CardContent>
-                            </Card>
-                        ))}
+                                </div>
+                            </section>
+                            )
+                        })}
                     </div>
                 </>
             ) : (
-                <div className="flex flex-col items-center justify-center h-[400px] border-2 border-dashed rounded-xl bg-muted/30">
-                    <AlertCircle className="w-12 h-12 text-muted-foreground mb-4" />
-                    <h3 className="text-xl font-semibold text-muted-foreground">Selecciona un coche para comenzar</h3>
-                    <p className="text-sm text-muted-foreground mt-2">Elige un vehículo del desplegable superior para ver su checklist.</p>
+                <div className="flex min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center">
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                        <AlertCircle className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <h3 className="font-medium">Selecciona un coche para comenzar</h3>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">Elige un vehículo en el desplegable superior para ver su checklist.</p>
                 </div>
             )}
         </div>

@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
@@ -13,6 +15,7 @@ import { Loader2, Shield, Users, Trash2, Database, Lock, Ban, Info, HardDrive, R
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { ExportImportTools } from "@/components/export-import-tools"
+import { StorageCleanup } from "@/components/storage-cleanup"
 
 interface Profile {
     id: string
@@ -482,446 +485,447 @@ export function AdminPanel() {
     }
 
     if (loading) {
-        return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
+        return (
+            <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando…
+            </div>
+        )
     }
+
+    const bandwidthPercentage = (estimatedBandwidthGB / BANDWIDTH_LIMIT_GB) * 100
 
     return (
         <div className="space-y-6 animate-in">
-            {/* Export/Import Tools */}
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                    <h2 className="text-2xl font-semibold tracking-tight mb-1">Administración</h2>
+                    <p className="text-muted-foreground">Usuarios, almacenamiento, seguridad y actividad de la plataforma.</p>
+                </div>
+                {/* Export/Import Tools */}
                 <ExportImportTools />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Usuarios</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{usersCountReal > 0 ? usersCountReal : users.length}</div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Almacenamiento</CardTitle>
-                        <HardDrive className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {storageUsageMB.toFixed(2)} MB
-                        </div>
-                        <p className="text-xs text-muted-foreground">de {STORAGE_LIMIT_MB} MB (Imágenes)</p>
-                        <div className="h-1.5 w-full bg-secondary mt-2 rounded-full overflow-hidden">
-                            <div
-                                className={`h-full ${storagePercentage > 90 ? 'bg-destructive' : 'bg-blue-500'}`}
-                                style={{ width: `${Math.min(storagePercentage, 100)}%` }}
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Base de Datos</CardTitle>
-                        <Database className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{dbUsageMB.toFixed(2)} MB</div>
-                        <p className="text-xs text-muted-foreground">de {DB_LIMIT_MB} MB (Texto)</p>
-                        <div className="h-1.5 w-full bg-secondary mt-2 rounded-full overflow-hidden">
-                            <div
-                                className={`h-full ${dbPercentage > 90 ? 'bg-destructive' : 'bg-green-500'}`}
-                                style={{ width: `${Math.min(dbPercentage, 100)}%` }}
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Bandwidth</CardTitle>
-                        <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{estimatedBandwidthGB.toFixed(2)} GB</div>
-                        <p className="text-xs text-muted-foreground">de {BANDWIDTH_LIMIT_GB} GB/mes</p>
-                        <div className="h-1.5 w-full bg-secondary mt-2 rounded-full overflow-hidden">
-                            <div
-                                className={`h-full ${(estimatedBandwidthGB / BANDWIDTH_LIMIT_GB * 100) > 90 ? 'bg-destructive' : 'bg-purple-500'}`}
-                                style={{ width: `${Math.min((estimatedBandwidthGB / BANDWIDTH_LIMIT_GB * 100), 100)}%` }}
-                            />
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-1">⚠️ Estimado (Supabase)</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Seguridad</CardTitle>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <StatCard label="Usuarios" icon={Users} value={String(usersCountReal > 0 ? usersCountReal : users.length)} />
+                <StatCard
+                    label="Almacenamiento"
+                    icon={HardDrive}
+                    value={`${storageUsageMB.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MB`}
+                    sub={`de ${STORAGE_LIMIT_MB.toLocaleString('es-ES')} MB (imágenes)`}
+                    percentage={storagePercentage}
+                />
+                <StatCard
+                    label="Base de datos"
+                    icon={Database}
+                    value={`${dbUsageMB.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MB`}
+                    sub={`de ${DB_LIMIT_MB} MB (texto)`}
+                    percentage={dbPercentage}
+                />
+                <StatCard
+                    label="Ancho de banda"
+                    icon={RefreshCw}
+                    value={`${estimatedBandwidthGB.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} GB`}
+                    sub={`de ${BANDWIDTH_LIMIT_GB} GB/mes · estimado`}
+                    percentage={bandwidthPercentage}
+                />
+                <div className="rounded-xl border bg-card p-5 shadow-xs">
+                    <div className="mb-3 flex items-center justify-between">
+                        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Seguridad</p>
                         <Lock className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${registrationsEnabled ? 'bg-green-500' : 'bg-red-500'}`} />
-                            <span className="font-bold text-sm">{registrationsEnabled ? 'Reg. Abierto' : 'Reg. Cerrado'}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">{blockedEmails.length} bloqueados</p>
-                    </CardContent>
-                </Card>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${registrationsEnabled ? 'bg-success' : 'bg-destructive'}`} />
+                        <span className="text-sm font-semibold">{registrationsEnabled ? 'Registro abierto' : 'Registro cerrado'}</span>
+                    </div>
+                    <p className="tabular mt-1 text-xs text-muted-foreground">{blockedEmails.length} {blockedEmails.length === 1 ? 'email bloqueado' : 'emails bloqueados'}</p>
+                </div>
             </div>
 
             <Tabs defaultValue="users" className="space-y-4">
-                <TabsList className="flex flex-wrap h-auto w-full justify-start gap-2 bg-muted/50 p-1">
-                    <TabsTrigger value="users" className="flex-1 min-w-[120px]">Gestión Usuarios</TabsTrigger>
-                    <TabsTrigger value="storage" className="flex-1 min-w-[120px]">Almacenamiento & DB</TabsTrigger>
-                    <TabsTrigger value="security" className="flex-1 min-w-[120px]">Seguridad</TabsTrigger>
-                    <TabsTrigger value="logs" className="flex-1 min-w-[120px]">Logs Sistema</TabsTrigger>
+                <TabsList className="h-auto w-full flex-wrap justify-start sm:w-auto">
+                    <TabsTrigger value="users">Usuarios</TabsTrigger>
+                    <TabsTrigger value="storage">Almacenamiento y BD</TabsTrigger>
+                    <TabsTrigger value="security">Seguridad</TabsTrigger>
+                    <TabsTrigger value="logs">Actividad</TabsTrigger>
                 </TabsList>
 
                 {/* --- USERS TAB --- */}
                 <TabsContent value="users">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Usuarios Registrados</CardTitle>
-                            <CardDescription>Gestiona roles y permisos.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Email</TableHead>
-                                            <TableHead>Rol</TableHead>
-                                            <TableHead>Gastos Globales</TableHead>
-                                            <TableHead>Registro</TableHead>
-                                            <TableHead>Última Conexión</TableHead>
-                                            <TableHead>Acciones</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {users.map((user) => (
-                                            <TableRow key={user.id} className={user.role === 'banned' ? 'bg-destructive/10' : ''}>
-                                                <TableCell className="whitespace-nowrap">
-                                                    {user.email}
-                                                    {user.role === 'banned' && <span className="ml-2 text-xs text-destructive font-bold">(BANEADO)</span>}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Select
-                                                        defaultValue={user.role}
-                                                        onValueChange={(val) => handleRoleChange(user.id, val)}
-                                                        disabled={user.role === 'banned'}
-                                                    >
-                                                        <SelectTrigger className="w-[130px]">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="usuario">Usuario</SelectItem>
-                                                            <SelectItem value="gestor">Gestor</SelectItem>
-                                                            <SelectItem value="importador">Importador</SelectItem>
-                                                            <SelectItem value="admin">Admin</SelectItem>
-                                                            {user.role === 'super_admin' && <SelectItem value="super_admin">Super Admin (God Level)</SelectItem>}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div
-                                                        onClick={() => toggleManageExpenses(user.id, user.can_manage_expenses)}
-                                                        className={`w-10 h-5 rounded-full p-0.5 cursor-pointer transition-colors flex-shrink-0 ${user.can_manage_expenses ? 'bg-primary' : 'bg-secondary'}`}
-                                                    >
-                                                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${user.can_manage_expenses ? 'translate-x-5' : 'translate-x-0'}`} />
+                    <Panel title="Usuarios registrados" description="Gestiona roles y permisos.">
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="pl-5">Email</TableHead>
+                                        <TableHead>Rol</TableHead>
+                                        <TableHead>Gastos globales</TableHead>
+                                        <TableHead>Registro</TableHead>
+                                        <TableHead>Última conexión</TableHead>
+                                        <TableHead className="pr-5 text-right">Acciones</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {users.map((user) => (
+                                        <TableRow key={user.id} className={user.role === 'banned' ? 'bg-destructive/5' : ''}>
+                                            <TableCell className="whitespace-nowrap pl-5 font-medium">
+                                                {user.email}
+                                                {user.role === 'banned' && (
+                                                    <Badge variant="outline" className="ml-2 border-transparent bg-destructive/10 text-destructive">Bloqueado</Badge>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Select
+                                                    defaultValue={user.role}
+                                                    onValueChange={(val) => handleRoleChange(user.id, val)}
+                                                    disabled={user.role === 'banned'}
+                                                >
+                                                    <SelectTrigger size="sm" className="w-[150px]">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="usuario">Usuario</SelectItem>
+                                                        <SelectItem value="gestor">Gestor</SelectItem>
+                                                        <SelectItem value="importador">Importador</SelectItem>
+                                                        <SelectItem value="admin">Admin</SelectItem>
+                                                        {user.role === 'super_admin' && <SelectItem value="super_admin">Super Admin (God Level)</SelectItem>}
+                                                    </SelectContent>
+                                                </Select>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Switch
+                                                    checked={!!user.can_manage_expenses}
+                                                    onCheckedChange={() => toggleManageExpenses(user.id, user.can_manage_expenses)}
+                                                    aria-label="Permitir gestionar gastos globales"
+                                                />
+                                            </TableCell>
+                                            <TableCell className="tabular whitespace-nowrap text-muted-foreground">{new Date(user.created_at).toLocaleDateString('es-ES')}</TableCell>
+                                            <TableCell className="whitespace-nowrap">
+                                                {user.last_sign_in_at ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="tabular text-sm">{new Date(user.last_sign_in_at).toLocaleDateString('es-ES')}</span>
+                                                        <span className="tabular text-xs text-muted-foreground">{new Date(user.last_sign_in_at).toLocaleTimeString('es-ES')}</span>
                                                     </div>
-                                                </TableCell>
-                                                <TableCell className="whitespace-nowrap">{new Date(user.created_at).toLocaleDateString()}</TableCell>
-                                                <TableCell className="whitespace-nowrap">
-                                                    {user.last_sign_in_at ? (
-                                                        <div className="flex flex-col">
-                                                            <span className="text-sm">{new Date(user.last_sign_in_at).toLocaleDateString()}</span>
-                                                            <span className="text-xs text-muted-foreground">{new Date(user.last_sign_in_at).toLocaleTimeString()}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground">Nunca</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Button
-                                                        variant={user.role === 'banned' ? "outline" : "secondary"}
-                                                        size="sm"
-                                                        onClick={() => handleBanUser(user.id, user.role)}
-                                                    >
-                                                        {user.role === 'banned' ? <Shield className="w-4 h-4 text-green-600 mr-2" /> : <Ban className="w-4 h-4 text-destructive mr-2" />}
-                                                        {user.role === 'banned' ? "Desbloquear" : "Bloquear"}
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground">Nunca</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="pr-5 text-right">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleBanUser(user.id, user.role)}
+                                                    className={user.role === 'banned' ? '' : 'text-destructive hover:bg-destructive/10 hover:text-destructive'}
+                                                >
+                                                    {user.role === 'banned' ? <Shield className="h-4 w-4 text-success" /> : <Ban className="h-4 w-4" />}
+                                                    {user.role === 'banned' ? "Desbloquear" : "Bloquear"}
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </Panel>
                 </TabsContent>
 
                 {/* --- STORAGE TAB --- */}
-                <TabsContent value="storage">
-                    <div className="grid gap-6 md:grid-cols-2 mb-6">
-                        <Card>
-                            <CardHeader>
-                                <div className="flex items-center justify-between">
-                                    <CardTitle className="flex items-center gap-2">
-                                        <HardDrive className="w-5 h-5" /> Almacenamiento (Archivos)
-                                    </CardTitle>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={calculateRealStorage}
-                                        disabled={calculatingStorage}
-                                    >
-                                        {calculatingStorage ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                                        {calculatingStorage ? "Calculando..." : "Calcular Real"}
-                                    </Button>
+                <TabsContent value="storage" className="space-y-6">
+                    <StorageCleanup />
+                    <div className="grid gap-6 md:grid-cols-2">
+                        <section className="rounded-xl border bg-card p-5 shadow-xs">
+                            <div className="mb-4 flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                                        <HardDrive className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-semibold">Almacenamiento (archivos)</h3>
+                                        <p className="text-xs text-muted-foreground">Espacio usado por imágenes y documentos.</p>
+                                    </div>
                                 </div>
-                                <CardDescription>Espacio usado por imágenes y documentos.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-3xl font-bold mb-2">
-                                    {storageUsageMB.toFixed(1)} MB
-                                    {realStorageMB !== null && <span className="text-sm font-normal text-green-600 ml-2">(Real)</span>}
-                                </div>
-                                <div className="flex justify-between text-sm text-muted-foreground mb-2">
-                                    <span>Usado</span>
-                                    <span>Límite: {STORAGE_LIMIT_MB} MB</span>
-                                </div>
-                                <div className="h-3 w-full bg-secondary rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full transition-all duration-500 ${storagePercentage > 90 ? 'bg-destructive' : 'bg-blue-500'}`}
-                                        style={{ width: `${Math.min(storagePercentage, 100)}%` }}
-                                    />
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-4">
-                                    {realStorageMB !== null
-                                        ? "Dato calculado escaneando el tamaño real de las imágenes."
-                                        : `*Estimación basada en ${EST_MB_PER_CAR_IMAGES}MB por coche importado.`}
-                                </p>
-                            </CardContent>
-                        </Card>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={calculateRealStorage}
+                                    disabled={calculatingStorage}
+                                >
+                                    {calculatingStorage ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    {calculatingStorage ? "Calculando…" : "Calcular real"}
+                                </Button>
+                            </div>
+                            <div className="mb-3 flex items-baseline gap-2">
+                                <span className="tabular text-2xl font-semibold tracking-tight">
+                                    {storageUsageMB.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB
+                                </span>
+                                {realStorageMB !== null && (
+                                    <Badge variant="outline" className="border-transparent bg-success/10 text-success">Real</Badge>
+                                )}
+                            </div>
+                            <UsageBar percentage={storagePercentage} />
+                            <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+                                <span>Usado</span>
+                                <span className="tabular">Límite: {STORAGE_LIMIT_MB.toLocaleString('es-ES')} MB</span>
+                            </div>
+                            <p className="mt-4 text-xs text-muted-foreground">
+                                {realStorageMB !== null
+                                    ? "Dato calculado escaneando el tamaño real de las imágenes."
+                                    : `*Estimación basada en ${EST_MB_PER_CAR_IMAGES.toLocaleString('es-ES')} MB por coche importado.`}
+                            </p>
+                        </section>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Database className="w-5 h-5" /> Base de Datos (Texto)
-                                </CardTitle>
-                                <CardDescription>Espacio usado por registros de texto.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-3xl font-bold mb-2">{dbUsageMB.toFixed(2)} MB</div>
-                                <div className="flex justify-between text-sm text-muted-foreground mb-2">
-                                    <span>Usado</span>
-                                    <span>Límite: {DB_LIMIT_MB} MB</span>
+                        <section className="rounded-xl border bg-card p-5 shadow-xs">
+                            <div className="mb-4 flex items-center gap-3">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                                    <Database className="h-4 w-4 text-primary" />
                                 </div>
-                                <div className="h-3 w-full bg-secondary rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full transition-all duration-500 ${dbPercentage > 90 ? 'bg-destructive' : 'bg-green-500'}`}
-                                        style={{ width: `${Math.min(dbPercentage, 100)}%` }}
-                                    />
+                                <div>
+                                    <h3 className="text-sm font-semibold">Base de datos (texto)</h3>
+                                    <p className="text-xs text-muted-foreground">Espacio usado por registros de texto.</p>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-4">
-                                    *Estimación basada en el volumen de registros de texto.
-                                </p>
-                            </CardContent>
-                        </Card>
+                            </div>
+                            <div className="mb-3">
+                                <span className="tabular text-2xl font-semibold tracking-tight">
+                                    {dbUsageMB.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MB
+                                </span>
+                            </div>
+                            <UsageBar percentage={dbPercentage} />
+                            <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+                                <span>Usado</span>
+                                <span className="tabular">Límite: {DB_LIMIT_MB} MB</span>
+                            </div>
+                            <p className="mt-4 text-xs text-muted-foreground">
+                                *Estimación basada en el volumen de registros de texto.
+                            </p>
+                        </section>
                     </div>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Gestión por Usuario</CardTitle>
-                            <CardDescription>Visualiza y libera espacio ocupado por los usuarios.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Usuario</TableHead>
-                                            <TableHead>Coches</TableHead>
-                                            <TableHead>Almacenamiento (Est.)</TableHead>
-                                            <TableHead>Acciones</TableHead>
+                    <Panel title="Gestión por usuario" description="Visualiza y libera espacio ocupado por los usuarios.">
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="pl-5">Usuario</TableHead>
+                                        <TableHead className="text-right">Coches</TableHead>
+                                        <TableHead className="text-right">Almacenamiento (est.)</TableHead>
+                                        <TableHead className="pr-5 text-right">Acciones</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {users.map((user) => (
+                                        <TableRow key={user.id}>
+                                            <TableCell className="whitespace-nowrap pl-5 font-medium">{user.email}</TableCell>
+                                            <TableCell className="tabular text-right">{carsCount[user.id] || 0}</TableCell>
+                                            <TableCell className="tabular whitespace-nowrap text-right">{calculateUserStorage(user.id)} MB</TableCell>
+                                            <TableCell className="pr-5 text-right">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteData(user.id)}
+                                                    disabled={!carsCount[user.id]}
+                                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                    Eliminar datos
+                                                </Button>
+                                            </TableCell>
                                         </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {users.map((user) => (
-                                            <TableRow key={user.id}>
-                                                <TableCell className="whitespace-nowrap">{user.email}</TableCell>
-                                                <TableCell>{carsCount[user.id] || 0}</TableCell>
-                                                <TableCell className="whitespace-nowrap">{calculateUserStorage(user.id)} MB</TableCell>
-                                                <TableCell>
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="sm"
-                                                        onClick={() => handleDeleteData(user.id)}
-                                                        disabled={!carsCount[user.id]}
-                                                    >
-                                                        <Trash2 className="w-4 h-4 mr-2" />
-                                                        Eliminar Datos
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </Panel>
                 </TabsContent>
 
                 {/* --- SECURITY TAB --- */}
                 <TabsContent value="security">
                     <div className="grid gap-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Control de Acceso</CardTitle>
-                                <CardDescription>Gestiona quién puede registrarse en la plataforma.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                <div className="space-y-1 flex-1">
-                                    <h4 className="font-medium">Permitir Nuevos Registros</h4>
-                                    <p className="text-sm text-muted-foreground">
-                                        Si se desactiva, nadie nuevo podrá crear una cuenta.
-                                    </p>
-                                </div>
-                                <div
-                                    onClick={toggleRegistrations}
-                                    className={`w-14 h-7 rounded-full p-1 cursor-pointer transition-colors flex-shrink-0 ${registrationsEnabled ? 'bg-primary' : 'bg-secondary'}`}
-                                >
-                                    <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${registrationsEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
-                                </div>
-                            </CardContent>
-                        </Card>
+                        <Panel title="Control de acceso" description="Gestiona quién puede registrarse en la plataforma.">
+                            <div className="p-5">
+                                <SettingRow
+                                    id="setting-registrations"
+                                    title="Permitir nuevos registros"
+                                    description="Si se desactiva, nadie nuevo podrá crear una cuenta."
+                                    checked={registrationsEnabled}
+                                    onToggle={toggleRegistrations}
+                                />
+                            </div>
+                        </Panel>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Lista Negra de Emails</CardTitle>
-                                <CardDescription>Bloquea direcciones de correo específicas para impedir su acceso o registro.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="flex flex-col sm:flex-row gap-2">
-                                    <input
+                        <Panel title="Lista negra de emails" description="Bloquea direcciones de correo específicas para impedir su acceso o registro.">
+                            <div className="space-y-4 p-5">
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <Input
                                         type="email"
                                         placeholder="ejemplo@correo.com"
                                         value={newBlockedEmail}
                                         onChange={(e) => setNewBlockedEmail(e.target.value)}
-                                        className="flex-1 px-3 py-2 rounded-lg bg-input border border-border"
+                                        className="flex-1"
                                     />
                                     <Button onClick={addBlockedEmail} className="w-full sm:w-auto">
-                                        <Ban className="w-4 h-4 mr-2" /> Bloquear
+                                        <Ban className="h-4 w-4" /> Bloquear
                                     </Button>
                                 </div>
 
-                                <div className="space-y-2">
-                                    {blockedEmails.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground text-center py-4">No hay emails bloqueados.</p>
-                                    ) : (
-                                        blockedEmails.map((email) => (
-                                            <div key={email} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg border border-border">
-                                                <span className="font-medium text-sm truncate flex-1 mr-2">{email}</span>
-                                                <Button variant="ghost" size="sm" onClick={() => removeBlockedEmail(email)}>
-                                                    <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                                {blockedEmails.length === 0 ? (
+                                    <div className="rounded-lg border border-dashed py-6 text-center text-sm text-muted-foreground">
+                                        No hay emails bloqueados.
+                                    </div>
+                                ) : (
+                                    <div className="divide-y rounded-lg border">
+                                        {blockedEmails.map((email) => (
+                                            <div key={email} className="flex items-center justify-between gap-2 px-3 py-2">
+                                                <span className="flex-1 truncate text-sm font-medium">{email}</span>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    onClick={() => removeBlockedEmail(email)}
+                                                    aria-label={`Desbloquear ${email}`}
+                                                    className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </div>
-                                        ))
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </Panel>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Configuración General</CardTitle>
-                                <CardDescription>Opciones globales de la aplicación.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-secondary/30 rounded-lg border">
-                                    <div className="space-y-1 flex-1">
-                                        <h4 className="font-semibold">Pestaña de Donaciones</h4>
-                                        <p className="text-sm text-muted-foreground">
-                                            Muestra u oculta la pestaña de "Donaciones" en el menú de navegación para todos los usuarios.
-                                        </p>
-                                    </div>
-                                    <div
-                                        onClick={toggleDonations}
-                                        className={`w-14 h-7 rounded-full p-1 cursor-pointer transition-colors flex-shrink-0 ${donationsEnabled ? 'bg-green-500 dark:bg-green-600' : 'bg-secondary'}`}
-                                    >
-                                        <div className={`bg-white dark:bg-slate-200 w-5 h-5 rounded-full shadow-md transform transition-transform ${donationsEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
-                                    </div>
+                        <Panel title="Configuración general" description="Opciones globales de la aplicación.">
+                            <div className="divide-y">
+                                <div className="p-5">
+                                    <SettingRow
+                                        id="setting-donations"
+                                        title="Pestaña de donaciones"
+                                        description={'Muestra u oculta la pestaña de "Donaciones" en el menú de navegación para todos los usuarios.'}
+                                        checked={donationsEnabled}
+                                        onToggle={toggleDonations}
+                                    />
                                 </div>
-
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-secondary/30 rounded-lg border">
-                                    <div className="space-y-1 flex-1">
-                                        <h4 className="font-semibold">Suscripciones Mensuales</h4>
-                                        <p className="text-sm text-muted-foreground">
-                                            Habilita o deshabilita las suscripciones mensuales en la pestaña de donaciones.
-                                        </p>
-                                    </div>
-                                    <div
-                                        onClick={toggleSubscriptions}
-                                        className={`w-14 h-7 rounded-full p-1 cursor-pointer transition-colors flex-shrink-0 ${subscriptionsEnabled ? 'bg-green-500 dark:bg-green-600' : 'bg-secondary'}`}
-                                    >
-                                        <div className={`bg-white dark:bg-slate-200 w-5 h-5 rounded-full shadow-md transform transition-transform ${subscriptionsEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
-                                    </div>
+                                <div className="p-5">
+                                    <SettingRow
+                                        id="setting-subscriptions"
+                                        title="Suscripciones mensuales"
+                                        description="Habilita o deshabilita las suscripciones mensuales en la pestaña de donaciones."
+                                        checked={subscriptionsEnabled}
+                                        onToggle={toggleSubscriptions}
+                                    />
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </Panel>
                     </div>
                 </TabsContent>
 
 
                 {/* --- LOGS TAB --- */}
                 <TabsContent value="logs">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Registro de Actividad</CardTitle>
-                            <CardDescription>Auditoría de acciones importantes.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
+                    <Panel title="Registro de actividad" description="Auditoría de acciones importantes.">
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="pl-5">Usuario</TableHead>
+                                        <TableHead>Acción</TableHead>
+                                        <TableHead>Detalles</TableHead>
+                                        <TableHead className="pr-5">Fecha</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {logs.length === 0 ? (
                                         <TableRow>
-                                            <TableHead>Usuario</TableHead>
-                                            <TableHead>Acción</TableHead>
-                                            <TableHead>Detalles</TableHead>
-                                            <TableHead>Fecha</TableHead>
+                                            <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
+                                                No hay actividad registrada
+                                            </TableCell>
                                         </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {logs.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                                                    No hay logs de actividad registrados
+                                    ) : (
+                                        logs.map((log) => (
+                                            <TableRow key={log.id}>
+                                                <TableCell className="whitespace-nowrap pl-5 font-medium">{log.profiles?.email || 'Desconocido'}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="secondary" className="whitespace-nowrap font-mono text-[11px]">{log.action}</Badge>
+                                                </TableCell>
+                                                <TableCell className="min-w-[200px] whitespace-normal text-muted-foreground">{log.details}</TableCell>
+                                                <TableCell className="tabular whitespace-nowrap pr-5 text-sm text-muted-foreground">
+                                                    {format(new Date(log.created_at), "dd/MM/yyyy HH:mm", { locale: es })}
                                                 </TableCell>
                                             </TableRow>
-                                        ) : (
-                                            logs.map((log) => (
-                                                <TableRow key={log.id}>
-                                                    <TableCell className="font-medium whitespace-nowrap">{log.profiles?.email || 'Desconocido'}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline" className="whitespace-nowrap">{log.action}</Badge>
-                                                    </TableCell>
-                                                    <TableCell className="min-w-[200px]">{log.details}</TableCell>
-                                                    <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                                                        {format(new Date(log.created_at), "dd/MM/yyyy HH:mm", { locale: es })}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </Panel>
                 </TabsContent>
             </Tabs>
-        </div >
+        </div>
+    )
+}
+
+// --- Presentational helpers ---
+
+function UsageBar({ percentage }: { percentage: number }) {
+    const tone = percentage > 90 ? 'bg-destructive' : percentage > 75 ? 'bg-warning' : 'bg-primary'
+    return (
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+                className={`h-full rounded-full transition-all duration-500 ${tone}`}
+                style={{ width: `${Math.min(percentage, 100)}%` }}
+            />
+        </div>
+    )
+}
+
+function StatCard({ label, icon: Icon, value, sub, percentage }: {
+    label: string
+    icon: React.ComponentType<{ className?: string }>
+    value: string
+    sub?: string
+    percentage?: number
+}) {
+    return (
+        <div className="rounded-xl border bg-card p-5 shadow-xs">
+            <div className="mb-3 flex items-center justify-between">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+                <Icon className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <p className="tabular text-2xl font-semibold tracking-tight">{value}</p>
+            {sub && <p className="tabular mt-0.5 text-xs text-muted-foreground">{sub}</p>}
+            {percentage !== undefined && (
+                <div className="mt-3">
+                    <UsageBar percentage={percentage} />
+                </div>
+            )}
+        </div>
+    )
+}
+
+function Panel({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+    return (
+        <section className="overflow-hidden rounded-xl border bg-card shadow-xs">
+            <div className="border-b px-5 py-4">
+                <h3 className="text-sm font-semibold">{title}</h3>
+                {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+            </div>
+            {children}
+        </section>
+    )
+}
+
+function SettingRow({ id, title, description, checked, onToggle }: {
+    id: string
+    title: string
+    description: string
+    checked: boolean
+    onToggle: () => void
+}) {
+    return (
+        <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 space-y-0.5">
+                <Label htmlFor={id} className="text-sm font-medium">{title}</Label>
+                <p className="text-sm text-muted-foreground">{description}</p>
+            </div>
+            <Switch id={id} checked={checked} onCheckedChange={() => onToggle()} />
+        </div>
     )
 }

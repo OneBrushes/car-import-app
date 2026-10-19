@@ -1,13 +1,17 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, Search, Car } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AddSpainCarModal } from "@/components/modals/add-spain-car-modal"
 import { ShareSpainCarModal } from "@/components/modals/share-spain-car-modal"
 import { SpainCarCard } from "@/components/cards/spain-car-card"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
+import { OPEN_CAR_EVENT, type OpenCarDetail } from "@/components/command-palette"
 
 interface SpainCar {
     id: string
@@ -49,6 +53,19 @@ export function CarsSpain({ role }: CarsSpainProps) {
     useEffect(() => {
         if (user) fetchCars()
     }, [user])
+
+    // Abrir un coche concreto desde la búsqueda global (Ctrl+K)
+    useEffect(() => {
+        const onOpenCar = (event: Event) => {
+            const { table, id } = (event as CustomEvent<OpenCarDetail>).detail
+            if (table !== "spain_cars") return
+            const car: any = cars.find(c => c.id === id)
+            // Solo el propietario (o el Modo Dios) puede editar; el resto solo ve la pestaña
+            if (car && (car.user_id === user?.id || isGodMode)) handleEdit(car)
+        }
+        window.addEventListener(OPEN_CAR_EVENT, onOpenCar)
+        return () => window.removeEventListener(OPEN_CAR_EVENT, onOpenCar)
+    }, [cars, user, isGodMode])
 
     const fetchCars = async () => {
         try {
@@ -108,7 +125,6 @@ export function CarsSpain({ role }: CarsSpainProps) {
 
         try {
             const carData = {
-                user_id: user.id,
                 brand: newCar.brand,
                 model: newCar.model,
                 year: newCar.year,
@@ -138,9 +154,10 @@ export function CarsSpain({ role }: CarsSpainProps) {
                 toast.success("Coche actualizado")
             } else {
                 // Insert
+                // El propietario solo se fija al crear (al editar en Modo Dios no debe cambiar)
                 const { error } = await supabase
                     .from('spain_cars')
-                    .insert(carData)
+                    .insert({ ...carData, user_id: user.id })
 
                 if (error) throw error
                 toast.success("Coche de referencia añadido")
@@ -224,55 +241,61 @@ export function CarsSpain({ role }: CarsSpainProps) {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-semibold tracking-tight mb-1">Coches España</h2>
-                    <p className="text-muted-foreground">Coches de referencia para comparar ({cars.length})</p>
+                    <p className="text-muted-foreground">
+                        Coches de referencia para comparar (<span className="tabular">{cars.length}</span>)
+                    </p>
                 </div>
                 {role !== 'usuario' && (
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
-                    >
-                        <Plus className="w-5 h-5" />
-                        Añadir Referencia
-                    </button>
+                    <Button onClick={() => setIsModalOpen(true)}>
+                        <Plus className="w-4 h-4" />
+                        Añadir referencia
+                    </Button>
                 )}
             </div>
 
             {/* Búsqueda y Filtros */}
-            <div className="flex flex-col gap-4 bg-card border border-border rounded-lg p-4">
-                <input
-                    type="text"
-                    placeholder="Buscar por marca o modelo..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-
-                <div className="flex gap-2">
-                    <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    >
-                        <option value="date">Últimos añadidos</option>
-                        <option value="price">Precio menor</option>
-                        <option value="mileage">Menor km</option>
-                        <option value="year">Año del coche</option>
-                    </select>
+            <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        type="text"
+                        placeholder="Buscar por marca o modelo..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-9"
+                    />
                 </div>
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value)}>
+                    <SelectTrigger className="w-full sm:w-48">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="date">Últimos añadidos</SelectItem>
+                        <SelectItem value="price">Precio menor</SelectItem>
+                        <SelectItem value="mileage">Menos km</SelectItem>
+                        <SelectItem value="year">Año del coche</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
             {/* Lista de Coches */}
             {sortedCars.length === 0 ? (
-                <div className="bg-card border border-border rounded-lg p-12 text-center">
-                    <p className="text-muted-foreground mb-4">No hay coches de referencia en España</p>
-                    {role !== 'usuario' && (
-                        <button onClick={() => setIsModalOpen(true)} className="text-primary hover:underline font-medium">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-12 text-center">
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                        <Car className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        {searchTerm ? "Ningún coche coincide con la búsqueda" : "No hay coches de referencia en España"}
+                    </p>
+                    {role !== 'usuario' && !searchTerm && (
+                        <Button size="sm" className="mt-4" onClick={() => setIsModalOpen(true)}>
+                            <Plus className="w-4 h-4" />
                             Añade tu primer coche de referencia
-                        </button>
+                        </Button>
                     )}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {sortedCars.map((car: any) => (
                         <SpainCarCard
                             key={car.id}

@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Trash2, ShieldAlert, Receipt, Calendar } from "lucide-react"
+import { Plus, Trash2, ShieldAlert, Receipt, Calendar, Paperclip } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { openPrivateFile, removePrivateFiles } from "@/lib/private-files"
 
 interface GlobalExpense {
   id: string
@@ -86,8 +87,8 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
           .upload(fileName, newReceipt)
 
         if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(fileName)
-          receiptUrl = urlData.publicUrl
+          // Bucket privado: se guarda la ruta y se abre con un enlace temporal
+          receiptUrl = fileName
         } else {
           toast.error("Aviso: No se pudo subir el archivo adjunto.")
         }
@@ -118,6 +119,10 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
            throw new Error("No tienes permisos para modificar este gasto, o RLS lo bloqueó silenciosamente.");
         }
         
+        // Al sustituir el recibo, borrar el archivo anterior
+        const previous = expenses.find(e => e.id === editingId)
+        if (receiptUrl && previous?.receipt_url) await removePrivateFiles('receipts', [previous.receipt_url])
+
         toast.success("Gasto actualizado");
         setExpenses(expenses.map(e => e.id === editingId ? { ...e, ...payload } : e));
       } else {
@@ -163,8 +168,10 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
     if (!isAdmin || !confirm("¿Seguro que deseas eliminar este gasto de la empresa?")) return
 
     try {
+      const expense = expenses.find(e => e.id === id)
       const { error } = await supabase.from('global_expenses').delete().eq('id', id)
       if (error) throw error
+      if (expense?.receipt_url) await removePrivateFiles('receipts', [expense.receipt_url])
       
       setExpenses(expenses.filter(e => e.id !== id))
       toast.success("Eliminado")
@@ -181,12 +188,12 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Gastos Generales de la Empresa</h2>
-          <p className="text-sm text-muted-foreground">Material, software, honorarios y amortizaciones.</p>
+          <h2 className="text-2xl font-semibold tracking-tight mb-1">Gastos generales de la empresa</h2>
+          <p className="text-muted-foreground">Material, software, honorarios y amortizaciones.</p>
         </div>
         
         {isAdmin ? (
-          <Button onClick={() => setShowAddForm(!showAddForm)} className="gap-2 bg-rose-600 hover:bg-rose-700 text-white">
+          <Button onClick={() => setShowAddForm(!showAddForm)} className="gap-2">
             <Plus className="w-4 h-4" /> Añadir Gasto Global
           </Button>
         ) : (
@@ -198,7 +205,7 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
       </div>
 
       {showAddForm && isAdmin && (
-        <form onSubmit={handleAddExpense} className="bg-muted/30 border border-border rounded-xl p-4 sm:p-6 space-y-4 animate-in slide-in-from-top-4">
+        <form onSubmit={handleAddExpense} className="bg-card border rounded-xl p-5 shadow-xs space-y-4 animate-in slide-in-from-top-4">
           <h3 className="font-semibold border-b border-border pb-2">{editingId ? 'Editar Gasto' : 'Registrar Nuevo Gasto'}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
@@ -257,7 +264,7 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={resetForm} disabled={isUploading}>Cancelar</Button>
-            <Button type="submit" disabled={isUploading} className="bg-rose-600 hover:bg-rose-700 text-white">
+            <Button type="submit" disabled={isUploading}>
                {isUploading ? 'Subiendo...' : (editingId ? 'Actualizar' : 'Guardar Gasto')}
             </Button>
           </div>
@@ -266,19 +273,19 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl flex items-center justify-between">
+        <div className="flex items-center justify-between rounded-xl border bg-card p-5 shadow-xs">
           <div>
-            <p className="text-xs font-semibold text-rose-500/80 uppercase tracking-widest">Total Gastos</p>
-            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">-{totalExpenses.toLocaleString('es-ES')} €</p>
+            <p className="text-[13px] font-medium text-muted-foreground">Total gastos</p>
+            <p className="tabular mt-1.5 text-2xl font-semibold tracking-tight text-destructive">-{totalExpenses.toLocaleString('es-ES')} €</p>
           </div>
-          <div className="p-3 bg-rose-500/20 rounded-full">
-            <Receipt className="w-6 h-6 text-rose-600 dark:text-rose-400" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-destructive/10">
+            <Receipt className="h-4 w-4 text-destructive" />
           </div>
         </div>
       </div>
 
       {/* List */}
-      <div className="bg-background border border-border rounded-xl overflow-hidden">
+      <div className="bg-card border rounded-xl overflow-hidden shadow-xs">
         {expenses.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">No hay gastos globales registrados.</div>
         ) : (
@@ -295,26 +302,28 @@ export function GlobalExpenses({ role }: { role?: string | null }) {
                          <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground border border-border">{exp.category}</span>
                          <span className="text-xs text-muted-foreground">{new Date(exp.date).toLocaleDateString('es-ES')}</span>
                          {exp.receipt_url && (
-                           <a 
-                             href={exp.receipt_url} 
-                             target="_blank" 
-                             rel="noopener noreferrer" 
-                             className="text-[10px] font-semibold bg-rose-500/10 text-rose-600 px-2 py-0.5 rounded-full border border-rose-500/20 hover:bg-rose-500/20 transition-colors flex items-center gap-1"
+                           <button
+                             type="button"
+                             onClick={async () => {
+                               const ok = await openPrivateFile('receipts', exp.receipt_url)
+                               if (!ok) toast.error("No se pudo abrir la factura")
+                             }}
+                             className="flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
                            >
-                              Factura 📎
-                           </a>
+                             <Paperclip className="h-3 w-3" /> Factura
+                           </button>
                          )}
                        </div>
                      </div>
                   </div>
                   <div className="flex items-center gap-4">
-                     <span className="font-bold text-rose-600 dark:text-rose-400">-{Number(exp.amount).toLocaleString('es-ES')} €</span>
+                     <span className="tabular font-semibold text-destructive">-{Number(exp.amount).toLocaleString('es-ES')} €</span>
                      {isAdmin && (
                         <div className="flex items-center gap-1">
                           <button onClick={() => handleEdit(exp)} className="text-xs px-3 py-1.5 hover:bg-muted rounded-md transition-colors text-muted-foreground">
                             Editar
                           </button>
-                          <button onClick={() => handleDelete(exp.id)} className="p-2 hover:bg-rose-500/10 hover:text-rose-500 rounded-md transition-colors text-muted-foreground">
+                          <button onClick={() => handleDelete(exp.id)} className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-md transition-colors text-muted-foreground">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>

@@ -180,52 +180,59 @@ export function NotificationsCenter() {
                 </button>
             </PopoverTrigger>
             <PopoverContent className="w-96 p-0" align="end">
-                <div className="flex items-center justify-between p-4 border-b">
-                    <h4 className="font-semibold text-sm">Notificaciones</h4>
+                <div className="flex h-12 items-center justify-between border-b px-4">
                     <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-semibold">Notificaciones</h4>
                         {unreadCount > 0 && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={markAllAsRead}
-                                className="h-8 text-xs"
-                            >
-                                <Check className="w-3 h-3 mr-1" />
-                                Marcar todas
-                            </Button>
+                            <Badge variant="secondary" className="tabular h-5 px-1.5 text-[11px]">
+                                {unreadCount} sin leer
+                            </Badge>
                         )}
                     </div>
+                    {unreadCount > 0 && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={markAllAsRead}
+                            className="-mr-2 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                            <Check className="h-3.5 w-3.5" />
+                            Marcar todas como leídas
+                        </Button>
+                    )}
                 </div>
 
                 <ScrollArea className="h-[400px]">
                     {notifications.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-center">
-                            <Bell className="w-12 h-12 text-muted-foreground/30 mb-3" />
-                            <p className="text-sm text-muted-foreground">No tienes notificaciones</p>
+                        <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                                <Bell className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <p className="text-sm font-medium">Todo al día</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">No tienes notificaciones</p>
                         </div>
                     ) : (
                         <div className="divide-y">
                             {notifications.map((notification) => (
                                 <div
                                     key={notification.id}
-                                    className={`p-4 hover:bg-secondary/50 transition-colors cursor-pointer group ${!notification.read ? 'bg-primary/5' : ''
+                                    className={`group cursor-pointer px-4 py-3 transition-colors hover:bg-accent ${!notification.read ? 'bg-primary/5' : ''
                                         }`}
                                     onClick={() => handleNotificationClick(notification)}
                                 >
                                     <div className="flex items-start gap-3">
+                                        <span
+                                            className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${!notification.read ? 'bg-primary' : 'bg-transparent'}`}
+                                            aria-hidden="true"
+                                        />
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-start justify-between gap-2 mb-1">
-                                                <p className="text-sm font-medium truncate">
-                                                    {notification.title}
-                                                </p>
-                                                {!notification.read && (
-                                                    <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-1.5" />
-                                                )}
-                                            </div>
-                                            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                                            <p className={`text-sm truncate ${!notification.read ? 'font-semibold' : 'font-medium'}`}>
+                                                {notification.title}
+                                            </p>
+                                            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
                                                 {notification.message}
                                             </p>
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="mt-1.5 text-[11px] text-muted-foreground/80">
                                                 {formatDistanceToNow(new Date(notification.created_at), {
                                                     addSuffix: true,
                                                     locale: es,
@@ -234,14 +241,15 @@ export function NotificationsCenter() {
                                         </div>
                                         <Button
                                             variant="ghost"
-                                            size="sm"
-                                            className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                                            size="icon-sm"
+                                            aria-label="Eliminar notificación"
+                                            className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
                                             onClick={(e) => {
                                                 e.stopPropagation()
                                                 deleteNotification(notification.id)
                                             }}
                                         >
-                                            <Trash2 className="w-3 h-3 text-muted-foreground" />
+                                            <Trash2 className="h-3.5 w-3.5" />
                                         </Button>
                                     </div>
                                 </div>

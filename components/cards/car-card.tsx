@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ImageCarousel } from "@/components/ui/image-carousel"
 import { supabase } from "@/lib/supabase"
+import { CarHistoryButton } from "@/components/car-history"
 
 interface CarCardProps {
   car: any
@@ -125,6 +126,7 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
             </a>
           )}
 
+          <CarHistoryButton importedId={car.id} title={`${car.brand} ${car.model}${car.year ? ` (${car.year})` : ""}`} />
           {isOwner && (
             <>
               {onToggleContacted && (

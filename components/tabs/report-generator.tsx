@@ -1,14 +1,23 @@
-import { useState, useEffect, useRef } from "react"
+"use client"
+
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useReactToPrint } from 'react-to-print'
 import {
-    FileText, Printer, Check, X, Plus, Image as ImageIcon,
-    Calendar, User, MoveUp, MoveDown, Trash2, Eye, EyeOff,
-    Type, Layout, Settings, TrendingDown
+    FileText, Printer, Check, X, Plus, Image as ImageIcon, MoveUp, MoveDown, Trash2, Eye, EyeOff,
+    Type, Settings, Car as CarIcon, Info, Star,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { calculateImportCost, DEFAULT_IMPORT_COSTS } from "@/lib/import-costs"
 
-// ... Imports
+// Radix Select no admite "" como valor de un item: centinela que se traduce a "" en el estado
+const NONE_VALUE = "__none__"
 
 const CHECKLIST_SECTIONS = {
     exterior: {
@@ -70,80 +79,177 @@ const CHECKLIST_SECTIONS = {
     }
 }
 
-// ... Imports
-
-// ... CHECKLIST_SECTIONS (ya está ahí)
-
-interface Car {
+interface ReportCar {
     id: string
     brand: string
     model: string
-    year: number
-    month?: number
+    year: number | null
+    month: number | null
     price: number
-    totalExpenses: number
-    finalPrice: number
-    mileage: number
-    cv: number
-    fuel?: string
-    fuelType?: string
+    totalCost: number
+    expenses: { label: string; amount: number }[]
+    mileage: number | null
+    cv: number | null
+    fuelType: string
     transmission: string
-    images: string[]
-    equipment: string[]
-    url: string
     color: string
     location: string
-    notes?: string
-    motorType?: string
-    displacement?: string
-    doors?: string
-    traction?: string
+    origin: string
+    motorType: string
+    displacement: string
+    doors: string
+    traction: string
+    co2: number | null
+    images: string[]
+    equipment: string[]
+    notes: string
 }
 
 interface SpainCar {
     id: string
     brand: string
     model: string
-    year: number
+    year: number | null
     price: number
-    mileage: number
-    cv: number
+    mileage: number | null
+    cv: number | null
     equipmentLevel?: string
 }
 
-type SectionType = 'header' | 'car-summary' | 'gallery' | 'features' | 'text-block' | 'image-block' | 'pricing' | 'comparison' | 'inspection'
-
-interface ReportSection {
-    // ...
-    id: string
-    type: SectionType
-    title: string
-    content?: string
-    image?: string
-    isVisible: boolean
-    data?: any
+/** Ajustes de cada coche dentro del informe */
+interface CarConfig {
+    carId: string
+    spainCarId: string
+    equipmentLevel: string
+    discount: number
 }
 
-// --- Components ---
+type BlockId = 'summary' | 'pricing' | 'comparison' | 'specs' | 'features' | 'gallery' | 'inspection' | 'notes'
+
+interface Block {
+    id: BlockId
+    title: string
+    isVisible: boolean
+}
+
+interface CustomBlock {
+    id: string
+    type: 'text' | 'image'
+    title: string
+    content: string
+    image?: string
+    isVisible: boolean
+}
+
+const DEFAULT_BLOCKS: Block[] = [
+    { id: 'summary', title: 'Presentación del vehículo', isVisible: true },
+    { id: 'specs', title: 'Ficha técnica', isVisible: true },
+    { id: 'pricing', title: 'Precio final en España', isVisible: true },
+    { id: 'comparison', title: 'Comparativa con España', isVisible: true },
+    { id: 'features', title: 'Equipamiento', isVisible: true },
+    { id: 'gallery', title: 'Galería', isVisible: true },
+    { id: 'inspection', title: 'Inspección técnica', isVisible: true },
+    { id: 'notes', title: 'Observaciones', isVisible: true },
+]
+
+const BLOCK_HINTS: Record<BlockId, string> = {
+    summary: 'Foto principal y cifras clave.',
+    pricing: 'Siempre aparece. Si el coche no tiene gastos apuntados, se estima con la calculadora.',
+    comparison: 'Solo si eliges un coche de España para ese vehículo.',
+    specs: 'Datos técnicos del coche.',
+    features: 'Solo si el coche tiene equipamiento apuntado.',
+    gallery: 'Solo si el coche tiene más de una foto.',
+    inspection: 'Solo si el coche tiene checklist de inspección.',
+    notes: 'Solo si el coche tiene notas.',
+}
+
+// Colores del documento impreso (no dependen del tema claro/oscuro de la app)
+const INK = "#18181b"
+const MUTED = "#6b6b73"
+const LINE = "#e5e5e1"
+const SOFT = "#f7f7f5"
+const ACCENT = "#2b4acb"
+const SUCCESS = "#15803d"
+
+/** Coches que caben en la portada; si hay más, se añade la página de resumen */
+const COVER_MAX = 3
+
+const eur = (n: number) => `${Math.round(n).toLocaleString('es-ES')} €`
+const num = (v: any) => (v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? null : Number(v))
+
+interface PriceBreakdown {
+    lines: { label: string; amount: number; hint?: string }[]
+    subtotal: number
+    discount: number
+    final: number
+    estimated: boolean
+}
+
+/** Precio final "llave en mano" en España: gastos apuntados o, si no hay, estimación de la calculadora */
+function priceFor(car: ReportCar, discount: number): PriceBreakdown {
+    const recorded = car.expenses.filter(e => e.amount)
+    const recordedSum = recorded.reduce((sum, e) => sum + e.amount, 0)
+    const lumpExpenses = car.totalCost > car.price ? car.totalCost - car.price : 0
+
+    let lines: PriceBreakdown['lines']
+    let estimated = false
+
+    if (recorded.length > 0) {
+        lines = [{ label: 'Precio del vehículo', amount: car.price }, ...recorded.map(e => ({ label: e.label, amount: e.amount }))]
+        // Si el coste total guardado incluye más que los gastos detallados, se añade la diferencia
+        const gap = car.totalCost - (car.price + recordedSum)
+        if (gap > 1) lines.push({ label: 'Otros gastos de importación', amount: gap })
+    } else if (lumpExpenses > 0) {
+        lines = [
+            { label: 'Precio del vehículo', amount: car.price },
+            { label: 'Gastos de importación y matriculación', amount: lumpExpenses },
+        ]
+    } else {
+        estimated = true
+        const estimate = calculateImportCost({
+            purchasePrice: car.price,
+            firstRegistration: new Date(car.year || new Date().getFullYear(), (car.month || 1) - 1, 1),
+            co2: car.co2,
+            payVat: false,
+            ...DEFAULT_IMPORT_COSTS,
+            other: 0,
+        })
+        lines = estimate.lines.map(line => line.label === 'Precio de compra' ? { ...line, label: 'Precio del vehículo' } : line)
+    }
+
+    const subtotal = lines.reduce((sum, l) => sum + l.amount, 0)
+    return { lines, subtotal, discount, final: subtotal - discount, estimated }
+}
+
+/** Etiquetas "Recomendado" / "Mejor precio" del documento */
+function CarTags({ recommended, cheapest, size = 9 }: { recommended?: boolean; cheapest?: boolean; size?: number }) {
+    if (!recommended && !cheapest) return null
+    const base = { fontSize: size, fontWeight: 700, letterSpacing: '.1em', borderRadius: 999, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, lineHeight: 1.4 } as const
+    return (
+        <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+            {recommended && <span style={{ ...base, background: INK, color: '#fff' }}>★ RECOMENDADO</span>}
+            {cheapest && <span style={{ ...base, border: `1px solid ${ACCENT}`, color: ACCENT }}>MEJOR PRECIO</span>}
+        </span>
+    )
+}
 
 export function ReportGenerator() {
-    const [cars, setCars] = useState<Car[]>([])
+    const [cars, setCars] = useState<ReportCar[]>([])
     const [spainCars, setSpainCars] = useState<SpainCar[]>([])
-    const [selectedCarId, setSelectedCarId] = useState<string>("")
-    const [selectedSpainCarId, setSelectedSpainCarId] = useState<string>("")
+    const [configs, setConfigs] = useState<CarConfig[]>([])
     const [showPreview, setShowPreview] = useState(false)
-    const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
 
-    // Report State
     const [clientName, setClientName] = useState("")
+    const [reportTitle, setReportTitle] = useState("Presupuesto de importación")
+    const [validityDays, setValidityDays] = useState(15)
+    const [recommendedId, setRecommendedId] = useState("")
+    const [recommendReason, setRecommendReason] = useState("")
     const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0])
-    const [negotiationDiscount, setNegotiationDiscount] = useState<number>(0)
-    const [importedCarEquipmentLevel, setImportedCarEquipmentLevel] = useState<string>("")
-    const [sections, setSections] = useState<ReportSection[]>([])
-    const [checklistData, setChecklistData] = useState<any>(null)
-    const [imageBlobs, setImageBlobs] = useState<string[]>([])
+    const [blocks, setBlocks] = useState<Block[]>(DEFAULT_BLOCKS)
+    const [customBlocks, setCustomBlocks] = useState<CustomBlock[]>([])
+    const [checklists, setChecklists] = useState<Record<string, any>>({})
+    const [imageBlobs, setImageBlobs] = useState<Record<string, string[]>>({})
 
-    // Footer customization
     const [showFooterContact, setShowFooterContact] = useState(false)
     const [footerEmail, setFooterEmail] = useState("info@nordrive.es")
     const [footerPhone, setFooterPhone] = useState("+34 XXX XXX XXX")
@@ -151,1018 +257,1059 @@ export function ReportGenerator() {
 
     const reportRef = useRef<HTMLDivElement>(null)
 
-    // Load Checklist and Images when car changes
-    useEffect(() => {
-        if (selectedCarId) {
-            const fetchChecklist = async () => {
-                const { data } = await supabase
-                    .from('car_checklists')
-                    .select('data')
-                    .eq('car_id', selectedCarId)
-                    .single()
-                setChecklistData(data?.data || null)
-            }
-            fetchChecklist()
-
-            const car = cars.find(c => c.id === selectedCarId)
-            if (car && car.images?.length > 0) {
-                const loadImages = async () => {
-                    const promises = car.images.map(async (url) => {
-                        try {
-                            const response = await fetch(url)
-                            const blob = await response.blob()
-                            return URL.createObjectURL(blob)
-                        } catch (e) {
-                            console.error("Error loading image blob:", e)
-                            return url
-                        }
-                    })
-                    const blobs = await Promise.all(promises)
-                    setImageBlobs(blobs)
-                }
-                loadImages()
-            } else {
-                setImageBlobs([])
-            }
-        } else {
-            setChecklistData(null)
-            setImageBlobs([])
-        }
-    }, [selectedCarId, cars])
-
-    // Load Cars from Supabase
+    // Cargar coches
     useEffect(() => {
         const fetchReportData = async () => {
             try {
-                // Fetch Imported Cars
                 const { data: importedData, error: importedError } = await supabase
                     .from('imported_cars')
                     .select('*')
                     .order('created_at', { ascending: false })
-
                 if (importedError) throw importedError
 
-                // ... (resto del formateo de coches)
-
-                // Si hay coche seleccionado, cargar su checklist
-                if (selectedCarId) {
-                    const { data: checkData } = await supabase
-                        .from('car_checklists')
-                        .select('data')
-                        .eq('car_id', selectedCarId)
-                        .single()
-
-                    if (checkData) setChecklistData(checkData.data)
-                    else setChecklistData(null)
-                }
-
-                // ... (resto del código)
-
-                const formattedCars: Car[] = (importedData || []).map((car: any) => ({
-                    id: car.id,
-                    brand: car.brand,
-                    model: car.model,
-                    year: car.year,
-                    month: 1, // Default or add to DB
-                    price: Number(car.price),
-                    totalExpenses: Number(car.total_cost) - Number(car.price), // Aprox
-                    finalPrice: Number(car.total_cost),
-                    mileage: Number(car.mileage),
-                    cv: Number(car.cv),
-                    fuel: car.fuel_type || "Gasolina", // Add to DB if missing
-                    fuelType: car.fuel_type || "Gasolina",
-                    transmission: car.transmission || "Manual", // Add to DB
-                    images: car.images || (car.image_url ? [car.image_url] : []), // Usar array de imágenes si existe
-                    equipment: car.equipment || [], // Add to DB
-                    url: "",
-                    color: car.color || "",
-                    location: car.location || "",
-                    notes: "",
-                    motorType: "",
-                    displacement: "",
-                    doors: "",
-                    traction: ""
+                setCars((importedData || []).map((car: any): ReportCar => {
+                    const expenses = Array.isArray(car.expenses)
+                        ? car.expenses.map((e: any) => ({ label: e.type || e.description || e.concept || 'Gasto', amount: Number(e.amount) || 0 }))
+                        : []
+                    return {
+                        id: car.id,
+                        brand: car.brand || '',
+                        model: car.model || '',
+                        year: num(car.year),
+                        month: num(car.month),
+                        price: Number(car.price) || 0,
+                        totalCost: Number(car.total_cost) || 0,
+                        expenses,
+                        mileage: num(car.mileage),
+                        cv: num(car.cv),
+                        fuelType: car.fuel_type || '',
+                        transmission: car.transmission || '',
+                        color: car.color || '',
+                        location: car.location || '',
+                        origin: car.origin || '',
+                        motorType: car.motor_type || '',
+                        displacement: car.displacement ? String(car.displacement) : '',
+                        doors: car.doors ? String(car.doors) : '',
+                        traction: car.traction || '',
+                        co2: num(car.co2),
+                        images: car.images?.length ? car.images : (car.image_url ? [car.image_url] : []),
+                        equipment: Array.isArray(car.equipment) ? car.equipment : [],
+                        notes: car.notes || '',
+                    }
                 }))
-                setCars(formattedCars)
 
-                // Fetch Spain Cars
                 const { data: spainData, error: spainError } = await supabase
                     .from('spain_cars')
                     .select('*')
                     .order('created_at', { ascending: false })
-
                 if (spainError) throw spainError
 
-                const formattedSpainCars: SpainCar[] = (spainData || []).map((car: any) => ({
+                setSpainCars((spainData || []).map((car: any) => ({
                     id: car.id,
                     brand: car.brand,
                     model: car.model,
-                    year: car.year,
-                    price: Number(car.price),
-                    mileage: Number(car.mileage),
-                    cv: Number(car.cv),
-                    equipmentLevel: "Medio" // Default
-                }))
-                setSpainCars(formattedSpainCars)
-
+                    year: num(car.year),
+                    price: Number(car.price) || 0,
+                    mileage: num(car.mileage),
+                    cv: num(car.cv),
+                    equipmentLevel: car.equipment_level || undefined,
+                })))
             } catch (error) {
                 console.error("Error loading report data:", error)
                 toast.error("Error al cargar datos para informes")
             }
         }
-
         fetchReportData()
     }, [])
 
-    const selectedCar = cars.find((c) => c.id === selectedCarId)
-    const selectedSpainCar = spainCars.find((c) => c.id === selectedSpainCarId)
+    const selectedIds = configs.map(c => c.carId)
+    const selectedKey = selectedIds.join(',')
 
-    // Initialize Sections when Car is Selected
+    // Checklists e imágenes (como blob para que se impriman sin problemas de CORS)
     useEffect(() => {
-        if (selectedCar) {
-            const baseSections: ReportSection[] = [
-                { id: 'header', type: 'header', title: 'Encabezado', isVisible: true },
-                { id: 'summary', type: 'car-summary', title: 'Resumen del Vehículo', isVisible: true },
-                { id: 'features', type: 'features', title: 'Equipamiento Destacado', isVisible: true },
-                { id: 'gallery', type: 'gallery', title: 'Galería de Imágenes', isVisible: true, data: { images: selectedCar.images } },
-                { id: 'pricing', type: 'pricing', title: 'Oferta Económica', isVisible: true }
-            ]
+        if (selectedIds.length === 0) return
+        supabase
+            .from('car_checklists')
+            .select('car_id, data')
+            .in('car_id', selectedIds)
+            .then(({ data }) => {
+                const map: Record<string, any> = {}
+                for (const row of data || []) map[row.car_id] = row.data
+                setChecklists(map)
+            })
 
-            // Add comparison section if Spain car is selected
-            if (selectedSpainCarId) {
-                baseSections.push({
-                    id: 'comparison',
-                    type: 'comparison',
-                    title: 'Comparativa con España',
-                    isVisible: true
-                })
-            }
+        const missing = selectedIds.filter(id => !imageBlobs[id])
+        missing.forEach(async (id) => {
+            const car = cars.find(c => c.id === id)
+            if (!car || car.images.length === 0) return
+            const blobs = await Promise.all(car.images.slice(0, 7).map(async (url) => {
+                try {
+                    const response = await fetch(url)
+                    return URL.createObjectURL(await response.blob())
+                } catch {
+                    return url
+                }
+            }))
+            setImageBlobs(prev => ({ ...prev, [id]: blobs }))
+        })
+    }, [selectedKey, cars])
 
-            if (selectedCar.notes) {
-                baseSections.push({
-                    id: 'notes',
-                    type: 'text-block',
-                    title: 'Observaciones',
-                    content: selectedCar.notes,
-                    isVisible: true
-                })
-            }
+    const reportCars = useMemo(() => configs
+        .map(config => {
+            const car = cars.find(c => c.id === config.carId)
+            if (!car) return null
+            const spain = spainCars.find(s => s.id === config.spainCarId) || null
+            const price = priceFor(car, config.discount || 0)
+            const images = imageBlobs[car.id]?.length ? imageBlobs[car.id] : car.images
+            return { car, config, spain, price, images, checklist: checklists[car.id] || null }
+        })
+        .filter(Boolean) as {
+            car: ReportCar; config: CarConfig; spain: SpainCar | null; price: PriceBreakdown; images: string[]; checklist: any
+        }[], [configs, cars, spainCars, imageBlobs, checklists])
 
-            if (checklistData) {
-                baseSections.push({
-                    id: 'inspection',
-                    type: 'inspection',
-                    title: 'Inspección Técnica',
-                    isVisible: true
-                })
-            }
+    const cheapestId = reportCars.length > 1
+        ? reportCars.reduce((best, item) => (item.price.final < best.price.final ? item : best)).car.id
+        : null
 
-            setSections(baseSections)
-        } else {
-            setSections([])
-        }
-    }, [selectedCarId, selectedSpainCarId, checklistData])
+    const recommended = reportCars.length > 1 ? reportCars.find(r => r.car.id === recommendedId) || null : null
+    const highlightId = recommended?.car.id ?? cheapestId
 
-    // --- Actions ---
+    // --- Acciones ---
 
     const handlePrint = useReactToPrint({
         contentRef: reportRef,
-        documentTitle: `Informe_${selectedCar?.brand}_${selectedCar?.model}_${new Date().toISOString().split('T')[0]}`,
-        pageStyle: `
-            @page {
-                size: A4 portrait;
-                margin: 0mm;
-            }
-            @media print {
-                body {
-                    print-color-adjust: exact;
-                    -webkit-print-color-adjust: exact;
-                    margin: 0;
-                    padding: 0;
-                }
-                .report-page {
-                    page-break-after: always;
-                }
-                .report-page:last-child {
-                    page-break-after: auto;
-                }
-            }
-        `
+        documentTitle: `Informe_${(clientName || reportCars.map(r => `${r.car.brand}_${r.car.model}`).join('_')).replace(/\s+/g, '_')}_${reportDate}`,
     })
 
-    const moveSection = (index: number, direction: 'up' | 'down') => {
-        const newSections = [...sections]
-        if (direction === 'up' && index > 0) {
-            [newSections[index], newSections[index - 1]] = [newSections[index - 1], newSections[index]]
-        } else if (direction === 'down' && index < newSections.length - 1) {
-            [newSections[index], newSections[index + 1]] = [newSections[index + 1], newSections[index]]
-        }
-        setSections(newSections)
+    const addCar = (carId: string) => {
+        if (!carId || selectedIds.includes(carId)) return
+        setConfigs(prev => [...prev, { carId, spainCarId: '', equipmentLevel: '', discount: 0 }])
     }
-
-    const toggleVisibility = (index: number) => {
-        const newSections = [...sections]
-        newSections[index].isVisible = !newSections[index].isVisible
-        setSections(newSections)
+    const updateConfig = (carId: string, patch: Partial<CarConfig>) =>
+        setConfigs(prev => prev.map(c => (c.carId === carId ? { ...c, ...patch } : c)))
+    const removeCar = (carId: string) => {
+        setConfigs(prev => prev.filter(c => c.carId !== carId))
+        if (carId === recommendedId) setRecommendedId("")
     }
+    const moveCar = (index: number, direction: -1 | 1) => setConfigs(prev => {
+        const next = [...prev]
+        const target = index + direction
+        if (target < 0 || target >= next.length) return prev
+        ;[next[index], next[target]] = [next[target], next[index]]
+        return next
+    })
 
-    const deleteSection = (index: number) => {
-        const newSections = sections.filter((_, i) => i !== index)
-        setSections(newSections)
-    }
+    const moveBlock = (index: number, direction: -1 | 1) => setBlocks(prev => {
+        const next = [...prev]
+        const target = index + direction
+        if (target < 0 || target >= next.length) return prev
+        ;[next[index], next[target]] = [next[target], next[index]]
+        return next
+    })
+    const toggleBlock = (index: number) => setBlocks(prev => prev.map((b, i) => (i === index ? { ...b, isVisible: !b.isVisible } : b)))
+    const renameBlock = (index: number, title: string) => setBlocks(prev => prev.map((b, i) => (i === index ? { ...b, title } : b)))
 
-    const addSection = (type: SectionType) => {
-        const newSection: ReportSection = {
-            id: Date.now().toString(),
-            type,
-            title: type === 'text-block' ? 'Información Adicional' : 'Imagen Destacada',
-            content: '',
-            isVisible: true,
-            data: {}
-        }
-        setSections([...sections, newSection])
-    }
-
-    const updateSection = (index: number, field: keyof ReportSection, value: any) => {
-        const newSections = [...sections]
-        newSections[index] = { ...newSections[index], [field]: value }
-        setSections(newSections)
-    }
-
-    const handleImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const addCustomBlock = (type: CustomBlock['type']) => setCustomBlocks(prev => [...prev, {
+        id: Date.now().toString(),
+        type,
+        title: type === 'text' ? 'Información adicional' : 'Imagen destacada',
+        content: '',
+        isVisible: true,
+    }])
+    const updateCustomBlock = (id: string, patch: Partial<CustomBlock>) =>
+        setCustomBlocks(prev => prev.map(b => (b.id === id ? { ...b, ...patch } : b)))
+    const moveCustomBlock = (index: number, direction: -1 | 1) => setCustomBlocks(prev => {
+        const next = [...prev]
+        const target = index + direction
+        if (target < 0 || target >= next.length) return prev
+        ;[next[index], next[target]] = [next[target], next[index]]
+        return next
+    })
+    const handleImageUpload = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
-        if (file) {
-            const reader = new FileReader()
-            reader.onload = (event) => {
-                updateSection(index, 'image', event.target?.result as string)
-            }
-            reader.readAsDataURL(file)
-        }
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = (event) => updateCustomBlock(id, { image: event.target?.result as string })
+        reader.readAsDataURL(file)
     }
 
-    // --- Renderers ---
+    // Una hoja por coche: si el contenido de un capítulo pasa de un A4, se escala para que quepa
+    useEffect(() => {
+        if (!showPreview) return
+        const A4_PX = (297 * 96) / 25.4
+        const fit = () => {
+            document.querySelectorAll<HTMLElement>('.rp-fit').forEach(sheet => {
+                const inner = sheet.querySelector<HTMLElement>('.rp-fit-inner')
+                if (!inner) return
+                inner.style.transform = ''
+                inner.style.width = ''
+                inner.style.marginBottom = ''
+                const padding = sheet.getBoundingClientRect().height - inner.getBoundingClientRect().height
+                const available = A4_PX - padding - 4
+                const height = inner.getBoundingClientRect().height
+                if (height > available) {
+                    const scale = Math.max(0.6, available / height)
+                    // Se maqueta más ancho y se reduce en bloque: así el texto vuelve a repartirse
+                    // y el resultado ocupa exactamente el ancho de la hoja, sin salirse por la derecha
+                    inner.style.width = `${100 / scale}%`
+                    inner.style.transformOrigin = 'top left'
+                    inner.style.transform = `scale(${scale})`
+                    const scaledHeight = inner.getBoundingClientRect().height
+                    // transform no cambia el espacio que ocupa en la página: se recupera con margen negativo
+                    inner.style.marginBottom = `${-(inner.offsetHeight - scaledHeight)}px`
+                }
+            })
+        }
+        const timers = [50, 400, 1200, 2500].map(ms => setTimeout(fit, ms))
+        const images = Array.from(document.querySelectorAll<HTMLImageElement>('.rp-fit img'))
+        images.forEach(img => img.addEventListener('load', fit))
+        return () => {
+            timers.forEach(clearTimeout)
+            images.forEach(img => img.removeEventListener('load', fit))
+        }
+    }, [showPreview, reportCars, blocks, customBlocks, recommendReason, showFooterContact])
 
-    if (showPreview && selectedCar) {
+    const isBlockVisible = (id: BlockId) => blocks.find(b => b.id === id)?.isVisible
+    const blockTitle = (id: BlockId) => blocks.find(b => b.id === id)?.title || ''
+
+    // --- Vista previa / documento ---
+
+    if (showPreview && reportCars.length > 0) {
+        const formattedDate = new Date(reportDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
+        const hero = reportCars[0].images[0]
+
+        /** Portada: el recomendado primero y después los más baratos */
+        const coverCars = [...reportCars]
+            .sort((a, b) => {
+                if (a.car.id === recommended?.car.id) return -1
+                if (b.car.id === recommended?.car.id) return 1
+                return a.price.final - b.price.final
+            })
+            .slice(0, COVER_MAX)
+
+        /** Cabecera discreta de las hojas interiores */
+        const runningHeader = (label: string) => (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, marginBottom: 18, borderBottom: `1px solid ${LINE}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <img src={`${process.env.__NEXT_ROUTER_BASEPATH || ''}/NorDrive.png`} alt="" style={{ width: 18, height: 18, objectFit: 'contain' }} />
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>NorDrive</span>
+                    {clientName && <span style={{ fontSize: 12, color: MUTED }}>· {clientName}</span>}
+                </div>
+                <span className="rp-label" style={{ color: ACCENT }}>{label}</span>
+            </div>
+        )
+
         return (
-            <div className="fixed inset-0 bg-white z-50 overflow-auto animate-in fade-in duration-200">
-                {/* Toolbar */}
-                <div className="sticky top-0 left-0 right-0 bg-slate-900 text-white p-4 flex justify-between items-center print:hidden shadow-lg z-50">
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => setShowPreview(false)}
-                            className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                        >
-                            <X className="w-4 h-4" /> Volver al Editor
-                        </button>
-                        <span className="font-medium">Vista Previa del Informe</span>
+            <div className="fixed inset-0 z-50 overflow-auto bg-muted animate-in fade-in duration-200">
+                <div className="sticky top-0 z-50 flex h-14 items-center justify-between gap-3 border-b bg-card/90 px-4 backdrop-blur-md print:hidden">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <Button variant="ghost" size="sm" onClick={() => setShowPreview(false)}>
+                            <X className="h-4 w-4" /> Volver al editor
+                        </Button>
+                        <div className="hidden h-4 w-px bg-border sm:block" />
+                        <span className="hidden truncate text-sm font-medium sm:inline">
+                            Vista previa · {reportCars.length} {reportCars.length === 1 ? 'vehículo' : 'vehículos'}
+                        </span>
                     </div>
-                    <button
-                        onClick={handlePrint}
-                        disabled={isGeneratingPDF}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <Printer className="w-4 h-4" />
-                        {isGeneratingPDF ? 'Generando PDF...' : 'Descargar PDF'}
-                    </button>
+                    <Button size="sm" onClick={handlePrint}>
+                        <Printer className="h-4 w-4" /> Descargar PDF
+                    </Button>
                 </div>
 
-                {/* Report Content */}
-                <div ref={reportRef} data-report-content className="bg-white text-slate-800">
-                    <style>{`
-            @page {
-                size: A4 portrait;
-                margin: 0mm;
-            }
-            @media print {
-                body {
-                    print-color-adjust: exact;
-                    -webkit-print-color-adjust: exact;
-                    margin: 0;
-                    padding: 0;
-                }
-                .report-page {
-                    position: relative;
-                    padding: 10mm 15mm;
-                    page-break-after: auto;
-                    min-height: auto;
-                }
-                .force-break {
-                    page-break-after: always;
-                    min-height: 297mm;
-                }
-                .page-break {
-                    page-break-before: always;
-                }
-                .avoid-break {
-                    page-break-inside: avoid;
-                }
-            }
-            @media screen {
-                .report-page {
-                    width: 210mm;
-                    min-height: auto;
-                    padding: 20mm 15mm;
-                    margin: 0 auto 20px;
-                    background: white;
-                    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-                }
-                .force-break {
-                    min-height: 297mm;
-                }
-            }
-        `}</style>
+                <div className="py-8">
+                    <div ref={reportRef} data-report-content style={{ color: INK, fontFamily: 'var(--font-geist-sans), -apple-system, "Segoe UI", Roboto, sans-serif' }}>
+                        <style>{`
+                            @page { size: A4 portrait; margin: 0; }
+                            .rp-sheet { box-sizing: border-box; width: 210mm; background: #fff; margin: 0 auto 24px; padding: 16mm 15mm; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.06); }
+                            .rp-cover { height: 297mm; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+                            .rp-num { font-variant-numeric: tabular-nums; }
+                            .rp-avoid { break-inside: avoid; page-break-inside: avoid; }
+                            .rp-keep, .rp-keep tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+                            .rp-h2 { break-after: avoid; page-break-after: avoid; }
+                            .rp-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: ${MUTED}; }
+                            .rp-h2 { font-size: 18px; font-weight: 750; letter-spacing: -.01em; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+                            .rp-h2::before { content: ""; width: 4px; height: 18px; border-radius: 4px; background: ${ACCENT}; }
+                            .rp-block { margin-top: 30px; }
+                            .rp-cblock { margin-top: 14px; }
+                            .rp-fit { overflow: hidden; }
+                            .rp-fit-inner { max-width: none; }
+                            .rp-h3 { font-size: 13px; font-weight: 750; letter-spacing: -.005em; margin: 0 0 7px; display: flex; align-items: center; gap: 8px; break-after: avoid; }
+                            .rp-h3::before { content: ""; width: 3px; height: 12px; border-radius: 3px; background: ${ACCENT}; }
+                            @media print {
+                                body { print-color-adjust: exact; -webkit-print-color-adjust: exact; margin: 0; }
+                                .rp-sheet { margin: 0; box-shadow: none; padding: 14mm 14mm; }
+                                .rp-cover { padding: 0; }
+                                .rp-sheet + .rp-sheet { break-before: page; page-break-before: always; }
+                            }
+                        `}</style>
 
-                    {/* PORTADA - Página 1 */}
-                    <div className="report-page force-break flex flex-col items-center justify-center text-center">
-                        <div className="mb-8">
-                            <h1 className="text-5xl font-extrabold text-slate-900 mb-2">NorDrive</h1>
-                            <p className="text-lg text-slate-500">Importación de Vehículos</p>
-                        </div>
-
-                        <div className="my-8 w-full max-w-md">
-                            <h2 className="text-4xl font-bold text-slate-900 mb-4">
-                                {selectedCar.brand} {selectedCar.model}
-                            </h2>
-                            <p className="text-2xl text-slate-600 mb-8">
-                                {selectedCar.year}{selectedCar.month ? `/${selectedCar.month}` : ''}
-                            </p>
-
-                            {(imageBlobs[0] || selectedCar.images?.[0]) && (
-                                <div className="w-full aspect-video bg-slate-100 rounded-xl overflow-hidden border-2 border-slate-200 shadow-lg">
-                                    <img src={imageBlobs[0] || selectedCar.images[0]} alt="Portada" className="w-full h-full object-cover" crossOrigin="anonymous" />
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="mt-auto pt-8">
-                            <p className="text-sm text-slate-500">Informe preparado para</p>
-                            <p className="text-xl font-semibold text-blue-600">{clientName || "Cliente"}</p>
-                            <p className="text-sm text-slate-400 mt-4">{new Date(reportDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                        </div>
-                    </div>
-
-                    {/* ÍNDICE - Página 2 */}
-                    <div className="report-page force-break">
-                        <h2 className="text-3xl font-bold text-slate-900 mb-8 pb-4 border-b-4 border-blue-600">Índice</h2>
-                        <div className="space-y-3">
-                            {sections.filter(s => s.isVisible).map((section, idx) => (
-                                <div key={section.id} className="flex justify-between items-center py-2 border-b border-slate-100">
-                                    <span className="text-slate-700">{idx + 1}. {section.title}</span>
-                                    <span className="text-slate-400">{idx + 3}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* CONTENIDO - Páginas siguientes */}
-                    {sections.filter(s => s.isVisible).map((section, idx) => {
-                        // Filter empty sections
-                        if (section.type === 'pricing' && !selectedSpainCar) return null;
-                        if (section.type === 'features' && (!selectedCar.equipment || selectedCar.equipment.length === 0)) return null;
-                        if (section.type === 'gallery' && (!selectedCar.images || selectedCar.images.length <= 1)) return null;
-
-                        return (
-                            <div key={section.id} className="report-page avoid-break">
-                                {/* Header Section */}
-                                {section.type === 'header' && (
-                                    <div>
-                                        <div className="flex justify-between items-start border-b-4 border-blue-600 pb-6 mb-8">
-                                            <div>
-                                                <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">NorDrive</h1>
-                                                <p className="text-slate-500 font-medium mt-1">Importación de Vehículos</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-xs text-slate-400 uppercase tracking-wider">Fecha</p>
-                                                <p className="font-semibold">{new Date(reportDate).toLocaleDateString()}</p>
-                                            </div>
+                        {/* PORTADA */}
+                        {reportCars.length === 1 ? (
+                        <section className="rp-sheet rp-cover">
+                            <div style={{ position: 'relative', height: reportCars.length === 1 ? '62%' : '38%', background: SOFT }}>
+                                {hero && <img src={hero} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0) 60%, rgba(0,0,0,.55) 100%)' }} />
+                                <div style={{ position: 'absolute', top: '12mm', left: '15mm', right: '15mm', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <div style={{ width: 36, height: 36, borderRadius: 8, background: '#fff', padding: 3 }}>
+                                            <img src={`${process.env.__NEXT_ROUTER_BASEPATH || ''}/NorDrive.png`} alt="NorDrive" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                         </div>
+                                        <span style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>NorDrive</span>
+                                    </div>
+                                    <span style={{ color: 'rgba(255,255,255,.9)', fontSize: 12 }}>{formattedDate}</span>
+                                </div>
+                                {reportCars.length === 1 && (
+                                    <div style={{ position: 'absolute', left: '15mm', right: '15mm', bottom: '12mm', color: '#fff' }}>
+                                        <p style={{ fontSize: 13, opacity: .85, margin: 0 }}>{[reportCars[0].car.year, reportCars[0].car.mileage ? `${reportCars[0].car.mileage.toLocaleString('es-ES')} km` : null, reportCars[0].car.cv ? `${reportCars[0].car.cv} CV` : null].filter(Boolean).join(' · ')}</p>
+                                        <h1 style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-.02em', margin: '4px 0 0', lineHeight: 1.05 }}>{reportCars[0].car.brand} {reportCars[0].car.model}</h1>
                                     </div>
                                 )}
+                            </div>
 
-                                {/* Car Summary */}
-                                {section.type === 'car-summary' && (
-                                    <div>
-                                        <h2 className="text-3xl font-bold text-slate-900 mb-6 pb-4 border-b-4 border-blue-600">
-                                            Especificaciones del Vehículo
-                                        </h2>
+                            <div style={{ flex: 1, padding: '14mm 15mm 12mm', display: 'flex', flexDirection: 'column' }}>
+                                <p className="rp-label">{clientName ? 'Preparado para' : 'Informe'}</p>
+                                <h2 style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', margin: '6px 0 4px' }}>{clientName || reportTitle}</h2>
+                                {clientName && <p style={{ fontSize: 15, color: MUTED, margin: 0 }}>{reportTitle}</p>}
 
-                                        <div className="mb-8">
-                                            <h3 className="text-2xl font-bold text-slate-900 mb-2">
-                                                {selectedCar.brand} {selectedCar.model}
-                                            </h3>
-                                            <p className="text-xl text-slate-500">
-                                                {selectedCar.year}{selectedCar.month ? `/${selectedCar.month}` : ''} • {selectedCar.mileage?.toLocaleString()} km • {selectedCar.cv} CV
-                                            </p>
+                                {reportCars.length === 1 ? (
+                                    <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderTop: `1px solid ${LINE}`, paddingTop: 18 }}>
+                                        <div>
+                                            <p className="rp-label">Precio final en España</p>
+                                            <p className="rp-num" style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.02em', margin: '4px 0 0' }}>{eur(reportCars[0].price.final)}</p>
+                                            <p style={{ fontSize: 12, color: MUTED, margin: '2px 0 0' }}>Llave en mano{reportCars[0].price.estimated ? ' · estimado' : ''}</p>
                                         </div>
-
-                                        <div className="mb-8">
-                                            <h4 className="text-lg font-bold text-slate-900 mb-4">Datos Técnicos</h4>
-                                            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                                                <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                    <span className="text-slate-600">Año:</span>
-                                                    <span className="font-semibold">{selectedCar.year}</span>
+                                        {reportCars[0].spain && reportCars[0].spain.price > reportCars[0].price.final && (
+                                            <div style={{ textAlign: 'right' }}>
+                                                <p className="rp-label">Ahorro frente a España</p>
+                                                <p className="rp-num" style={{ fontSize: 26, fontWeight: 800, color: SUCCESS, margin: '4px 0 0' }}>{eur(reportCars[0].spain.price - reportCars[0].price.final)}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                                        {reportCars.slice(0, 6).map(({ car, price, images }) => (
+                                            <div key={car.id} style={{ display: 'flex', gap: 10, alignItems: 'center', border: `1px solid ${LINE}`, borderRadius: 10, padding: 8 }}>
+                                                <div style={{ width: 64, height: 44, borderRadius: 6, overflow: 'hidden', background: SOFT, flexShrink: 0 }}>
+                                                    {images[0] && <img src={images[0]} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                                                 </div>
-                                                <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                    <span className="text-slate-600">Kilometraje:</span>
-                                                    <span className="font-semibold">{selectedCar.mileage?.toLocaleString()} km</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                    <span className="text-slate-600">Potencia:</span>
-                                                    <span className="font-semibold">{selectedCar.cv} CV</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                    <span className="text-slate-600">Combustible:</span>
-                                                    <span className="font-semibold">{selectedCar.fuel || selectedCar.fuelType || "-"}</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                    <span className="text-slate-600">Transmisión:</span>
-                                                    <span className="font-semibold">{selectedCar.transmission || "-"}</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                    <span className="text-slate-600">Color:</span>
-                                                    <span className="font-semibold">{selectedCar.color || "-"}</span>
-                                                </div>
-                                                {selectedCar.motorType && (
-                                                    <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                        <span className="text-slate-600">Motor:</span>
-                                                        <span className="font-semibold">{selectedCar.motorType}</span>
-                                                    </div>
-                                                )}
-                                                {selectedCar.displacement && (
-                                                    <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                        <span className="text-slate-600">Cilindrada:</span>
-                                                        <span className="font-semibold">{selectedCar.displacement} cc</span>
-                                                    </div>
-                                                )}
-                                                {selectedCar.traction && (
-                                                    <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                        <span className="text-slate-600">Tracción:</span>
-                                                        <span className="font-semibold">{selectedCar.traction}</span>
-                                                    </div>
-                                                )}
-                                                {selectedCar.doors && (
-                                                    <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                        <span className="text-slate-600">Puertas:</span>
-                                                        <span className="font-semibold">{selectedCar.doors}</span>
-                                                    </div>
-                                                )}
-                                                <div className="flex justify-between border-b border-slate-100 pb-2">
-                                                    <span className="text-slate-600">Ubicación:</span>
-                                                    <span className="font-semibold">{selectedCar.location || "-"}</span>
+                                                <div style={{ minWidth: 0 }}>
+                                                    <p style={{ fontWeight: 600, fontSize: 13, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{car.brand} {car.model}</p>
+                                                    <p className="rp-num" style={{ fontSize: 12, color: MUTED, margin: 0 }}>{car.year} · {eur(price.final)}</p>
                                                 </div>
                                             </div>
-                                        </div>
+                                        ))}
                                     </div>
                                 )}
+                            </div>
+                        </section>
+                        ) : (
+                        /* PORTADA CON VARIOS COCHES: mosaico de fotos + lista de la propuesta */
+                        <section className="rp-sheet rp-cover">
+                            <div style={{ position: 'relative', height: '50%', background: INK, display: 'grid', gap: 3, gridTemplateColumns: reportCars.length === 2 ? '1fr 1fr' : '1.6fr 1fr', gridTemplateRows: reportCars.length === 2 ? '1fr' : '1fr 1fr' }}>
+                                {reportCars.slice(0, 3).map(({ car, images }, i) => (
+                                    <div key={car.id} style={{ position: 'relative', overflow: 'hidden', background: '#27272a', gridRow: reportCars.length > 2 && i === 0 ? '1 / span 2' : undefined }}>
+                                        {images[0] && <img src={images[0]} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                                    </div>
+                                ))}
+                                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,.45) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 55%, rgba(0,0,0,.7) 100%)' }} />
+                                <div style={{ position: 'absolute', top: '12mm', left: '15mm', right: '15mm', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <div style={{ width: 36, height: 36, borderRadius: 8, background: '#fff', padding: 3 }}>
+                                            <img src={`${process.env.__NEXT_ROUTER_BASEPATH || ''}/NorDrive.png`} alt="NorDrive" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                        </div>
+                                        <span style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>NorDrive</span>
+                                    </div>
+                                    <span style={{ color: 'rgba(255,255,255,.9)', fontSize: 12 }}>{formattedDate}</span>
+                                </div>
+                                <div style={{ position: 'absolute', left: '15mm', right: '15mm', bottom: '11mm', color: '#fff' }}>
+                                    <p style={{ fontSize: 12, letterSpacing: '.14em', textTransform: 'uppercase', fontWeight: 600, opacity: .8, margin: 0 }}>{reportTitle}</p>
+                                    <h1 style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-.02em', margin: '4px 0 0', lineHeight: 1.05 }}>
+                                        {reportCars.length} vehículos seleccionados
+                                    </h1>
+                                </div>
+                            </div>
 
-                                {/* Pricing */}
-                                {section.type === 'pricing' && selectedSpainCar && (
+                            <div style={{ flex: 1, padding: '12mm 15mm 12mm', display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
                                     <div>
-                                        <h2 className="text-3xl font-bold text-slate-900 mb-6 pb-4 border-b-4 border-blue-600">
-                                            Oferta Económica
-                                        </h2>
-                                        <div className="bg-slate-50 rounded-xl p-8 border border-slate-200 space-y-4">
-                                            <div className="flex justify-between items-center text-lg border-b border-slate-200 pb-3">
-                                                <span className="text-slate-700">Precio base del vehículo</span>
-                                                <span className="font-semibold">{selectedCar.price?.toLocaleString()}€</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-lg border-b border-slate-200 pb-3">
-                                                <span className="text-slate-700">Gastos de importación</span>
-                                                <span className="font-semibold">{selectedCar.totalExpenses?.toLocaleString()}€</span>
-                                            </div>
-                                            {negotiationDiscount > 0 && (
-                                                <div className="flex justify-between items-center text-lg border-b border-green-200 pb-3 bg-green-50 -mx-8 px-8 py-3">
-                                                    <span className="text-green-700 flex items-center gap-2">
-                                                        <TrendingDown className="w-5 h-5" />
-                                                        Descuento negociado
-                                                    </span>
-                                                    <span className="font-bold text-green-700">-{negotiationDiscount?.toLocaleString()}€</span>
-                                                </div>
+                                        <p className="rp-label" style={{ margin: 0 }}>{clientName ? 'Preparado para' : 'Presupuesto'}</p>
+                                        <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', margin: '4px 0 0' }}>{clientName || 'Selección de vehículos'}</h2>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <p className="rp-label" style={{ margin: 0 }}>Desde</p>
+                                        <p className="rp-num" style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', margin: '4px 0 0', color: ACCENT }}>
+                                            {eur(Math.min(...reportCars.map(r => r.price.final)))}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {recommended && (
+                                    <div style={{ marginTop: 16, display: 'flex', gap: 14, alignItems: 'center', background: SOFT, borderRadius: 12, padding: 10, border: `1px solid ${LINE}` }}>
+                                        <div style={{ width: 120, height: 78, borderRadius: 8, overflow: 'hidden', background: '#e4e4e7', flexShrink: 0 }}>
+                                            {recommended.images[0] && <img src={recommended.images[0]} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                                        </div>
+                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                            <p className="rp-label" style={{ margin: 0, color: INK }}>★ Nuestra recomendación</p>
+                                            <p style={{ fontSize: 17, fontWeight: 800, margin: '2px 0 0', letterSpacing: '-.01em' }}>{recommended.car.brand} {recommended.car.model}</p>
+                                            {recommendReason ? (
+                                                <p style={{ fontSize: 11.5, color: MUTED, margin: '3px 0 0', lineHeight: 1.45 }}>{recommendReason}</p>
+                                            ) : (
+                                                <p className="rp-num" style={{ fontSize: 11.5, color: MUTED, margin: '3px 0 0' }}>
+                                                    {[recommended.car.year, recommended.car.mileage != null ? `${recommended.car.mileage.toLocaleString('es-ES')} km` : null, recommended.car.cv ? `${recommended.car.cv} CV` : null].filter(Boolean).join(' · ')}
+                                                </p>
                                             )}
-                                            <div className="border-t-2 border-slate-300 pt-6 mt-4">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-xl text-slate-700">Precio Final "Llave en mano"</span>
-                                                    <p className="text-4xl font-bold text-blue-600">
-                                                        {((selectedCar.finalPrice || 0) - negotiationDiscount).toLocaleString()}€
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <p className="text-sm text-slate-500 leading-relaxed border-t border-slate-200 pt-4 mt-4">
-                                                Incluye: Vehículo, transporte internacional, matriculación, ITV, tasas de tráfico, gestión documental y garantía (si aplica).
-                                            </p>
                                         </div>
-                                        {/* Comparison with Spain */}
-                                        <div className="avoid-break">
-                                            <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-4 flex items-center gap-6">
-                                                <span className="w-1 h-5 bg-blue-500 rounded-full"></span>
-                                                Comparativa con España
-                                            </h3>
-                                            <div className="grid grid-cols-2 gap-6">
-                                                {/* Imported Car */}
-                                                <div className="bg-blue-50 rounded-xl p-5 border border-blue-100">
-                                                    <p className="text-xs text-blue-600 uppercase font-semibold mb-2">Vehículo Importado</p>
-                                                    <p className="text-2xl font-bold text-blue-900 mb-3">
-                                                        {((selectedCar.finalPrice || 0) - negotiationDiscount).toLocaleString()}€
-                                                    </p>
-                                                    <dl className="space-y-1 text-sm">
-                                                        <div className="flex justify-between"><dt className="text-blue-700">Año:</dt><dd className="font-medium">{selectedCar.year}</dd></div>
-                                                        <div className="flex justify-between"><dt className="text-blue-700">Kilometraje:</dt><dd className="font-medium">{selectedCar.mileage?.toLocaleString()} km</dd></div>
-                                                        <div className="flex justify-between"><dt className="text-blue-700">Potencia:</dt><dd className="font-medium">{selectedCar.cv} CV</dd></div>
-                                                        {importedCarEquipmentLevel && (
-                                                            <div className="flex justify-between"><dt className="text-blue-700">Equipamiento:</dt><dd className="font-medium">{importedCarEquipmentLevel}</dd></div>
-                                                        )}
-                                                    </dl>
-                                                </div>
+                                        <p className="rp-num" style={{ fontSize: 20, fontWeight: 800, margin: '0 6px 0 0', flexShrink: 0 }}>{eur(recommended.price.final)}</p>
+                                    </div>
+                                )}
 
-                                                {/* Spain Car */}
-                                                <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
-                                                    <p className="text-xs text-slate-600 uppercase font-semibold mb-2">Vehículo en España</p>
-                                                    <p className="text-2xl font-bold text-slate-900 mb-3">
-                                                        {selectedSpainCar.price?.toLocaleString()}€
-                                                    </p>
-                                                    <dl className="space-y-1 text-sm">
-                                                        <div className="flex justify-between"><dt className="text-slate-600">Año:</dt><dd className="font-medium">{selectedSpainCar.year}</dd></div>
-                                                        <div className="flex justify-between"><dt className="text-slate-600">Kilometraje:</dt><dd className="font-medium">{selectedSpainCar.mileage?.toLocaleString()} km</dd></div>
-                                                        <div className="flex justify-between"><dt className="text-slate-600">Potencia:</dt><dd className="font-medium">{selectedSpainCar.cv} CV</dd></div>
-                                                        {selectedSpainCar.equipmentLevel && (
-                                                            <div className="flex justify-between"><dt className="text-slate-600">Equipamiento:</dt><dd className="font-medium">{selectedSpainCar.equipmentLevel}</dd></div>
-                                                        )}
-                                                    </dl>
-                                                </div>
+                                <div style={{ marginTop: 16, borderTop: `1px solid ${LINE}` }}>
+                                    {coverCars.map(({ car, price, images }) => (
+                                        <div key={car.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: `1px solid ${LINE}` }}>
+                                            <span className="rp-num" style={{ width: 22, height: 22, borderRadius: 999, background: car.id === highlightId ? (recommended ? INK : ACCENT) : SOFT, color: car.id === highlightId ? '#fff' : MUTED, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{reportCars.findIndex(r => r.car.id === car.id) + 1}</span>
+                                            <div style={{ width: 52, height: 36, borderRadius: 6, overflow: 'hidden', background: SOFT, flexShrink: 0 }}>
+                                                {images[0] && <img src={images[0]} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                                             </div>
-
-                                            {/* Savings */}
-                                            <div className="mt-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border-2 border-green-200">
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <p className="text-sm text-green-700 font-medium mb-1">💰 Te ahorras</p>
-                                                        <p className="text-4xl font-extrabold text-green-600">
-                                                            {(selectedSpainCar.price - ((selectedCar.finalPrice || 0) - negotiationDiscount)).toLocaleString()}€
-                                                        </p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-xs text-green-700 uppercase tracking-wide mb-1">Diferencia</p>
-                                                        <p className="text-2xl font-bold text-green-700">
-                                                            {(((selectedSpainCar.price - ((selectedCar.finalPrice || 0) - negotiationDiscount)) / selectedSpainCar.price) * 100).toFixed(1)}%
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <p className="text-xs text-green-700 mt-4 leading-relaxed">
-                                                    Importando este vehículo ahorras significativamente en comparación con un vehículo similar en España.
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                <p style={{ fontWeight: 650, fontSize: 14, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{car.brand} {car.model}</p>
+                                                <p className="rp-num" style={{ fontSize: 11, color: MUTED, margin: 0 }}>
+                                                    {[car.year, car.mileage != null ? `${car.mileage.toLocaleString('es-ES')} km` : null, car.cv ? `${car.cv} CV` : null, car.fuelType || null].filter(Boolean).join(' · ')}
                                                 </p>
                                             </div>
-                                        </div>
-                                    </div>
-
-                                )}
-
-
-                                {/* Features */}
-                                {section.type === 'features' && selectedCar.equipment?.length > 0 && (
-                                    <div className="avoid-break">
-                                        <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-4">Equipamiento</h3>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {selectedCar.equipment.map((item, idx) => (
-                                                <div key={idx} className="flex items-start gap-2 text-sm">
-                                                    <Check className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-                                                    <span className="text-slate-700">{item}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Gallery */}
-                                {section.type === 'gallery' && (imageBlobs.length > 1 || selectedCar.images?.length > 1) && (
-                                    <div className="avoid-break">
-                                        <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-4">Galería</h3>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            {(imageBlobs.length > 0 ? imageBlobs : selectedCar.images).slice(1, 7).map((img, idx) => (
-                                                <div key={idx} className="aspect-[4/3] bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
-                                                    <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover" crossOrigin="anonymous" />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Text Block */}
-                                {section.type === 'text-block' && (
-                                    <div>
-                                        {section.title && <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-4">{section.title}</h3>}
-                                        <div className="prose max-w-none text-slate-700 whitespace-pre-wrap">
-                                            {section.content}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Image Block */}
-                                {section.type === 'image-block' && (
-                                    <div>
-                                        {section.title && <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-4">{section.title}</h3>}
-                                        {section.image && (
-                                            <div className="w-full bg-slate-100 rounded-xl overflow-hidden mb-4 border border-slate-200">
-                                                <img src={section.image} alt={section.title} className="w-full h-auto object-cover" />
+                                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                <p className="rp-num" style={{ fontWeight: 750, fontSize: 15, margin: 0 }}>{eur(price.final)}</p>
+                                                <div style={{ marginTop: 2 }}><CarTags recommended={car.id === recommended?.car.id} cheapest={car.id === cheapestId} size={8} /></div>
                                             </div>
-                                        )}
-                                        {section.content && (
-                                            <p className="text-slate-700">{section.content}</p>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Inspection Checklist */}
-                                {section.type === 'inspection' && checklistData && (
-                                    <div className="avoid-break">
-                                        <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-2 mb-3">Inspección Técnica</h3>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            {Object.entries(CHECKLIST_SECTIONS).map(([key, sec]: any) => {
-                                                const items = sec.items.map((item: string, idx: number) => {
-                                                    const itemKey = `${key}-${idx}`
-                                                    const data = checklistData[itemKey]
-                                                    if (data?.checked) {
-                                                        return { item, note: data.note }
-                                                    }
-                                                    return null
-                                                }).filter(Boolean)
-
-                                                if (items.length === 0) return null
-
-                                                return (
-                                                    <div key={key} className="mb-3 break-inside-avoid">
-                                                        <h4 className="font-semibold text-blue-600 mb-2 text-sm">{sec.title}</h4>
-                                                        <ul className="space-y-1.5">
-                                                            {items.map((i: any, idx: number) => (
-                                                                <li key={idx} className="text-sm flex flex-col">
-                                                                    <div className="flex items-start gap-2">
-                                                                        <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                                                                        <span className="text-slate-700 leading-tight">{i.item}</span>
-                                                                    </div>
-                                                                    {i.note && (
-                                                                        <p className="text-xs text-slate-500 ml-6 italic mt-0.5 bg-yellow-50 px-2 py-0.5 rounded">
-                                                                            {i.note}
-                                                                        </p>
-                                                                    )}
-                                                                    {!i.note && (
-                                                                        <p className="text-xs text-green-600 ml-6 mt-0.5">✓ OK</p>
-                                                                    )}
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </div>
-                                                )
-                                            })}
                                         </div>
-                                    </div>
-                                )}
+                                    ))}
+                                    {reportCars.length > COVER_MAX && (
+                                        <p style={{ fontSize: 12, color: MUTED, margin: '10px 0 0' }}>
+                                            Y {reportCars.length - COVER_MAX} {reportCars.length - COVER_MAX === 1 ? 'vehículo más' : 'vehículos más'}: todos comparados en la página siguiente.
+                                        </p>
+                                    )}
+                                </div>
+
+                                <p style={{ marginTop: 'auto', fontSize: 11, color: MUTED }}>Precios finales en España, llave en mano y matriculados.</p>
                             </div>
-                        )
-                    })}
-
-                    {/* Footer - Al final del contenido */}
-                    <div className="mt-12 pt-6 border-t-2 border-slate-200 bg-white -mx-[15mm] px-[15mm] pb-6">
-                        {showFooterContact ? (
-                            // 3 columnas con contacto
-                            <div className="grid grid-cols-3 gap-8 mb-4">
-                                {/* Columna 1: Contacto (izquierda) */}
-                                <div>
-                                    <h5 className="font-semibold text-slate-700 text-sm mb-2">Contacto</h5>
-                                    <p className="text-xs text-slate-600 mb-1">📧 {footerEmail}</p>
-                                    <p className="text-xs text-slate-600 mb-1">📱 {footerPhone}</p>
-                                    <p className="text-xs text-slate-600">🌐 {footerWeb}</p>
-                                </div>
-
-                                {/* Columna 2: NorDrive (centro) */}
-                                <div className="text-center">
-                                    <h4 className="font-bold text-slate-900 text-xl mb-1">NorDrive</h4>
-                                    <p className="text-sm text-slate-600">Importación profesional de vehículos</p>
-                                </div>
-
-                                {/* Columna 3: Disclaimer (derecha) */}
-                                <div className="text-right">
-                                    <p className="text-xs text-slate-400 mb-2">Documento informativo no vinculante</p>
-                                    <p className="text-xs text-slate-400">Los precios pueden variar según condiciones del mercado</p>
-                                </div>
-                            </div>
-                        ) : (
-                            // 2 columnas sin contacto
-                            <div className="grid grid-cols-2 gap-8 mb-4">
-                                {/* Columna 1: NorDrive (izquierda) */}
-                                <div>
-                                    <h4 className="font-bold text-slate-900 text-xl mb-1">NorDrive</h4>
-                                    <p className="text-sm text-slate-600">Importación profesional de vehículos</p>
-                                </div>
-
-                                {/* Columna 2: Disclaimer (derecha) */}
-                                <div className="text-right">
-                                    <p className="text-xs text-slate-400 mb-2">Documento informativo no vinculante</p>
-                                    <p className="text-xs text-slate-400">Los precios pueden variar según condiciones del mercado</p>
-                                </div>
-                            </div>
+                        </section>
                         )}
 
-                        <div className="border-t border-slate-200 pt-3 text-center">
-                            <p className="text-xs text-slate-400">
-                                © {new Date().getFullYear()} NorDrive - Todos los derechos reservados
-                            </p>
-                        </div>
+                        {/* COMPARATIVA ENTRE COCHES: solo si en la portada no caben todos */}
+                        {reportCars.length > COVER_MAX && (
+                            <section className="rp-sheet">
+                                {runningHeader('Resumen')}
+                                <h2 className="rp-h2">Resumen del presupuesto</h2>
+                                <p style={{ fontSize: 13, color: MUTED, margin: '-6px 0 16px' }}>
+                                    Comparativa de los {reportCars.length} vehículos. Todos los precios son finales en España, llave en mano.
+                                </p>
+                                <div style={{ border: `1px solid ${LINE}`, borderRadius: 12, overflow: 'hidden' }}>
+                                <table className="rp-num" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                    <thead>
+                                        <tr>
+                                            {['Vehículo', 'Año', 'Km', 'CV', 'Combustible', 'Precio final'].map((h, i) => (
+                                                <th key={h} className="rp-label" style={{ textAlign: i >= 1 ? 'right' : 'left', padding: '10px 12px', background: SOFT, borderBottom: `1px solid ${LINE}` }}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {reportCars.map(({ car, price, images }) => (
+                                            <tr key={car.id} style={{ background: car.id === highlightId ? '#f2f5ff' : undefined }}>
+                                                <td style={{ padding: '10px 12px', borderBottom: `1px solid ${LINE}` }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                        <div style={{ width: 56, height: 38, borderRadius: 6, overflow: 'hidden', background: SOFT, flexShrink: 0 }}>
+                                                            {images[0] && <img src={images[0]} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                                                        </div>
+                                                        <div>
+                                                            <p style={{ fontWeight: 600, margin: 0 }}>{car.brand} {car.model}</p>
+                                                            <div style={{ marginTop: 3 }}><CarTags recommended={car.id === recommended?.car.id} cheapest={car.id === cheapestId} size={8} /></div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td style={{ textAlign: 'right', padding: '10px 12px', borderBottom: `1px solid ${LINE}` }}>{car.year ?? '—'}</td>
+                                                <td style={{ textAlign: 'right', padding: '10px 12px', borderBottom: `1px solid ${LINE}` }}>{car.mileage != null ? car.mileage.toLocaleString('es-ES') : '—'}</td>
+                                                <td style={{ textAlign: 'right', padding: '10px 12px', borderBottom: `1px solid ${LINE}` }}>{car.cv ?? '—'}</td>
+                                                <td style={{ textAlign: 'right', padding: '10px 12px', borderBottom: `1px solid ${LINE}` }}>{car.fuelType || '—'}</td>
+                                                <td style={{ textAlign: 'right', padding: '10px 12px', borderBottom: `1px solid ${LINE}`, fontWeight: 700, fontSize: 14 }}>
+                                                    {eur(price.final)}{price.estimated && <span style={{ fontWeight: 400, color: MUTED }}> *</span>}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                </div>
+                                {reportCars.some(r => r.price.estimated) && (
+                                    <p style={{ fontSize: 11, color: MUTED, marginTop: 10 }}>* Precio estimado: incluye impuesto de matriculación, transporte, ITV, homologación, tasas y gestoría.</p>
+                                )}
+                            </section>
+                        )}
+
+                        {/* UN CAPÍTULO POR COCHE */}
+                        {reportCars.map(({ car, config, spain, price, images, checklist }, carIndex) => (
+                            <section key={car.id} className="rp-sheet rp-fit">
+                                <div className="rp-fit-inner">
+                                {runningHeader(reportCars.length > 1 ? `Vehículo ${carIndex + 1} de ${reportCars.length}` : 'Detalle del vehículo')}
+
+                                {(() => {
+                                    // Ficha de UNA página por coche: foto y precio lado a lado, el resto compacto
+                                    const visible = blocks.filter(b => b.isVisible)
+                                    const showSummary = visible.some(b => b.id === 'summary')
+                                    const pricingInSummary = showSummary && visible.some(b => b.id === 'pricing')
+
+                                    const priceCard = (
+                                        <div style={{ border: `1px solid ${LINE}`, borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                            <div style={{ padding: '4px 14px', flex: 1 }}>
+                                                <p className="rp-label" style={{ margin: '8px 0 2px' }}>{blockTitle('pricing')}</p>
+                                                {price.lines.map((line, i) => (
+                                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '5px 0', borderBottom: i < price.lines.length - 1 || price.discount > 0 ? `1px solid ${LINE}` : 'none', fontSize: 11.5 }}>
+                                                        <span style={{ color: i === 0 ? INK : MUTED }}>{line.label}</span>
+                                                        <span className="rp-num" style={{ fontWeight: i === 0 ? 600 : 500, whiteSpace: 'nowrap' }}>{eur(line.amount)}</span>
+                                                    </div>
+                                                ))}
+                                                {price.discount > 0 && (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 11.5, color: SUCCESS, fontWeight: 600 }}>
+                                                        <span>Descuento negociado</span>
+                                                        <span className="rp-num">−{eur(price.discount)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div style={{ background: INK, color: '#fff', padding: '12px 14px' }}>
+                                                <p style={{ margin: 0, fontSize: 9.5, letterSpacing: '.12em', textTransform: 'uppercase', opacity: .7, fontWeight: 600 }}>Precio final en España</p>
+                                                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                                                    <span style={{ fontSize: 10.5, opacity: .7 }}>Llave en mano{price.estimated ? ' · estimado' : ''}</span>
+                                                    <span className="rp-num" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-.02em' }}>{eur(price.final)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+
+                                    return visible.map(block => {
+                                        switch (block.id) {
+                                            case 'summary':
+                                                return (
+                                                    <div key={block.id} className="rp-avoid">
+                                                        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, margin: '0 0 10px' }}>
+                                                            <div style={{ minWidth: 0 }}>
+                                                                <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', margin: 0, lineHeight: 1.1 }}>{car.brand} {car.model}</h1>
+                                                                <p style={{ fontSize: 12.5, color: MUTED, margin: '3px 0 0' }}>
+                                                                    {[car.year ? `${car.month ? `${String(car.month).padStart(2, '0')}/` : ''}${car.year}` : null, car.origin || car.location].filter(Boolean).join(' · ')}
+                                                                </p>
+                                                            </div>
+                                                            {reportCars.length > 1 && <CarTags recommended={car.id === recommended?.car.id} cheapest={car.id === cheapestId} />}
+                                                        </div>
+                                                        {reportCars.length > 1 && car.id === recommended?.car.id && recommendReason && (
+                                                            <p style={{ fontSize: 11.5, color: INK, margin: '-4px 0 10px', lineHeight: 1.45 }}>{recommendReason}</p>
+                                                        )}
+
+                                                        <div style={{ display: 'grid', gridTemplateColumns: pricingInSummary ? '1.35fr 1fr' : '1fr', gap: 12, alignItems: 'stretch' }}>
+                                                            <div style={{ borderRadius: 12, overflow: 'hidden', background: SOFT, aspectRatio: pricingInSummary ? '16 / 11' : '16 / 7' }}>
+                                                                {images[0] && <img src={images[0]} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                                                            </div>
+                                                            {pricingInSummary && priceCard}
+                                                        </div>
+
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 10 }}>
+                                                            {[
+                                                                ['Año', car.year ?? '—'],
+                                                                ['Kilómetros', car.mileage != null ? car.mileage.toLocaleString('es-ES') : '—'],
+                                                                ['Potencia', car.cv ? `${car.cv} CV` : '—'],
+                                                                ['Combustible', car.fuelType || '—'],
+                                                            ].map(([label, value]) => (
+                                                                <div key={label as string} style={{ background: SOFT, borderRadius: 8, padding: '6px 10px' }}>
+                                                                    <p className="rp-label" style={{ margin: 0, fontSize: 8.5 }}>{label}</p>
+                                                                    <p className="rp-num" style={{ fontSize: 13.5, fontWeight: 700, margin: '1px 0 0' }}>{value}</p>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        {pricingInSummary && price.estimated && (
+                                                            <p style={{ fontSize: 9.5, color: MUTED, margin: '6px 0 0' }}>
+                                                                Precio estimado con los costes habituales de importación; se confirma con el presupuesto de transporte y la tasación de Hacienda.
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )
+
+                                            case 'pricing':
+                                                if (pricingInSummary) return null
+                                                return <div key={block.id} className="rp-cblock rp-avoid">{priceCard}</div>
+
+                                            case 'comparison': {
+                                                if (!spain) return null
+                                                const saving = spain.price - price.final
+                                                return (
+                                                    <div key={block.id} className="rp-cblock rp-avoid">
+                                                        <h3 className="rp-h3">{block.title}</h3>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                                                            <div style={{ borderRadius: 10, padding: '8px 12px', border: `1px solid ${ACCENT}`, background: '#f5f7ff' }}>
+                                                                <p className="rp-label" style={{ margin: 0, color: ACCENT, fontSize: 8.5 }}>Importado con NorDrive</p>
+                                                                <p className="rp-num" style={{ fontSize: 16, fontWeight: 800, margin: '1px 0 0' }}>{eur(price.final)}</p>
+                                                                <p className="rp-num" style={{ fontSize: 10, color: MUTED, margin: 0 }}>{[car.year, car.mileage != null ? `${car.mileage.toLocaleString('es-ES')} km` : null, config.equipmentLevel].filter(Boolean).join(' · ')}</p>
+                                                            </div>
+                                                            <div style={{ borderRadius: 10, padding: '8px 12px', border: `1px solid ${LINE}` }}>
+                                                                <p className="rp-label" style={{ margin: 0, fontSize: 8.5 }}>Equivalente en España</p>
+                                                                <p className="rp-num" style={{ fontSize: 16, fontWeight: 800, margin: '1px 0 0' }}>{eur(spain.price)}</p>
+                                                                <p className="rp-num" style={{ fontSize: 10, color: MUTED, margin: 0 }}>{[spain.year, spain.mileage != null ? `${spain.mileage.toLocaleString('es-ES')} km` : null, spain.equipmentLevel].filter(Boolean).join(' · ')}</p>
+                                                            </div>
+                                                            <div style={{ borderRadius: 10, padding: '8px 12px', background: saving > 0 ? '#ecfdf3' : SOFT, border: `1px solid ${saving > 0 ? '#bbf7d0' : LINE}` }}>
+                                                                <p className="rp-label" style={{ margin: 0, fontSize: 8.5, color: saving > 0 ? SUCCESS : MUTED }}>{saving > 0 ? 'Ahorro' : 'Diferencia'}</p>
+                                                                <p className="rp-num" style={{ fontSize: 16, fontWeight: 800, margin: '1px 0 0', color: saving > 0 ? SUCCESS : INK }}>{eur(Math.abs(saving))}</p>
+                                                                <p className="rp-num" style={{ fontSize: 10, color: saving > 0 ? SUCCESS : MUTED, margin: 0 }}>
+                                                                    {saving > 0 && spain.price > 0 ? `−${((saving / spain.price) * 100).toFixed(1)}% frente a España` : 'Ventaja en equipamiento o km'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            }
+
+                                            case 'specs': {
+                                                const specs: [string, string][] = ([
+                                                    ['Primera matriculación', car.year ? `${car.month ? `${String(car.month).padStart(2, '0')}/` : ''}${car.year}` : ''],
+                                                    ['Kilómetros', car.mileage != null ? `${car.mileage.toLocaleString('es-ES')} km` : ''],
+                                                    ['Potencia', car.cv ? `${car.cv} CV` : ''],
+                                                    ['Combustible', car.fuelType],
+                                                    ['Cambio', car.transmission],
+                                                    ['Motor', car.motorType],
+                                                    ['Cilindrada', car.displacement ? `${car.displacement} cc` : ''],
+                                                    ['Tracción', car.traction],
+                                                    ['Puertas', car.doors],
+                                                    ['Color', car.color],
+                                                    ['Emisiones CO₂', car.co2 ? `${car.co2} g/km` : ''],
+                                                    ['Procedencia', car.origin || car.location],
+                                                ] as [string, string][]).filter(([, value]) => value)
+                                                const perRow = 3
+                                                return (
+                                                    <div key={block.id} className="rp-cblock rp-avoid rp-keep">
+                                                        <h3 className="rp-h3">{block.title}</h3>
+                                                        <table className="rp-num rp-keep" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                                                            <tbody>
+                                                                {Array.from({ length: Math.ceil(specs.length / perRow) }, (_, row) => (
+                                                                    <tr key={row} className="rp-keep">
+                                                                        {Array.from({ length: perRow }, (_, col) => {
+                                                                            const pair = specs[row * perRow + col]
+                                                                            return (
+                                                                                <td key={col} style={{ width: `${100 / perRow}%`, padding: '5px 0', paddingRight: col < perRow - 1 ? 14 : 0, borderBottom: `1px solid ${LINE}`, verticalAlign: 'top' }}>
+                                                                                    {pair && (
+                                                                                        <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                                                                            <span style={{ color: MUTED }}>{pair[0]}</span>
+                                                                                            <span style={{ fontWeight: 600, textAlign: 'right' }}>{pair[1]}</span>
+                                                                                        </span>
+                                                                                    )}
+                                                                                </td>
+                                                                            )
+                                                                        })}
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )
+                                            }
+
+                                            case 'features': {
+                                                if (car.equipment.length === 0) return null
+                                                const maxItems = 18
+                                                return (
+                                                    <div key={block.id} className="rp-cblock rp-avoid">
+                                                        <h3 className="rp-h3">{block.title}</h3>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                                            {car.equipment.slice(0, maxItems).map((item, i) => (
+                                                                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, padding: '3px 8px', borderRadius: 999, background: SOFT, border: `1px solid ${LINE}` }}>
+                                                                    <Check style={{ width: 10, height: 10, color: ACCENT }} /> {item}
+                                                                </span>
+                                                            ))}
+                                                            {car.equipment.length > maxItems && (
+                                                                <span style={{ fontSize: 10.5, padding: '3px 8px', color: MUTED }}>y {car.equipment.length - maxItems} más</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            }
+
+                                            case 'gallery':
+                                                if (images.length <= 1) return null
+                                                return (
+                                                    <div key={block.id} className="rp-cblock rp-avoid">
+                                                        <h3 className="rp-h3">{block.title}</h3>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                                                            {images.slice(1, 6).map((img, i) => (
+                                                                <div key={i} style={{ aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', background: SOFT }}>
+                                                                    <img src={img} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )
+
+                                            case 'inspection': {
+                                                if (!checklist) return null
+                                                const groups = Object.entries(CHECKLIST_SECTIONS).map(([key, sec]) => {
+                                                    const checked = sec.items
+                                                        .map((item, idx) => ({ item, data: checklist[`${key}-${idx}`] }))
+                                                        .filter(i => i.data?.checked)
+                                                    return { title: sec.title, checked, notes: checked.filter(i => i.data.note) }
+                                                }).filter(g => g.checked.length > 0)
+                                                if (groups.length === 0) return null
+                                                return (
+                                                    <div key={block.id} className="rp-cblock rp-avoid">
+                                                        <h3 className="rp-h3">{block.title}</h3>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                                                            {groups.map(group => (
+                                                                <div key={group.title} style={{ border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 9px', fontSize: 10.5 }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+                                                                        <span style={{ fontWeight: 700 }}>{group.title}</span>
+                                                                        <span className="rp-num" style={{ color: SUCCESS, fontWeight: 600, whiteSpace: 'nowrap' }}>✓ {group.checked.length - group.notes.length}/{group.checked.length}</span>
+                                                                    </div>
+                                                                    {group.notes.map(({ item, data }) => (
+                                                                        <p key={item} style={{ margin: '3px 0 0', color: INK }}>
+                                                                            <span style={{ color: MUTED }}>{item}:</span> {data.note}
+                                                                        </p>
+                                                                    ))}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            }
+
+                                            case 'notes':
+                                                if (!car.notes) return null
+                                                return (
+                                                    <div key={block.id} className="rp-cblock rp-avoid">
+                                                        <h3 className="rp-h3">{block.title}</h3>
+                                                        <p style={{ fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', margin: 0 }}>{car.notes}</p>
+                                                    </div>
+                                                )
+                                        }
+                                        return null
+                                    })
+                                })()}
+
+                                {/* Bloques personalizados y pie: al final de la última hoja, sin página propia */}
+                                {carIndex === reportCars.length - 1 && (
+                                    <div style={{ marginTop: 16 }}>
+                            {customBlocks.filter(b => b.isVisible).map((block, i) => (
+                                <div key={block.id} className="rp-avoid" style={{ marginTop: i === 0 ? 0 : 28 }}>
+                                    {block.title && <h2 className="rp-h2">{block.title}</h2>}
+                                    {block.type === 'image' && block.image && (
+                                        <div style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 10 }}>
+                                            <img src={block.image} alt={block.title} style={{ width: '100%', display: 'block' }} />
+                                        </div>
+                                    )}
+                                    {block.content && <p style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', margin: 0 }}>{block.content}</p>}
+                                </div>
+                            ))}
+
+                            <div className="rp-avoid" style={{ marginTop: customBlocks.some(b => b.isVisible) ? 32 : 8, background: SOFT, borderRadius: 12, padding: '18px 20px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: showFooterContact ? '1.2fr 1fr 1fr' : '1fr 1fr', gap: 20, alignItems: 'start' }}>
+                                    <div>
+                                        <p style={{ fontWeight: 800, fontSize: 18, margin: 0 }}>NorDrive</p>
+                                        <p style={{ fontSize: 12, color: MUTED, margin: '2px 0 0' }}>Importación profesional de vehículos</p>
+                                    </div>
+                                    {showFooterContact && (
+                                        <div style={{ fontSize: 12, display: 'grid', gap: 3 }}>
+                                            <p className="rp-label" style={{ margin: '0 0 2px' }}>Contacto</p>
+                                            <span>{footerEmail}</span>
+                                            <span>{footerPhone}</span>
+                                            <span>{footerWeb}</span>
+                                        </div>
+                                    )}
+                                    <div style={{ fontSize: 11, color: MUTED, textAlign: showFooterContact ? 'left' : 'right' }}>
+                                        <p style={{ margin: 0 }}>
+                                            {validityDays > 0
+                                                ? `Presupuesto válido ${validityDays} días desde su emisión (hasta el ${new Date(new Date(reportDate).getTime() + validityDays * 86400000).toLocaleDateString('es-ES')}).`
+                                                : 'Documento informativo no vinculante.'}
+                                        </p>
+                                        <p style={{ margin: '2px 0 0' }}>Importes sujetos a la tasación oficial de Hacienda y a la disponibilidad del vehículo.</p>
+                                    </div>
+                                </div>
+                                <p style={{ fontSize: 10, color: MUTED, margin: '14px 0 0', borderTop: `1px solid ${LINE}`, paddingTop: 10, textAlign: 'center' }}>
+                                    © {new Date().getFullYear()} NorDrive · {formattedDate}
+                                </p>
+                            </div>
+                                    </div>
+                                )}
+                                </div>
+                            </section>
+                        ))}
+
                     </div>
                 </div>
             </div>
         )
     }
 
+    // --- Editor ---
+
+    const availableCars = cars.filter(c => !selectedIds.includes(c.id))
+
     return (
         <div className="space-y-6 animate-in">
             <div>
-                <h2 className="text-2xl font-semibold tracking-tight mb-1">Generador de Informes</h2>
-                <p className="text-muted-foreground">Personaliza y genera informes profesionales PDF para tus clientes.</p>
+                <h2 className="text-2xl font-semibold tracking-tight mb-1">Generador de informes</h2>
+                <p className="text-muted-foreground">Prepara un presupuesto en PDF con uno o varios coches para tu cliente.</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* Left Sidebar: Settings */}
-                <div className="lg:col-span-4 space-y-6">
-                    <div className="bg-card border border-border rounded-lg p-6 space-y-4 sticky top-6">
-                        <h3 className="font-semibold flex items-center gap-2">
-                            <Settings className="w-4 h-4" /> Configuración General
-                        </h3>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Vehículo</label>
-                            <select
-                                value={selectedCarId}
-                                onChange={(e) => setSelectedCarId(e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            >
-                                <option value="">-- Selecciona un coche --</option>
-                                {cars.map((car) => (
-                                    <option key={car.id} value={car.id}>
-                                        {car.brand} {car.model}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Cliente</label>
-                            <input
-                                type="text"
-                                value={clientName}
-                                onChange={(e) => setClientName(e.target.value)}
-                                placeholder="Nombre del cliente"
-                                className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Fecha</label>
-                            <input
-                                type="date"
-                                value={reportDate}
-                                onChange={(e) => setReportDate(e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                        </div>
-
-                        <div className="pt-4 border-t border-border">
-                            <label className="block text-sm font-medium mb-1">Descuento Negociación (€)</label>
-                            <input
-                                type="number"
-                                value={negotiationDiscount}
-                                onChange={(e) => setNegotiationDiscount(Number(e.target.value))}
-                                placeholder="0"
-                                min="0"
-                                className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">Se restará del precio final</p>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Coche de España (Comparativa)</label>
-                            <select
-                                value={selectedSpainCarId}
-                                onChange={(e) => setSelectedSpainCarId(e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            >
-                                <option value="">-- Sin comparativa --</option>
-                                {spainCars.map((car) => (
-                                    <option key={car.id} value={car.id}>
-                                        {car.brand} {car.model} ({car.year})
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="text-xs text-muted-foreground mt-1">Opcional: para mostrar ahorro</p>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Nivel Equipamiento Importado</label>
-                            <select
-                                value={importedCarEquipmentLevel}
-                                onChange={(e) => setImportedCarEquipmentLevel(e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            >
-                                <option value="">-- Seleccionar nivel --</option>
-                                <option value="Sin equipamiento">Sin equipamiento</option>
-                                <option value="Bajo">Bajo</option>
-                                <option value="Medio">Medio</option>
-                                <option value="Alto">Alto</option>
-                            </select>
-                            <p className="text-xs text-muted-foreground mt-1">Nivel de equipamiento del coche importado</p>
-                        </div>
-
-                        <div className="pt-4 border-t border-border">
-                            <p className="text-sm font-medium mb-3">Personalizar Footer</p>
-                            <div className="space-y-3">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={showFooterContact}
-                                        onChange={(e) => setShowFooterContact(e.target.checked)}
-                                        className="w-4 h-4"
-                                    />
-                                    <span className="text-sm">Mostrar información de contacto</span>
-                                </label>
-
-                                {showFooterContact && (
-                                    <>
-                                        <input
-                                            type="email"
-                                            value={footerEmail}
-                                            onChange={(e) => setFooterEmail(e.target.value)}
-                                            placeholder="Email"
-                                            className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                                        />
-                                        <input
-                                            type="text"
-                                            value={footerPhone}
-                                            onChange={(e) => setFooterPhone(e.target.value)}
-                                            placeholder="Teléfono"
-                                            className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                                        />
-                                        <input
-                                            type="text"
-                                            value={footerWeb}
-                                            onChange={(e) => setFooterWeb(e.target.value)}
-                                            placeholder="Sitio web"
-                                            className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                                        />
-                                    </>
-                                )}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Configuración general */}
+                <div className="lg:col-span-4">
+                    <div className="rounded-xl border bg-card p-5 shadow-xs space-y-4 lg:sticky lg:top-20">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                                <Settings className="h-4 w-4 text-primary" />
                             </div>
+                            <h3 className="text-sm font-semibold">Configuración general</h3>
                         </div>
 
-                        <div className="pt-4 border-t border-border">
-                            <p className="text-sm font-medium mb-2">Añadir Sección</p>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="report-client" className="text-[13px]">Cliente</Label>
+                            <Input id="report-client" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Nombre del cliente" />
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="report-title" className="text-[13px]">Título</Label>
+                            <Input id="report-title" value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} />
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="report-validity" className="text-[13px]">Validez (días)</Label>
+                            <Input id="report-validity" type="number" min="0" className="tabular" value={validityDays}
+                                onChange={(e) => setValidityDays(Math.max(0, Number(e.target.value) || 0))} />
+                            <p className="text-xs text-muted-foreground">Se indica en el pie. Pon 0 para un documento solo informativo.</p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="report-date" className="text-[13px]">Fecha</Label>
+                            <Input id="report-date" type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="tabular" />
+                        </div>
+
+                        <div className="space-y-3 border-t pt-4">
+                            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Pie de página</p>
+                            <label htmlFor="report-footer-contact" className="flex cursor-pointer items-center justify-between gap-3">
+                                <span className="text-sm">Mostrar información de contacto</span>
+                                <Switch id="report-footer-contact" checked={showFooterContact} onCheckedChange={setShowFooterContact} />
+                            </label>
+                            {showFooterContact && (
+                                <div className="space-y-2">
+                                    <Input type="email" value={footerEmail} onChange={(e) => setFooterEmail(e.target.value)} placeholder="Email" aria-label="Email de contacto" />
+                                    <Input value={footerPhone} onChange={(e) => setFooterPhone(e.target.value)} placeholder="Teléfono" aria-label="Teléfono de contacto" />
+                                    <Input value={footerWeb} onChange={(e) => setFooterWeb(e.target.value)} placeholder="Sitio web" aria-label="Sitio web" />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-2 border-t pt-4">
+                            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Añadir bloque al final</p>
                             <div className="grid grid-cols-2 gap-2">
-                                <button
-                                    onClick={() => addSection('text-block')}
-                                    disabled={!selectedCar}
-                                    className="flex items-center justify-center gap-2 px-3 py-2 bg-secondary hover:bg-secondary/80 rounded-lg text-sm transition-colors disabled:opacity-50"
-                                >
-                                    <Type className="w-4 h-4" /> Texto
-                                </button>
-                                <button
-                                    onClick={() => addSection('image-block')}
-                                    disabled={!selectedCar}
-                                    className="flex items-center justify-center gap-2 px-3 py-2 bg-secondary hover:bg-secondary/80 rounded-lg text-sm transition-colors disabled:opacity-50"
-                                >
-                                    <ImageIcon className="w-4 h-4" /> Imagen
-                                </button>
+                                <Button variant="outline" size="sm" onClick={() => addCustomBlock('text')}>
+                                    <Type className="h-4 w-4" /> Texto
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => addCustomBlock('image')}>
+                                    <ImageIcon className="h-4 w-4" /> Imagen
+                                </Button>
                             </div>
                         </div>
 
-                        <button
-                            onClick={() => setShowPreview(true)}
-                            disabled={!selectedCarId}
-                            className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-primary/20 mt-4"
-                        >
-                            <FileText className="w-5 h-5" />
-                            Generar Informe
-                        </button>
+                        <Button onClick={() => setShowPreview(true)} disabled={reportCars.length === 0} className="w-full">
+                            <FileText className="h-4 w-4" />
+                            Generar informe{reportCars.length > 1 ? ` (${reportCars.length} coches)` : ''}
+                        </Button>
                     </div>
                 </div>
 
-                {/* Main Content: Section Editor */}
-                <div className="lg:col-span-8 space-y-4">
-                    {selectedCar ? (
-                        <>
-                            <div className="flex items-center justify-between mb-2">
-                                <h3 className="font-semibold text-lg">Estructura del Informe</h3>
-                                <span className="text-sm text-muted-foreground">{sections.length} secciones</span>
-                            </div>
+                <div className="lg:col-span-8 space-y-6">
+                    {/* Coches del informe */}
+                    <section className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <h3 className="text-sm font-semibold">Coches del informe</h3>
+                            <span className="tabular text-xs text-muted-foreground">{configs.length} seleccionados</span>
+                        </div>
 
-                            <div className="space-y-4">
-                                {sections.map((section, index) => (
-                                    <div
-                                        key={section.id}
-                                        className={`bg-card border rounded-lg transition-all ${section.isVisible ? 'border-border' : 'border-border/50 opacity-60'
-                                            }`}
-                                    >
-                                        {/* Section Header */}
-                                        <div className="flex items-center justify-between p-4 bg-secondary/20 border-b border-border/50 rounded-t-lg">
-                                            <div className="flex items-center gap-3">
-                                                <div className="p-2 bg-background rounded-md border border-border">
-                                                    {section.type === 'header' && <Layout className="w-4 h-4" />}
-                                                    {section.type === 'car-summary' && <ImageIcon className="w-4 h-4" />}
-                                                    {section.type === 'features' && <Check className="w-4 h-4" />}
-                                                    {section.type === 'gallery' && <ImageIcon className="w-4 h-4" />}
-                                                    {section.type === 'text-block' && <Type className="w-4 h-4" />}
-                                                    {section.type === 'image-block' && <ImageIcon className="w-4 h-4" />}
-                                                    {section.type === 'pricing' && <FileText className="w-4 h-4" />}
-                                                    {section.type === 'comparison' && <TrendingDown className="w-4 h-4" />}
-                                                    {section.type === 'inspection' && <Settings className="w-4 h-4" />}
+                        <Select value="" onValueChange={addCar}>
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder={availableCars.length ? "Añadir un coche al informe…" : "No quedan coches por añadir"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableCars.map(car => (
+                                    <SelectItem key={car.id} value={car.id}>
+                                        {car.brand} {car.model} {car.year ? `(${car.year})` : ''}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        {reportCars.length === 0 ? (
+                            <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed p-10 text-center">
+                                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                                    <CarIcon className="h-5 w-5 text-muted-foreground" />
+                                </div>
+                                <p className="font-medium">Añade uno o varios coches</p>
+                                <p className="mt-1 max-w-sm text-sm text-muted-foreground">Cada coche tendrá su propio capítulo y, si hay varios, una página comparándolos.</p>
+                            </div>
+                        ) : (
+                            reportCars.map(({ car, config, price, images }, index) => (
+                                <div key={car.id} className="rounded-xl border bg-card shadow-xs">
+                                    <div className="flex items-center gap-3 border-b p-3">
+                                        <div className="h-12 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
+                                            {images[0] ? <img src={images[0]} alt="" className="h-full w-full object-cover" /> : <CarIcon className="m-auto mt-3 h-5 w-5 text-muted-foreground" />}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate font-medium">{car.brand} {car.model}</p>
+                                            <p className="tabular text-xs text-muted-foreground">
+                                                Precio final en España: <span className="font-semibold text-foreground">{eur(price.final)}</span>
+                                                {price.estimated && <span className="ml-1 rounded bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">estimado</span>}
+                                            </p>
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+                                            {reportCars.length > 1 && (
+                                                <Button
+                                                    variant={recommendedId === car.id ? "default" : "ghost"}
+                                                    size="sm"
+                                                    className="mr-1 h-8"
+                                                    onClick={() => setRecommendedId(recommendedId === car.id ? "" : car.id)}
+                                                    title={recommendedId === car.id ? "Quitar recomendación" : "Marcar como recomendado"}
+                                                >
+                                                    <Star className={`h-4 w-4 ${recommendedId === car.id ? "fill-current" : ""}`} />
+                                                    <span className="hidden sm:inline">{recommendedId === car.id ? "Recomendado" : "Recomendar"}</span>
+                                                </Button>
+                                            )}
+                                            <Button variant="ghost" size="icon-sm" onClick={() => moveCar(index, -1)} disabled={index === 0} title="Subir"><MoveUp className="h-4 w-4" /></Button>
+                                            <Button variant="ghost" size="icon-sm" onClick={() => moveCar(index, 1)} disabled={index === reportCars.length - 1} title="Bajar"><MoveDown className="h-4 w-4" /></Button>
+                                            <Button variant="ghost" size="icon-sm" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => removeCar(car.id)} title="Quitar"><Trash2 className="h-4 w-4" /></Button>
+                                        </div>
+                                    </div>
+                                    {reportCars.length > 1 && recommendedId === car.id && (
+                                        <div className="space-y-1.5 border-b p-3">
+                                            <Label className="text-[13px]">Por qué lo recomiendas (opcional)</Label>
+                                            <Textarea rows={2} value={recommendReason} onChange={(e) => setRecommendReason(e.target.value)}
+                                                placeholder="Mejor relación precio/kilómetros, equipamiento completo y revisiones al día." />
+                                        </div>
+                                    )}
+                                    <div className="grid gap-3 p-3 sm:grid-cols-3">
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[13px]">Comparar con coche de España</Label>
+                                            <Select value={config.spainCarId || NONE_VALUE} onValueChange={(v) => updateConfig(car.id, { spainCarId: v === NONE_VALUE ? '' : v })}>
+                                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value={NONE_VALUE}>Sin comparativa</SelectItem>
+                                                    {spainCars.map(s => (
+                                                        <SelectItem key={s.id} value={s.id}>{s.brand} {s.model} {s.year ? `(${s.year})` : ''} · {eur(s.price)}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[13px]">Descuento negociado (€)</Label>
+                                            <Input type="number" min="0" className="tabular" value={config.discount || ''} placeholder="0"
+                                                onChange={(e) => updateConfig(car.id, { discount: Number(e.target.value) || 0 })} />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[13px]">Nivel de equipamiento</Label>
+                                            <Select value={config.equipmentLevel || NONE_VALUE} onValueChange={(v) => updateConfig(car.id, { equipmentLevel: v === NONE_VALUE ? '' : v })}>
+                                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value={NONE_VALUE}>Sin especificar</SelectItem>
+                                                    <SelectItem value="Bajo">Bajo</SelectItem>
+                                                    <SelectItem value="Medio">Medio</SelectItem>
+                                                    <SelectItem value="Alto">Alto</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </section>
+
+                    {/* Estructura */}
+                    <section className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold">Contenido de cada coche</h3>
+                            <span className="text-xs text-muted-foreground">Se aplica a todos los coches</span>
+                        </div>
+                        <div className="divide-y rounded-xl border bg-card shadow-xs">
+                            {blocks.map((block, index) => (
+                                <div key={block.id} className={`flex items-center gap-3 px-4 py-2.5 ${block.isVisible ? '' : 'opacity-60'}`}>
+                                    <div className="min-w-0 flex-1">
+                                        <input
+                                            value={block.title}
+                                            onChange={(e) => renameBlock(index, e.target.value)}
+                                            className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-medium outline-none transition-colors hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                            aria-label="Título del bloque"
+                                        />
+                                        <p className="px-2 text-xs text-muted-foreground">{BLOCK_HINTS[block.id]}</p>
+                                    </div>
+                                    <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+                                        <Button variant="ghost" size="icon-sm" onClick={() => moveBlock(index, -1)} disabled={index === 0} title="Subir"><MoveUp className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon-sm" onClick={() => moveBlock(index, 1)} disabled={index === blocks.length - 1} title="Bajar"><MoveDown className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon-sm" onClick={() => toggleBlock(index)} title={block.isVisible ? 'Ocultar' : 'Mostrar'}>
+                                            {block.isVisible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+
+                    {/* Bloques personalizados */}
+                    {customBlocks.length > 0 && (
+                        <section className="space-y-3">
+                            <h3 className="text-sm font-semibold">Bloques al final del informe</h3>
+                            {customBlocks.map((block, index) => (
+                                <div key={block.id} className={`overflow-hidden rounded-xl border bg-card shadow-xs ${block.isVisible ? '' : 'opacity-60'}`}>
+                                    <div className="flex items-center gap-3 border-b px-4 py-2.5">
+                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                            {block.type === 'text' ? <Type className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+                                        </div>
+                                        <input
+                                            value={block.title}
+                                            onChange={(e) => updateCustomBlock(block.id, { title: e.target.value })}
+                                            className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-medium outline-none hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                            placeholder="Título del bloque"
+                                        />
+                                        <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+                                            <Button variant="ghost" size="icon-sm" onClick={() => moveCustomBlock(index, -1)} disabled={index === 0}><MoveUp className="h-4 w-4" /></Button>
+                                            <Button variant="ghost" size="icon-sm" onClick={() => moveCustomBlock(index, 1)} disabled={index === customBlocks.length - 1}><MoveDown className="h-4 w-4" /></Button>
+                                            <Button variant="ghost" size="icon-sm" onClick={() => updateCustomBlock(block.id, { isVisible: !block.isVisible })}>
+                                                {block.isVisible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                            </Button>
+                                            <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setCustomBlocks(prev => prev.filter(b => b.id !== block.id))}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-3 p-4">
+                                        {block.type === 'image' && (
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+                                                    {block.image ? <img src={block.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="h-6 w-6 text-muted-foreground" />}
                                                 </div>
                                                 <input
-                                                    value={section.title}
-                                                    onChange={(e) => updateSection(index, 'title', e.target.value)}
-                                                    className="bg-transparent font-medium focus:outline-none focus:underline"
-                                                    placeholder="Título de la sección"
+                                                    type="file"
+                                                    accept="image/*"
+                                                    onChange={(e) => handleImageUpload(block.id, e)}
+                                                    className="block w-full text-sm text-muted-foreground file:mr-3 file:h-8 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/15"
                                                 />
                                             </div>
-
-                                            <div className="flex items-center gap-1">
-                                                <button onClick={() => moveSection(index, 'up')} disabled={index === 0} className="p-1.5 hover:bg-secondary rounded disabled:opacity-30">
-                                                    <MoveUp className="w-4 h-4" />
-                                                </button>
-                                                <button onClick={() => moveSection(index, 'down')} disabled={index === sections.length - 1} className="p-1.5 hover:bg-secondary rounded disabled:opacity-30">
-                                                    <MoveDown className="w-4 h-4" />
-                                                </button>
-                                                <div className="w-px h-4 bg-border mx-1" />
-                                                <button onClick={() => toggleVisibility(index)} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
-                                                    {section.isVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                                                </button>
-                                                {['text-block', 'image-block'].includes(section.type) && (
-                                                    <button onClick={() => deleteSection(index)} className="p-1.5 hover:bg-destructive/10 text-destructive rounded ml-1">
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Section Body (Editable Content) */}
-                                        {section.isVisible && (
-                                            <div className="p-4 space-y-4">
-                                                {section.type === 'text-block' && (
-                                                    <textarea
-                                                        value={section.content}
-                                                        onChange={(e) => updateSection(index, 'content', e.target.value)}
-                                                        placeholder="Escribe el contenido aquí..."
-                                                        rows={4}
-                                                        className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                                                    />
-                                                )}
-
-                                                {section.type === 'image-block' && (
-                                                    <div className="space-y-4">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-24 h-24 bg-secondary rounded-lg overflow-hidden flex-shrink-0 border border-border flex items-center justify-center">
-                                                                {section.image ? (
-                                                                    <img src={section.image} alt="Preview" className="w-full h-full object-cover" />
-                                                                ) : (
-                                                                    <ImageIcon className="w-8 h-8 text-muted-foreground" />
-                                                                )}
-                                                            </div>
-                                                            <div className="flex-1">
-                                                                <label className="block text-sm font-medium mb-1">Imagen</label>
-                                                                <input
-                                                                    type="file"
-                                                                    accept="image/*"
-                                                                    onChange={(e) => handleImageUpload(index, e)}
-                                                                    className="text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <textarea
-                                                            value={section.content}
-                                                            onChange={(e) => updateSection(index, 'content', e.target.value)}
-                                                            placeholder="Descripción de la imagen (opcional)..."
-                                                            rows={2}
-                                                            className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                                                        />
-                                                    </div>
-                                                )}
-
-                                                {/* Read-only previews for standard sections */}
-                                                {['header', 'car-summary', 'features', 'gallery', 'pricing', 'comparison'].includes(section.type) && (
-                                                    <p className="text-sm text-muted-foreground italic">
-                                                        El contenido de esta sección se genera automáticamente a partir de los datos del coche.
-                                                    </p>
-                                                )}
-                                            </div>
                                         )}
+                                        <Textarea
+                                            value={block.content}
+                                            onChange={(e) => updateCustomBlock(block.id, { content: e.target.value })}
+                                            placeholder={block.type === 'text' ? 'Escribe el contenido aquí…' : 'Descripción de la imagen (opcional)…'}
+                                            rows={block.type === 'text' ? 4 : 2}
+                                        />
                                     </div>
-                                ))}
-                            </div>
-                        </>
-                    ) : (
-                        <div className="h-full flex flex-col items-center justify-center p-12 bg-secondary/20 rounded-lg border-2 border-dashed border-border text-center min-h-[400px]">
-                            <FileText className="w-16 h-16 text-muted-foreground/50 mb-4" />
-                            <h3 className="text-xl font-medium">Editor de Informes</h3>
-                            <p className="text-muted-foreground max-w-sm mt-2">
-                                Selecciona un vehículo en el panel izquierdo para comenzar a editar la estructura del informe.
-                            </p>
-                        </div>
+                                </div>
+                            ))}
+                        </section>
                     )}
+
+                    <div className="flex items-start gap-2 rounded-xl border bg-card p-4 text-xs text-muted-foreground shadow-xs">
+                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        <p>
+                            El precio final en España sale de los gastos apuntados en cada coche. Si un coche no tiene gastos,
+                            se estima con la calculadora de importación y aparece marcado como «estimado».
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

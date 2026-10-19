@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Loader2, Lock, Car } from "lucide-react"
+import { Loader2, Lock } from "lucide-react"
 
 export default function UpdatePasswordPage() {
     const [password, setPassword] = useState("")
@@ -49,26 +49,30 @@ export default function UpdatePasswordPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#0f172a] to-black p-4">
-            <div className="w-full max-w-md">
-                <div className="flex flex-col items-center mb-8 text-center">
-                    <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-900/50 mb-4 p-2">
+        <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
+            <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(var(--border)_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]"
+            />
+            <div className="relative z-10 w-full max-w-sm animate-in fade-in duration-300">
+                <div className="flex flex-col items-center text-center mb-6">
+                    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-white p-1.5 shadow-xs">
                         <img
                             src={`${process.env.__NEXT_ROUTER_BASEPATH || ''}/NorDrive.png`}
                             alt="NorDrive Logo"
-                            className="w-full h-full object-contain"
+                            className="h-full w-full object-contain"
                         />
                     </div>
-                    <h1 className="text-2xl font-bold text-white">Nueva Contraseña</h1>
-                    <p className="text-slate-400 mt-2 text-sm">Introduce tu nueva contraseña para acceder.</p>
+                    <h1 className="text-2xl font-semibold tracking-tight mb-1">Nueva contraseña</h1>
+                    <p className="text-sm text-muted-foreground">Introduce tu nueva contraseña para acceder.</p>
                 </div>
 
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+                <div className="rounded-xl border bg-card p-6 shadow-xs">
                     <form onSubmit={handleUpdatePassword} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="password" className="text-slate-300">Nueva Contraseña</Label>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="password" className="text-[13px]">Nueva contraseña</Label>
                             <div className="relative">
-                                <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                 <Input
                                     id="password"
                                     type="password"
@@ -76,14 +80,14 @@ export default function UpdatePasswordPage() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
-                                    className="pl-10 bg-black/20 border-white/10 text-white"
+                                    className="pl-9"
                                 />
                             </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="confirm" className="text-slate-300">Confirmar Contraseña</Label>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="confirm" className="text-[13px]">Confirmar contraseña</Label>
                             <div className="relative">
-                                <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                 <Input
                                     id="confirm"
                                     type="password"
@@ -91,14 +95,14 @@ export default function UpdatePasswordPage() {
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
                                     required
-                                    className="pl-10 bg-black/20 border-white/10 text-white"
+                                    className="pl-9"
                                 />
                             </div>
                         </div>
 
-                        <Button className="w-full bg-primary mt-4" type="submit" disabled={loading}>
-                            {loading ? <Loader2 className="animate-spin mr-2" /> : null}
-                            Actualizar Contraseña
+                        <Button className="w-full mt-2" type="submit" disabled={loading}>
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            Actualizar contraseña
                         </Button>
                     </form>
                 </div>

@@ -9,6 +9,8 @@ import { ShareCarModal } from "@/components/modals/share-car-modal"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
+import { OPEN_CAR_EVENT, type OpenCarDetail } from "@/components/command-palette"
+import { describeDuplicates, findDuplicateImportedCars } from "@/lib/duplicates"
 
 interface Car {
   id: string
@@ -84,6 +86,18 @@ export function CarImport({ role }: CarImportProps) {
       }
     }
   }, [user])
+
+  // Abrir un coche concreto desde la búsqueda global (Ctrl+K)
+  useEffect(() => {
+    const onOpenCar = (event: Event) => {
+      const { table, id } = (event as CustomEvent<OpenCarDetail>).detail
+      if (table !== "imported_cars") return
+      const car = cars.find(c => c.id === id)
+      if (car) handleEdit(car)
+    }
+    window.addEventListener(OPEN_CAR_EVENT, onOpenCar)
+    return () => window.removeEventListener(OPEN_CAR_EVENT, onOpenCar)
+  }, [cars])
 
   const fetchCars = async () => {
     try {
@@ -257,6 +271,16 @@ export function CarImport({ role }: CarImportProps) {
           await supabase.from('notifications').insert(notifications)
         }
       } else {
+        // Avisar si el coche ya está guardado (mismo anuncio o mismos datos)
+        const duplicates = await findDuplicateImportedCars({
+          url: newCar.url, brand: newCar.brand, model: newCar.model, year: Number(newCar.year), mileage: Number(newCar.mileage),
+        })
+        if (duplicates.length > 0 && !window.confirm(`${describeDuplicates(duplicates)}
+
+¿Guardarlo de todas formas?`)) {
+          return
+        }
+
         // Crear (CON user_id)
         const { error } = await supabase
           .from('imported_cars')

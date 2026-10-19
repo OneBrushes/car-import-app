@@ -3,8 +3,16 @@
 import { useState, useEffect } from "react"
 
 import type React from "react"
-import { X, Plus } from "lucide-react"
+import { X, Plus, Car, Gauge, Tag, ImageIcon, StickyNote, ExternalLink } from "lucide-react"
 import { ImageUpload } from "../image-upload"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
+import { ImportFromUrl, type ScrapedCar } from "@/components/import-from-url"
+import { normaliseFuel, normaliseTransmission, normaliseColor } from "@/components/modals/add-car-modal"
+import { cn } from "@/lib/utils"
 
 interface AddSpainCarModalProps {
     isOpen: boolean
@@ -16,6 +24,16 @@ interface AddSpainCarModalProps {
 const vehicleTypes = ["Sedán", "SUV", "Deportivo", "Coupé", "Familiar", "Monovolumen", "Pickup"]
 const fuelTypes = ["Gasolina", "Diésel", "Híbrido", "Eléctrico", "Gas"]
 const transmissionTypes = ["Manual", "Automática", "Secuencial", "CVT"]
+const equipmentLevels = ["Sin equipamiento", "Bajo", "Medio", "Alto"]
+
+const MAX_IMAGES = 10
+
+const selectClass =
+    "h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+
+/** Lista de opciones + el valor actual si no está en ella (p. ej. un valor importado). */
+const withCurrent = (options: readonly string[], current: string) =>
+    current && !options.includes(current) ? [...options, current] : [...options]
 
 export function AddSpainCarModal({ isOpen, onClose, onSubmit, initialData }: AddSpainCarModalProps) {
     const [formData, setFormData] = useState({
@@ -113,6 +131,42 @@ export function AddSpainCarModal({ isOpen, onClose, onSubmit, initialData }: Add
         }))
     }
 
+    // Rellenar desde un anuncio: solo campos presentes y, al editar, solo campos vacíos
+    const handleImported = (car: ScrapedCar) => {
+        const isNew = !initialData
+        setFormData((prev) => {
+            const next = { ...prev }
+            const canSet = (current: unknown) => isNew || current === "" || current === null || current === undefined
+            const put = <K extends keyof typeof prev>(key: K, value: (typeof prev)[K] | undefined | null) => {
+                if (value === undefined || value === null || value === "") return
+                if (!canSet(prev[key])) return
+                next[key] = value
+            }
+
+            put("url", car.url)
+            put("location", car.location)
+            put("brand", car.brand)
+            put("model", car.model)
+            put("year", car.year)
+            put("price", car.price != null ? String(car.price) : undefined)
+            put("mileage", car.mileage != null ? String(car.mileage) : undefined)
+            put("cv", car.cv != null ? String(car.cv) : undefined)
+            put("fuelType", car.fuelType ? normaliseFuel(car.fuelType) : undefined)
+            put("transmission", car.transmission ? normaliseTransmission(car.transmission) : undefined)
+            put("color", car.color ? normaliseColor(car.color) : undefined)
+
+            if (car.images?.length) {
+                const merged = [...prev.images]
+                for (const img of car.images) {
+                    if (img && !merged.includes(img)) merged.push(img)
+                }
+                next.images = merged.slice(0, Math.max(MAX_IMAGES, prev.images.length))
+            }
+
+            return next
+        })
+    }
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         onSubmit({
@@ -127,217 +181,310 @@ export function AddSpainCarModal({ isOpen, onClose, onSubmit, initialData }: Add
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-            <div className="bg-background rounded-lg w-full max-w-2xl shadow-xl border border-border my-8">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-background w-full max-w-2xl rounded-xl border shadow-xl flex flex-col max-h-[92vh] overflow-hidden">
                 {/* Header */}
-                <div className="sticky top-0 flex items-center justify-between p-6 border-b border-border bg-background">
-                    <h2 className="text-2xl font-bold">{initialData ? "Editar Coche de España" : "Añadir Coche de Referencia (España)"}</h2>
-                    <button onClick={onClose} className="p-1 hover:bg-secondary rounded-lg transition-colors">
-                        <X className="w-6 h-6" />
-                    </button>
+                <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4 border-b">
+                    <div className="min-w-0">
+                        <h2 className="text-xl font-semibold tracking-tight">
+                            {initialData ? "Editar coche de España" : "Añadir coche de referencia"}
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                            Coche a la venta en España para comparar precios
+                        </p>
+                    </div>
+                    <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label="Cerrar">
+                        <X className="h-4 w-4" />
+                    </Button>
                 </div>
 
                 {/* Content */}
-                <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-200px)]">
+                <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto bg-muted/30 px-4 sm:px-5 py-5 space-y-4">
+                    <ImportFromUrl onImported={handleImported} className="bg-card" />
+
                     {/* Información Básica */}
-                    <section>
-                        <h3 className="text-lg font-semibold mb-4">Información Básica</h3>
+                    <Section icon={Car} title="Información básica">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <input
-                                type="text"
-                                name="brand"
-                                placeholder="Marca"
-                                value={formData.brand}
-                                onChange={handleChange}
-                                required
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <input
-                                type="text"
-                                name="model"
-                                placeholder="Modelo"
-                                value={formData.model}
-                                onChange={handleChange}
-                                required
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <input
-                                type="number"
-                                name="year"
-                                placeholder="Año"
-                                value={formData.year}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <input
-                                type="url"
-                                name="url"
-                                placeholder="URL del anuncio"
-                                value={formData.url}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <input
-                                type="text"
-                                name="location"
-                                placeholder="Ubicación (ciudad, región)"
-                                value={formData.location}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <input
-                                type="text"
-                                name="color"
-                                placeholder="Color"
-                                value={formData.color}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
+                            <Field label="Marca" htmlFor="es-brand">
+                                <Input
+                                    id="es-brand"
+                                    type="text"
+                                    name="brand"
+                                    placeholder="BMW"
+                                    value={formData.brand}
+                                    onChange={handleChange}
+                                    required
+                                />
+                            </Field>
+                            <Field label="Modelo" htmlFor="es-model">
+                                <Input
+                                    id="es-model"
+                                    type="text"
+                                    name="model"
+                                    placeholder="M3 Competition"
+                                    value={formData.model}
+                                    onChange={handleChange}
+                                    required
+                                />
+                            </Field>
+                            <Field label="Año" htmlFor="es-year">
+                                <Input
+                                    id="es-year"
+                                    type="number"
+                                    name="year"
+                                    placeholder="Año"
+                                    value={formData.year}
+                                    onChange={handleChange}
+                                    className="tabular"
+                                />
+                            </Field>
+                            <Field label="Color" htmlFor="es-color">
+                                <Input
+                                    id="es-color"
+                                    type="text"
+                                    name="color"
+                                    placeholder="Negro"
+                                    value={formData.color}
+                                    onChange={handleChange}
+                                />
+                            </Field>
+                            <Field label="Ubicación" htmlFor="es-location">
+                                <Input
+                                    id="es-location"
+                                    type="text"
+                                    name="location"
+                                    placeholder="Ciudad, región"
+                                    value={formData.location}
+                                    onChange={handleChange}
+                                />
+                            </Field>
+                            <Field label="URL del anuncio" htmlFor="es-url">
+                                <Input
+                                    id="es-url"
+                                    type="url"
+                                    name="url"
+                                    placeholder="https://…"
+                                    value={formData.url}
+                                    onChange={handleChange}
+                                />
+                                {formData.url && (
+                                    <a
+                                        href={formData.url.startsWith("http") ? formData.url : `https://${formData.url}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                    >
+                                        <ExternalLink className="h-3 w-3" />
+                                        Abrir anuncio
+                                    </a>
+                                )}
+                            </Field>
                         </div>
-                    </section>
+                    </Section>
 
                     {/* Especificaciones */}
-                    <section>
-                        <h3 className="text-lg font-semibold mb-4">Especificaciones</h3>
+                    <Section icon={Gauge} title="Precio y especificaciones">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <input
-                                type="number"
-                                name="price"
-                                placeholder="Precio"
-                                value={formData.price}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <input
-                                type="number"
-                                name="mileage"
-                                placeholder="Kilometraje"
-                                value={formData.mileage}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <input
-                                type="number"
-                                name="cv"
-                                placeholder="Caballos (CV)"
-                                value={formData.cv}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <select
-                                name="fuelType"
-                                value={formData.fuelType}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            >
-                                <option value="">Combustible</option>
-                                {fuelTypes.map((f) => (
-                                    <option key={f} value={f}>
-                                        {f}
-                                    </option>
-                                ))}
-                            </select>
-                            <select
-                                name="transmission"
-                                value={formData.transmission}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            >
-                                <option value="">Transmisión</option>
-                                {transmissionTypes.map((t) => (
-                                    <option key={t} value={t}>
-                                        {t}
-                                    </option>
-                                ))}
-                            </select>
-                            <select
-                                name="equipmentLevel"
-                                value={formData.equipmentLevel || ""}
-                                onChange={handleChange}
-                                className="px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            >
-                                <option value="">Nivel de Equipamiento</option>
-                                <option value="Sin equipamiento">Sin equipamiento</option>
-                                <option value="Bajo">Bajo</option>
-                                <option value="Medio">Medio</option>
-                                <option value="Alto">Alto</option>
-                            </select>
+                            <Field label="Precio" htmlFor="es-price">
+                                <div className="relative">
+                                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>
+                                    <Input
+                                        id="es-price"
+                                        type="number"
+                                        name="price"
+                                        placeholder="0"
+                                        value={formData.price}
+                                        onChange={handleChange}
+                                        className="pl-8 tabular"
+                                    />
+                                </div>
+                            </Field>
+                            <Field label="Kilometraje (km)" htmlFor="es-mileage">
+                                <Input
+                                    id="es-mileage"
+                                    type="number"
+                                    name="mileage"
+                                    placeholder="0"
+                                    value={formData.mileage}
+                                    onChange={handleChange}
+                                    className="tabular"
+                                />
+                            </Field>
+                            <Field label="Potencia (CV)" htmlFor="es-cv">
+                                <Input
+                                    id="es-cv"
+                                    type="number"
+                                    name="cv"
+                                    placeholder="0"
+                                    value={formData.cv}
+                                    onChange={handleChange}
+                                    className="tabular"
+                                />
+                            </Field>
+                            <Field label="Combustible" htmlFor="es-fuel">
+                                <select
+                                    id="es-fuel"
+                                    name="fuelType"
+                                    value={formData.fuelType}
+                                    onChange={handleChange}
+                                    className={selectClass}
+                                >
+                                    <option value="">Selecciona…</option>
+                                    {withCurrent(fuelTypes, formData.fuelType).map((f) => (
+                                        <option key={f} value={f}>
+                                            {f}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                            <Field label="Transmisión" htmlFor="es-transmission">
+                                <select
+                                    id="es-transmission"
+                                    name="transmission"
+                                    value={formData.transmission}
+                                    onChange={handleChange}
+                                    className={selectClass}
+                                >
+                                    <option value="">Selecciona…</option>
+                                    {withCurrent(transmissionTypes, formData.transmission).map((t) => (
+                                        <option key={t} value={t}>
+                                            {t}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                            <Field label="Nivel de equipamiento" htmlFor="es-equipment">
+                                <select
+                                    id="es-equipment"
+                                    name="equipmentLevel"
+                                    value={formData.equipmentLevel || ""}
+                                    onChange={handleChange}
+                                    className={selectClass}
+                                >
+                                    <option value="">Selecciona…</option>
+                                    {withCurrent(equipmentLevels, formData.equipmentLevel || "").map((level) => (
+                                        <option key={level} value={level}>
+                                            {level}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
                         </div>
-                    </section>
+                    </Section>
 
                     {/* Etiquetas */}
-                    <section>
-                        <h3 className="text-lg font-semibold mb-4">Etiquetas</h3>
-                        <div className="flex gap-2 mb-4">
-                            <input
-                                type="text"
-                                value={formData.newTag}
-                                onChange={(e) => setFormData({ ...formData, newTag: e.target.value })}
-                                onKeyPress={(e) => e.key === "Enter" && handleAddTag()}
-                                placeholder="Añadir etiqueta..."
-                                className="flex-1 px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                            <button
-                                type="button"
-                                onClick={handleAddTag}
-                                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                            >
-                                <Plus className="w-5 h-5" />
-                            </button>
-                        </div>
-                        {formData.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                                {formData.tags.map((tag) => (
-                                    <span
-                                        key={tag}
-                                        className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm flex items-center gap-2"
-                                    >
-                                        {tag}
-                                        <button type="button" onClick={() => handleRemoveTag(tag)} className="hover:opacity-70">
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </span>
-                                ))}
+                    <Section icon={Tag} title="Etiquetas">
+                        <div className="space-y-3">
+                            <div className="flex gap-2">
+                                <Input
+                                    type="text"
+                                    aria-label="Nueva etiqueta"
+                                    value={formData.newTag}
+                                    onChange={(e) => setFormData({ ...formData, newTag: e.target.value })}
+                                    onKeyPress={(e) => e.key === "Enter" && handleAddTag()}
+                                    placeholder="Añadir etiqueta…"
+                                />
+                                <Button type="button" variant="outline" size="icon" onClick={handleAddTag} aria-label="Añadir etiqueta">
+                                    <Plus className="h-4 w-4" />
+                                </Button>
                             </div>
-                        )}
-                    </section>
+                            {formData.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {formData.tags.map((tag) => (
+                                        <Badge key={tag} variant="outline" className="gap-1 border-transparent bg-primary/10 text-primary">
+                                            {tag}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveTag(tag)}
+                                                className="rounded-sm hover:text-destructive"
+                                                aria-label={`Quitar etiqueta ${tag}`}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </Badge>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </Section>
 
                     {/* Fotos del coche */}
-                    <section>
-                        <h3 className="text-lg font-semibold mb-4">Fotos del Coche</h3>
+                    <Section icon={ImageIcon} title="Fotos del coche" description="La primera foto será la principal">
                         <ImageUpload images={formData.images} onImagesChange={handleImagesChange} />
-                    </section>
+                    </Section>
 
                     {/* Notas */}
-                    <section>
-                        <h3 className="text-lg font-semibold mb-4">Notas</h3>
-                        <textarea
+                    <Section icon={StickyNote} title="Notas">
+                        <Textarea
                             name="notes"
-                            placeholder="Observaciones sobre este coche..."
+                            aria-label="Notas"
+                            placeholder="Observaciones sobre este coche…"
                             value={formData.notes}
                             onChange={handleChange}
                             rows={3}
-                            className="w-full px-3 py-2 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            className="resize-none"
                         />
-                    </section>
+                    </Section>
                 </form>
 
                 {/* Footer */}
-                <div className="sticky bottom-0 flex gap-3 p-6 border-t border-border bg-background">
-                    <button
-                        onClick={onClose}
-                        className="flex-1 px-4 py-2 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-colors font-medium"
-                    >
+                <div className="flex items-center justify-end gap-2 border-t bg-background px-4 sm:px-5 py-3">
+                    <Button type="button" variant="ghost" onClick={onClose}>
                         Cancelar
-                    </button>
-                    <button
-                        onClick={handleSubmit}
-                        className="flex-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
-                    >
-                        {initialData ? "Guardar Cambios" : "Añadir Referencia"}
-                    </button>
+                    </Button>
+                    <Button type="button" onClick={handleSubmit}>
+                        {initialData ? "Guardar cambios" : "Añadir referencia"}
+                    </Button>
                 </div>
             </div>
+        </div>
+    )
+}
+
+function Section({
+    icon: Icon,
+    title,
+    description,
+    children,
+}: {
+    icon: React.ComponentType<{ className?: string }>
+    title: string
+    description?: string
+    children: React.ReactNode
+}) {
+    return (
+        <section className="rounded-xl border bg-card p-5 shadow-xs">
+            <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <Icon className="h-4 w-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                    <h3 className="text-sm font-semibold leading-tight">{title}</h3>
+                    {description && <p className="text-xs text-muted-foreground">{description}</p>}
+                </div>
+            </div>
+            {children}
+        </section>
+    )
+}
+
+function Field({
+    label,
+    htmlFor,
+    className,
+    children,
+}: {
+    label: string
+    htmlFor?: string
+    className?: string
+    children: React.ReactNode
+}) {
+    return (
+        <div className={cn("space-y-1.5", className)}>
+            <Label htmlFor={htmlFor} className="text-[13px]">
+                {label}
+            </Label>
+            {children}
         </div>
     )
 }
