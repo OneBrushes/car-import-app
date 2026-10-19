@@ -58,32 +58,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Escuchar cambios en la autenticación (login, logout, etc.)
         const {
             data: { subscription },
-        } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (session?.user) {
-                // Check if banned
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', session.user.id)
-                    .single()
-
-                if (profile?.role === 'banned') {
-                    await supabase.auth.signOut()
-                    setSession(null)
-                    setUser(null)
-                    // alert("Tu cuenta ha sido suspendida.") // Opcional
-                    return
-                }
-
-                setProfile(profile)
-            } else {
-                setProfile(null)
-                setIsGodMode(false)
-            }
-
+        } = supabase.auth.onAuthStateChange((event, session) => {
+            // IMPORTANTE: este callback debe ser síncrono. Supabase lo ejecuta con el
+            // lock de auth tomado; un `await supabase...` aquí dentro provoca un deadlock
+            // al volver a la pestaña y deja colgadas todas las peticiones siguientes.
+            // Por eso la consulta del perfil se difiere con setTimeout.
             setSession(session)
             setUser(session?.user ?? null)
             setLoading(false)
+
+            if (!session?.user) {
+                setProfile(null)
+                setIsGodMode(false)
+                return
+            }
+
+            // Un refresco de token no cambia el perfil
+            if (event === 'TOKEN_REFRESHED') return
+
+            const userId = session.user.id
+            setTimeout(async () => {
+                const { data: profileData } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', userId)
+                    .single()
+
+                if (profileData?.role === 'banned') {
+                    await supabase.auth.signOut()
+                    return
+                }
+
+                setProfile(profileData)
+            }, 0)
         })
 
         return () => subscription.unsubscribe()
