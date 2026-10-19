@@ -875,7 +875,7 @@ export function ReportGenerator() {
     return (
         <div className="space-y-6 animate-in">
             <div>
-                <h2 className="text-3xl font-bold mb-2">Generador de Informes</h2>
+                <h2 className="text-2xl font-semibold tracking-tight mb-1">Generador de Informes</h2>
                 <p className="text-muted-foreground">Personaliza y genera informes profesionales PDF para tus clientes.</p>
             </div>
 

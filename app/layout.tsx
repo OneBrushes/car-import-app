@@ -5,8 +5,8 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { useState, useEffect } from "react"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" })
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
 
 import { AuthProvider } from "@/components/auth-provider"
 import { Toaster } from "@/components/ui/sonner"
@@ -43,7 +43,7 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" className={`${geist.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <head>
         <title>NorDrive - Gestión de Importación</title>
       </head>

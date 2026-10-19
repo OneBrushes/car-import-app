@@ -53,11 +53,11 @@ export function ComparativeCard({ id, importedCar, spainCar, steringAdjustment, 
   } else if (profitPercentage > 10 || difference > 2000) {
     status = {
       label: "BUENA OPCIÓN",
-      color: "accent",
+      color: "success",
       icon: "✓",
-      bg: "bg-accent/10",
-      border: "border-accent",
-      text: "text-accent",
+      bg: "bg-success/10",
+      border: "border-success",
+      text: "text-success",
     }
   } else if (
     (profitPercentage >= 5 && profitPercentage <= 10) &&
@@ -86,11 +86,11 @@ export function ComparativeCard({ id, importedCar, spainCar, steringAdjustment, 
   } else if (difference > 0) {
     status = {
       label: "BUENA OPCIÓN",
-      color: "accent",
+      color: "success",
       icon: "✓",
-      bg: "bg-accent/10",
-      border: "border-accent",
-      text: "text-accent",
+      bg: "bg-success/10",
+      border: "border-success",
+      text: "text-success",
     }
   }
 
@@ -189,7 +189,7 @@ export function ComparativeCard({ id, importedCar, spainCar, steringAdjustment, 
               )}
               <div className="flex justify-between text-sm pt-2 border-t border-border/50">
                 <span className="font-bold">PRECIO REFERENCIA:</span>
-                <span className="text-lg font-bold text-accent">{spainAdjustedPrice}€</span>
+                <span className="text-lg font-bold text-success">{spainAdjustedPrice}€</span>
               </div>
             </div>
           </div>

@@ -388,7 +388,7 @@ export function CarImport({ role }: CarImportProps) {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Importación de Coches</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Importación de Coches</h2>
           <p className="text-muted-foreground">Gestiona y calcula costes de importación</p>
         </div>
         {role !== 'usuario' && (

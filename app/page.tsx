@@ -19,11 +19,13 @@ import { NotificationsCenter } from "@/components/notifications-center"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { CompanyRoadmap } from "@/components/tabs/company-roadmap"
 import { GlobalExpenses } from "@/components/tabs/global-expenses"
-import { EasterEggs } from "@/components/easter-eggs"
+import { getNavGroups } from "@/components/navigation"
 import { ConnectionStatus } from "@/components/connection-status"
 import { LiveCursors } from "@/components/live-cursors"
 import { useAuth } from "@/components/auth-provider"
-import { Loader2, LogOut, User as UserIcon, Shield, MousePointerClick } from "lucide-react"
+import { Loader2, LogOut, User as UserIcon, Shield, Menu } from "lucide-react"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
+import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +49,8 @@ export default function Home() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [donationsEnabled, setDonationsEnabled] = useState(false)
   const [cursorsVisible, setCursorsVisible] = useState(true)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const { user, loading, signOut } = useAuth()
   const router = useRouter()
 
@@ -64,22 +68,26 @@ export default function Home() {
     const savedCursors = localStorage.getItem("showLiveCursors")
     if (savedCursors !== null) setCursorsVisible(JSON.parse(savedCursors))
 
-    // Auto-reconnect / wake up when returning to the browser tab
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        // Al volver a la pestaña, forzamos que Supabase despierte y no se quede atontado
-        supabase.auth.getSession().then(() => {
-          console.log("App devuelta a primer plano. Sesión refrescada.")
-        }).catch(console.error)
-      }
-    }
-    document.addEventListener("visibilitychange", handleVisibilityChange)
+    try {
+      setSidebarCollapsed(localStorage.getItem("sidebarCollapsed") === "true")
+    } catch { }
 
     return () => {
       observer.disconnect()
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
   }, [])
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(prev => {
+      try { localStorage.setItem("sidebarCollapsed", String(!prev)) } catch { }
+      return !prev
+    })
+  }
+
+  const handleTabSelect = (tab: TabType) => {
+    setActiveTab(tab)
+    setMobileNavOpen(false)
+  }
 
   useEffect(() => {
     if (!loading && !user) {
@@ -171,36 +179,72 @@ export default function Home() {
     setIsDark(!isDark)
   }
 
+  const navGroups = getNavGroups(role, donationsEnabled)
+  const currentGroup = navGroups.find(group => group.items.some(item => item.id === activeTab))
+  const currentItem = currentGroup?.items.find(item => item.id === activeTab)
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col relative w-full overflow-x-hidden">
+    <div className="min-h-screen bg-background text-foreground flex relative w-full overflow-x-hidden">
       <LiveCursors />
       {/* Connection Status Indicator */}
       <ConnectionStatus />
 
+      {/* Sidebar - Desktop */}
+      <aside
+        className={cn(
+          "hidden md:block sticky top-0 h-screen shrink-0 border-r border-sidebar-border transition-[width] duration-200",
+          sidebarCollapsed ? "w-[64px]" : "w-60"
+        )}
+      >
+        <Navigation
+          activeTab={activeTab}
+          onTabChange={handleTabSelect}
+          role={role}
+          donationsVisible={donationsEnabled}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={toggleSidebar}
+        />
+      </aside>
+
+      {/* Sidebar - Mobile */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="left" className="w-64 p-0 gap-0 [&>button]:hidden">
+          <SheetTitle className="sr-only">Menú de navegación</SheetTitle>
+          <Navigation
+            activeTab={activeTab}
+            onTabChange={handleTabSelect}
+            role={role}
+            donationsVisible={donationsEnabled}
+          />
+        </SheetContent>
+      </Sheet>
+
+      <div className="flex min-w-0 flex-1 flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-40 glass border-b">
-        <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <EasterEggs onLogoClick={() => { }} />
-            <div className="hidden sm:block">
-              <h1 className="text-lg font-semibold">NorDrive</h1>
-              <p className="text-xs text-muted-foreground">Gestión de importación</p>
+      <header className="sticky top-0 z-40 h-14 border-b bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="md:hidden"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Abrir menú"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div className="flex min-w-0 items-center gap-1.5 text-sm">
+              {currentGroup && (
+                <>
+                  <span className="hidden text-muted-foreground sm:inline">{currentGroup.label}</span>
+                  <span className="hidden text-muted-foreground/50 sm:inline">/</span>
+                </>
+              )}
+              <span className="truncate font-medium">{currentItem?.label ?? "NorDrive"}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {(role === 'admin' || role === 'super_admin') && (
-              <Button
-                variant={activeTab === 'admin' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('admin')}
-                className="gap-2 hidden md:flex"
-              >
-                <Shield className="h-4 w-4" />
-                Admin
-              </Button>
-            )}
-
+          <div className="flex items-center gap-1.5">
             <OnlineUsers activeTab={activeTab} />
             <NotificationsCenter />
             <ThemeToggle isDark={isDark} onToggle={handleToggleTheme} />
@@ -250,19 +294,9 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Navigation - Desktop */}
-      <div className="hidden md:block border-b sticky top-16 z-30 bg-background">
-        <Navigation activeTab={activeTab} onTabChange={setActiveTab} role={role} donationsVisible={donationsEnabled} />
-      </div>
-
-      {/* Navigation - Mobile */}
-      <div className="md:hidden border-b sticky top-16 z-30 bg-background px-4 py-2">
-        <Navigation activeTab={activeTab} onTabChange={setActiveTab} role={role} donationsVisible={donationsEnabled} />
-      </div>
-
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-[1920px] mx-auto w-full">
+      <main className="flex-1">
+        <div className="max-w-[1600px] mx-auto w-full">
           <div className="p-4 sm:p-6 lg:p-8 relative">
             <div className={activeTab === "dashboard" ? "block animate-in fade-in duration-300" : "hidden"}>
               <Dashboard isActive={activeTab === "dashboard"} />
@@ -306,6 +340,7 @@ export default function Home() {
           </div>
         </div>
       </main>
+      </div>
     </div>
   )
 }

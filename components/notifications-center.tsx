@@ -170,8 +170,8 @@ export function NotificationsCenter() {
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <button className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors">
-                    <Bell className="w-5 h-5 text-muted-foreground" />
+                <button className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" aria-label="Notificaciones">
+                    <Bell className="h-4 w-4" />
                     {unreadCount > 0 && (
                         <Badge variant="destructive" className="h-5 px-1.5 text-xs absolute -top-1 -right-1">
                             {unreadCount > 9 ? '9+' : unreadCount}

@@ -51,83 +51,77 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
   return (
     <div
       onClick={() => onEdit(car)} // Permitir ver tanto propios como compartidos
-      className={`bg-card border rounded-lg overflow-hidden transition-all group relative cursor-pointer ${
+      className={`bg-card border rounded-xl overflow-hidden shadow-xs transition-all group relative cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${
         car.contacted
-          ? 'hover:border-emerald-500/50 border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/5'
+          ? 'border-success/40'
           : isSharedWithMe
-            ? 'hover:border-blue-500/50 border-blue-500/30 bg-blue-500/5'
-            : isSharedByMe
-              ? 'hover:border-primary/30 border-blue-500/50'
-              : 'hover:border-primary/30 border-border'
+            ? 'border-primary/40'
+            : 'border-border hover:border-foreground/15'
       }`}
     >
       {/* Badges de Estado */}
-      <div className="absolute top-2 right-2 z-10 flex flex-col gap-1">
+      <div className="absolute top-2.5 left-2.5 z-10 flex flex-wrap gap-1">
         {car.contacted && (
-          <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
-            <MailOpen className="w-3 h-3 mr-1" /> Contactado
+          <Badge className="border-transparent bg-success text-success-foreground shadow-sm">
+            <MailOpen className="w-3 h-3" /> Contactado
           </Badge>
         )}
         {isSharedWithMe && (
-          <Badge variant="secondary" className="bg-blue-500/20 text-blue-400 border-blue-500/20">
-            <Users className="w-3 h-3 mr-1" /> Compartido contigo
+          <Badge className="border-transparent bg-primary text-primary-foreground shadow-sm">
+            <Users className="w-3 h-3" /> Compartido contigo
           </Badge>
         )}
         {isSharedByMe && (
-          <Badge variant="secondary" className="bg-blue-500/20 text-blue-400 border-blue-500/20">
-            <Share2 className="w-3 h-3 mr-1" /> Compartido
+          <Badge variant="secondary" className="bg-background/90 backdrop-blur shadow-sm">
+            <Share2 className="w-3 h-3" /> Compartido
           </Badge>
         )}
       </div>
 
       {/* Carrusel de Imágenes */}
-      <div className="w-full aspect-video bg-muted/20">
+      <div className="w-full aspect-[16/10] bg-muted">
         <ImageCarousel images={images} alt={`${car.brand} ${car.model}`} />
       </div>
 
       {/* Contenido */}
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-3">
         {/* Encabezado */}
-        <div>
-          <h3 className="text-lg font-bold">
-            {car.brand} {car.model}
-          </h3>
-          <p className="text-sm text-muted-foreground">{car.year}</p>
-        </div>
-
-        {/* Datos principales */}
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div>
-            <p className="text-muted-foreground text-xs">Km</p>
-            <p className="font-semibold">{car.mileage?.toLocaleString() || "—"}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground text-xs">CV</p>
-            <p className="font-semibold">{car.cv || "—"}</p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate font-semibold leading-snug">
+              {car.brand} {car.model}
+            </h3>
+            <p className="tabular mt-0.5 text-xs text-muted-foreground">
+              {[car.year, car.mileage ? `${Number(car.mileage).toLocaleString('es-ES')} km` : null, car.cv ? `${car.cv} CV` : null]
+                .filter(Boolean)
+                .join(" · ") || "Sin datos"}
+            </p>
           </div>
         </div>
 
         {/* Precio final destacado */}
-        <div className={`rounded-lg p-3 ${isSharedWithMe ? 'bg-blue-500/10' : 'bg-primary/10'}`}>
-          <p className="text-xs text-muted-foreground">Precio Final</p>
-          <p className={`text-2xl font-bold ${isSharedWithMe ? 'text-blue-400' : 'text-primary'}`}>{finalPrice.toFixed(0)}€</p>
+        <div className="flex items-end justify-between border-t pt-3">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Precio final</p>
+            <p className="tabular text-xl font-semibold tracking-tight">{finalPrice.toLocaleString('es-ES', { maximumFractionDigits: 0 })} €</p>
+          </div>
           {car.totalExpenses > 0 && (
-            <p className="text-xs text-muted-foreground mt-1">(Gastos: {car.totalExpenses}€)</p>
+            <p className="tabular text-xs text-muted-foreground">+{Number(car.totalExpenses).toLocaleString('es-ES')} € gastos</p>
           )}
         </div>
 
         {/* Botones */}
-        <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
           {car.url && (
             <a
               href={car.url.startsWith('http') ? car.url : `https://${car.url}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors text-sm font-medium"
+              className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-md border bg-background px-3 text-sm font-medium transition-colors hover:bg-accent"
               title="Ver anuncio original"
             >
               <ExternalLink className="w-4 h-4" />
-              <span className="hidden sm:inline">Ver</span>
+              <span>Ver anuncio</span>
             </a>
           )}
 
@@ -139,8 +133,8 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
                   size="icon"
                   className={`h-9 w-9 transition-colors ${
                     car.contacted
-                      ? "text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      ? "text-success hover:text-success hover:bg-success/10"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
                   }`}
                   onClick={() => onToggleContacted(car.id, !!car.contacted)}
                   title={car.contacted ? "Desmarcar como contactado" : "Marcar como contactado (mail/mensaje enviado)"}
@@ -151,7 +145,7 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10"
                 onClick={() => onShare && onShare(car)}
                 title={isSharedByMe ? "Gestionar compartidos" : "Compartir"}
               >
@@ -160,7 +154,7 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 onClick={onDelete}
                 title="Eliminar"
               >

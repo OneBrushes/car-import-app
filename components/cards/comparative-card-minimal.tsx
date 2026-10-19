@@ -19,7 +19,7 @@ export function ComparativeCardMinimal({ id, importedCar, spainCar, steringAdjus
   
   let color = "text-destructive"
   if (difference > 5000) color = "text-emerald-500"
-  else if (difference > 2000) color = "text-accent"
+  else if (difference > 2000) color = "text-success"
   else if (difference > 0) color = "text-blue-500"
 
   return (

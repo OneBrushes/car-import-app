@@ -95,7 +95,7 @@ interface HighlightCardProps {
 
 function HighlightCard({ icon: Icon, title, car, metric, metricLabel }: HighlightCardProps) {
   return (
-    <div className="bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/20 rounded-lg p-6 hover:border-primary/40 transition-colors">
+    <div className="bg-gradient-to-br from-primary/10 to-success/10 border border-primary/20 rounded-lg p-6 hover:border-primary/40 transition-colors">
       <div className="flex items-start gap-3 mb-4">
         <div className="p-2 bg-primary/20 rounded-lg">
           <Icon className="w-5 h-5 text-primary" />

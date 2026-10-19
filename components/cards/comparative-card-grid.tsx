@@ -24,13 +24,13 @@ export function ComparativeCardGrid({ id, importedCar, spainCar, steringAdjustme
   } else if (profitPercentage > 20 || difference > 5000) {
     status = { color: "emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500", text: "text-emerald-500" }
   } else if (profitPercentage > 10 || difference > 2000) {
-    status = { color: "accent", bg: "bg-accent/10", border: "border-accent", text: "text-accent" }
+    status = { color: "success", bg: "bg-success/10", border: "border-success", text: "text-success" }
   } else if ((profitPercentage >= 5 && profitPercentage <= 10) && (difference >= 1000 && difference <= 2000)) {
     status = { color: "blue-500", bg: "bg-blue-500/10", border: "border-blue-500", text: "text-blue-500" }
   } else if ((profitPercentage >= 0 && profitPercentage < 5) && (difference >= 0 && difference < 1000)) {
     status = { color: "orange-500", bg: "bg-orange-500/10", border: "border-orange-500", text: "text-orange-500" }
   } else if (difference > 0) {
-    status = { color: "accent", bg: "bg-accent/10", border: "border-accent", text: "text-accent" }
+    status = { color: "success", bg: "bg-success/10", border: "border-success", text: "text-success" }
   }
 
   return (

@@ -35,7 +35,7 @@ export function RecentSalesSection({ boughtCars }: RecentSalesSectionProps) {
                 <p className="text-sm text-muted-foreground">{new Date(car.dateSold).toLocaleDateString()}</p>
               </div>
               <div className="text-right">
-                <p className={`font-bold ${profit > 0 ? "text-accent" : "text-destructive"}`}>
+                <p className={`font-bold ${profit > 0 ? "text-success" : "text-destructive"}`}>
                   {profit > 0 ? "+" : ""}
                   {profit}€
                 </p>

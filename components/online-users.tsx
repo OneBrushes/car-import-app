@@ -156,7 +156,7 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
     }
 
     const badgeContent = (
-        <button className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors">
+        <button className="relative inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" aria-label="Usuarios conectados">
             <Users className="w-4 h-4 text-muted-foreground" />
             <Badge variant="secondary" className="h-5 px-1.5 text-xs">
                 {onlineUsers.length}
@@ -218,7 +218,7 @@ export function OnlineUsers({ activeTab }: OnlineUsersProps) {
                                         <p className="text-xs text-muted-foreground">Tú</p>
                                     ) : (
                                         role === 'super_admin' && (
-                                            <p className="text-[10px] text-accent font-semibold">{onlineUser.active_tab ? `Pestaña: ${onlineUser.active_tab.toUpperCase()}` : "Navegando..."}</p>
+                                            <p className="text-[10px] text-success font-semibold">{onlineUser.active_tab ? `Pestaña: ${onlineUser.active_tab.toUpperCase()}` : "Navegando..."}</p>
                                         )
                                     )}
                                 </div>

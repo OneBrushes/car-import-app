@@ -90,7 +90,7 @@ export function CarsMap() {
     <div className="space-y-6 animate-in fade-in">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
+          <h2 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <MapPin className="h-6 w-6 text-primary" />
             Mapa de Coches
           </h2>

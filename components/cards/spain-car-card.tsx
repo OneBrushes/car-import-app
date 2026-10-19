@@ -49,7 +49,7 @@ export function SpainCarCard({ car, onDelete, onEdit, onShare, isShared = false,
                 <div className="grid grid-cols-3 gap-2 text-sm">
                     <div>
                         <p className="text-muted-foreground text-xs">Precio</p>
-                        <p className="font-semibold text-accent">{car.price?.toLocaleString()}€</p>
+                        <p className="font-semibold text-success">{car.price?.toLocaleString()}€</p>
                     </div>
                     <div>
                         <p className="text-muted-foreground text-xs">Km</p>

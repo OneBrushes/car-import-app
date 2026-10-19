@@ -114,7 +114,7 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
               {car.brand} {car.model}
             </h3>
             <span
-              className={`px-2 py-1 rounded-full text-xs font-medium ${car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-accent/10 text-accent"
+              className={`px-2 py-1 rounded-full text-xs font-medium ${car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"
                 }`}
             >
               {car.status === "inventory" ? "En Inventario" : "Vendido"}
@@ -142,14 +142,14 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
             </div>
             <div>
               <p className="text-muted-foreground text-xs mb-1">Beneficio</p>
-              <p className={`font-bold ${profit > 0 ? "text-accent" : "text-destructive"}`}>
+              <p className={`font-bold ${profit > 0 ? "text-success" : "text-destructive"}`}>
                 {profit > 0 ? "+" : ""}
                 {profit.toFixed(2)}€
               </p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs mb-1">Rentabilidad</p>
-              <p className={`font-bold ${profitPercentage > 0 ? "text-accent" : "text-destructive"}`}>
+              <p className={`font-bold ${profitPercentage > 0 ? "text-success" : "text-destructive"}`}>
                 {profitPercentage > 0 ? "+" : ""}
                 {profitPercentage.toFixed(1)}%
               </p>
@@ -304,7 +304,7 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
             {car.status === "inventory" && (
               <button
                 onClick={onMarkAsSold}
-                className="flex-1 px-3 py-2 bg-accent text-accent-foreground rounded-lg hover:bg-accent/90 transition-colors text-sm font-medium"
+                className="flex-1 px-3 py-2 bg-success text-success-foreground rounded-lg hover:bg-success/90 transition-colors text-sm font-medium"
               >
                 Marcar como Vendido
               </button>

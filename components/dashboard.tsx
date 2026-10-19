@@ -192,7 +192,7 @@ export function Dashboard({ isActive = true }: DashboardProps) {
     <div className="space-y-8 animate-in">
       {/* Encabezado */}
       <div>
-        <h2 className="text-3xl font-bold mb-2">Dashboard</h2>
+        <h2 className="text-2xl font-semibold tracking-tight mb-1">Dashboard</h2>
         <p className="text-muted-foreground">Overview de tu negocio de importación de coches</p>
       </div>
 
@@ -203,14 +203,14 @@ export function Dashboard({ isActive = true }: DashboardProps) {
           title="Beneficio Total"
           value={`€${stats.totalProfit.toLocaleString()}`}
           icon={DollarSign}
-          color={stats.totalProfit >= 0 ? "accent" : "destructive"}
+          color={stats.totalProfit >= 0 ? "success" : "destructive"}
           trend={stats.totalProfit}
         />
         <MetricCard
           title="Rentabilidad Media"
           value={`${stats.avgProfitability.toFixed(1)}%`}
           icon={TrendingUp}
-          color={stats.avgProfitability >= 0 ? "accent" : "destructive"}
+          color={stats.avgProfitability >= 0 ? "success" : "destructive"}
         />
         <MetricCard title="En Inventario" value={stats.carsInInventory} icon={Zap} color="primary" />
       </div>
@@ -272,33 +272,43 @@ function MetricCard({ title, value, icon: Icon, color = "foreground", trend, siz
   const colorClass =
     color === "primary"
       ? "text-primary"
-      : color === "accent"
-        ? "text-accent"
+      : color === "success"
+        ? "text-success"
         : color === "destructive"
           ? "text-destructive"
           : "text-muted-foreground"
 
-  const sizeClasses = size === "small" ? "p-4" : "p-6"
+  const iconBg =
+    color === "primary"
+      ? "bg-primary/10"
+      : color === "success"
+        ? "bg-success/10"
+        : color === "destructive"
+          ? "bg-destructive/10"
+          : "bg-muted"
+
+  const isSmall = size === "small"
 
   return (
-    <div className={`bg-card border border-border rounded-lg ${sizeClasses} hover:border-primary/20 transition-colors`}>
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-sm text-muted-foreground mb-1">{title}</p>
-          <p className={`text-2xl font-bold ${size === "small" ? "text-xl" : ""}`}>{value}</p>
+    <div className={`bg-card border border-border rounded-xl shadow-xs ${isSmall ? "p-4" : "p-5"} transition-shadow hover:shadow-sm`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-muted-foreground">{title}</p>
+          <p className={`tabular mt-1.5 font-semibold tracking-tight ${isSmall ? "text-xl" : "text-2xl"}`}>{value}</p>
         </div>
-        <Icon className={`w-5 h-5 ${colorClass}`} />
+        <div className={`flex shrink-0 items-center justify-center rounded-lg ${iconBg} ${isSmall ? "h-8 w-8" : "h-9 w-9"}`}>
+          <Icon className={`h-4 w-4 ${colorClass}`} />
+        </div>
       </div>
       {trend !== undefined && (
-        <div className="mt-2 flex items-center gap-1">
+        <div className="mt-3 flex items-center gap-1">
           {trend >= 0 ? (
-            <TrendingUp className="w-4 h-4 text-accent" />
+            <TrendingUp className="w-3.5 h-3.5 text-success" />
           ) : (
-            <TrendingDown className="w-4 h-4 text-destructive" />
+            <TrendingDown className="w-3.5 h-3.5 text-destructive" />
           )}
-          <span className={`text-xs font-medium ${trend >= 0 ? "text-accent" : "text-destructive"}`}>
-            {trend >= 0 ? "+" : ""}
-            {trend}
+          <span className={`text-xs font-medium ${trend >= 0 ? "text-success" : "text-destructive"}`}>
+            {trend >= 0 ? "Beneficio neto positivo" : "Beneficio neto negativo"}
           </span>
         </div>
       )}

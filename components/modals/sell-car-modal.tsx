@@ -73,17 +73,17 @@ export function SellCarModal({ isOpen, onClose, onSubmit, car }: SellCarModalPro
           </div>
 
           {sellPrice && (
-            <div className="bg-accent/10 rounded-lg p-3">
+            <div className="bg-success/10 rounded-lg p-3">
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-muted-foreground">Beneficio:</span>
-                <span className={profit > 0 ? "text-accent font-bold" : "text-destructive font-bold"}>
+                <span className={profit > 0 ? "text-success font-bold" : "text-destructive font-bold"}>
                   {profit > 0 ? "+" : ""}
                   {profit.toFixed(0)}€
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Rentabilidad:</span>
-                <span className={profitPercentage > 0 ? "text-accent font-bold" : "text-destructive font-bold"}>
+                <span className={profitPercentage > 0 ? "text-success font-bold" : "text-destructive font-bold"}>
                   {profitPercentage > 0 ? "+" : ""}
                   {profitPercentage.toFixed(1)}%
                 </span>
@@ -123,7 +123,7 @@ export function SellCarModal({ isOpen, onClose, onSubmit, car }: SellCarModalPro
           </button>
           <button
             onClick={handleSubmit}
-            className="flex-1 px-4 py-2 rounded-lg bg-accent text-accent-foreground hover:bg-accent/90 transition-colors font-medium"
+            className="flex-1 px-4 py-2 rounded-lg bg-success text-success-foreground hover:bg-success/90 transition-colors font-medium"
           >
             Confirmar Venta
           </button>

@@ -1125,7 +1125,7 @@ export function AddCarModal({ isOpen, onClose, onSubmit, initialData }: AddCarMo
                         {formData.tags.map((tag) => (
                           <span
                             key={tag}
-                            className="px-2 py-1 bg-accent/20 text-accent rounded-md text-sm flex items-center gap-1"
+                            className="px-2 py-1 bg-success/20 text-success rounded-md text-sm flex items-center gap-1"
                           >
                             {tag}
                             <button onClick={() => handleRemoveTag(tag)} className="hover:text-destructive">

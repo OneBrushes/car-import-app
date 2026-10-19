@@ -346,7 +346,7 @@ export function CarsManagement() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold mb-2">Coches en Patrulla</h2>
+          <h2 className="text-2xl font-semibold tracking-tight mb-1">Coches en Patrulla</h2>
           <p className="text-muted-foreground">Gestiona la logística y los gastos de tu inventario ({boughtCars.length})</p>
         </div>
         <button
@@ -547,9 +547,9 @@ function StatCard({ label, value, icon: Icon, highlight }: any) {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs text-muted-foreground mb-1">{label}</p>
-          <p className={`text-xl font-bold ${highlight ? "text-accent" : ""}`}>{value}</p>
+          <p className={`text-xl font-bold ${highlight ? "text-success" : ""}`}>{value}</p>
         </div>
-        <Icon className={`w-5 h-5 ${highlight ? "text-accent" : "text-muted-foreground"}`} />
+        <Icon className={`w-5 h-5 ${highlight ? "text-success" : "text-muted-foreground"}`} />
       </div>
     </div>
   )

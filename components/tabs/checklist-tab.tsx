@@ -210,7 +210,7 @@ export function ChecklistTab() {
         <div className="space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Checklist de Inspección</h2>
+                    <h2 className="text-2xl font-semibold tracking-tight">Checklist de Inspección</h2>
                     <p className="text-muted-foreground">Verifica el estado de los vehículos importados.</p>
                 </div>
 

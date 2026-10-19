@@ -1,110 +1,188 @@
 "use client"
 
-import { Car, MapPin, Scale, Archive, Home, Menu, X, FileText, TrendingUp, CheckSquare, Heart, Map as MapIcon, Network, Wallet, EyeOff, Eye } from "lucide-react"
-import { useState } from "react"
+import {
+  Car, MapPin, Scale, Archive, Home, FileText, TrendingUp, CheckSquare, Heart,
+  Map as MapIcon, Network, Wallet, EyeOff, Eye, Shield, PanelLeftClose, PanelLeftOpen,
+  type LucideIcon,
+} from "lucide-react"
 import { useAuth } from "./auth-provider"
+import { EasterEggs } from "./easter-eggs"
+import { cn } from "@/lib/utils"
+
+const ALL_ROLES = ['usuario', 'gestor', 'importador', 'admin', 'super_admin']
+const MANAGER_ROLES = ['gestor', 'importador', 'admin', 'super_admin']
+const IMPORTER_ROLES = ['importador', 'admin', 'super_admin']
+const ADMIN_ROLES = ['admin', 'super_admin']
+
+export interface NavItem {
+  id: string
+  label: string
+  icon: LucideIcon
+  roles: string[]
+}
+
+export interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+export function getNavGroups(role: string | null | undefined, donationsVisible: boolean): NavGroup[] {
+  const isAdmin = role === 'admin' || role === 'super_admin'
+
+  const groups: NavGroup[] = [
+    {
+      label: "General",
+      items: [
+        { id: "dashboard", label: "Dashboard", icon: Home, roles: ALL_ROLES },
+      ],
+    },
+    {
+      label: "Vehículos",
+      items: [
+        { id: "import", label: "Importación", icon: Car, roles: ALL_ROLES },
+        { id: "spain", label: "España", icon: MapPin, roles: ALL_ROLES },
+        { id: "comparison", label: "Comparativa", icon: Scale, roles: ALL_ROLES },
+        { id: "profitable", label: "Rentables", icon: TrendingUp, roles: ALL_ROLES },
+        { id: "map", label: "Mapa", icon: MapIcon, roles: ALL_ROLES },
+      ],
+    },
+    {
+      label: "Operaciones",
+      items: [
+        { id: "management", label: "Comprados", icon: Archive, roles: MANAGER_ROLES },
+        { id: "expenses", label: "Gastos", icon: Wallet, roles: IMPORTER_ROLES },
+        { id: "checklist", label: "Checklist", icon: CheckSquare, roles: IMPORTER_ROLES },
+        { id: "report", label: "Informe", icon: FileText, roles: IMPORTER_ROLES },
+      ],
+    },
+    {
+      label: "Empresa",
+      items: [
+        { id: "roadmap", label: "Roadmap", icon: Network, roles: IMPORTER_ROLES },
+        ...(donationsVisible || isAdmin
+          ? [{ id: "donations", label: "Donaciones", icon: Heart, roles: ALL_ROLES }]
+          : []),
+        { id: "admin", label: "Administración", icon: Shield, roles: ADMIN_ROLES },
+      ],
+    },
+  ]
+
+  return groups
+    .map(group => ({ ...group, items: group.items.filter(item => !role || item.roles.includes(role)) }))
+    .filter(group => group.items.length > 0)
+}
 
 interface NavigationProps {
   activeTab: string
   onTabChange: (tab: any) => void
   role?: string | null
   donationsVisible?: boolean
+  collapsed?: boolean
+  onToggleCollapsed?: () => void
 }
 
-export function Navigation({ activeTab, onTabChange, role, donationsVisible = false }: NavigationProps) {
-  const [menuOpen, setMenuOpen] = useState(false)
+export function Navigation({
+  activeTab,
+  onTabChange,
+  role,
+  donationsVisible = false,
+  collapsed = false,
+  onToggleCollapsed,
+}: NavigationProps) {
   const { isGodMode, toggleGodMode, profile } = useAuth()
   const isSuperAdmin = profile?.role === 'super_admin'
-
-  const allTabs = [
-    { id: "dashboard", label: "Dashboard", icon: Home, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
-    { id: "import", label: "Importación", icon: Car, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
-    { id: "spain", label: "España", icon: MapPin, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
-    { id: "map", label: "Mapa", icon: MapIcon, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
-    { id: "comparison", label: "Comparativa", icon: Scale, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
-    { id: "management", label: "Comprados", icon: Archive, roles: ['gestor', 'importador', 'admin', 'super_admin'] },
-    { id: "profitable", label: "Rentables", icon: TrendingUp, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] },
-    { id: "report", label: "Informe", icon: FileText, roles: ['importador', 'admin', 'super_admin'] },
-    { id: "checklist", label: "Checklist", icon: CheckSquare, roles: ['importador', 'admin', 'super_admin'] },
-    { id: "roadmap", label: "Roadmap", icon: Network, roles: ['importador', 'admin', 'super_admin'] },
-    { id: "expenses", label: "Gastos", icon: Wallet, roles: ['importador', 'admin', 'super_admin'] },
-    ...(donationsVisible || role === 'admin' || role === 'super_admin' ? [{ id: "donations", label: "Donaciones", icon: Heart, roles: ['usuario', 'gestor', 'importador', 'admin', 'super_admin'] }] : []),
-  ]
-
-  const tabs = allTabs.filter(tab => !role || tab.roles.includes(role))
+  const groups = getNavGroups(role, donationsVisible)
 
   return (
-    <>
-      {/* Desktop Navigation */}
-      <nav className="hidden md:flex gap-1 px-4 sm:px-6 lg:px-8 py-4 overflow-x-auto">
-        {tabs.map((tab) => {
-          const Icon = tab.icon
-          const isActive = activeTab === tab.id
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${isActive
-                ? "bg-primary/10 text-primary font-medium"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span className="text-sm">{tab.label}</span>
-            </button>
-          )
-        })}
-
-        {isSuperAdmin && (
-          <div className="flex-1 flex justify-end">
-             <button
-                onClick={toggleGodMode}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors border ${isGodMode ? 'bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-secondary/50 text-muted-foreground border-transparent hover:text-foreground'}`}
-                title={isGodMode ? "Modo Dios Activado (Viendo toda la empresa)" : "Modo Aislado (Viendo solo tus datos)"}
-             >
-                {isGodMode ? <Eye className="w-4 h-4 animate-pulse" /> : <EyeOff className="w-4 h-4" />}
-                <span className="text-xs font-bold uppercase tracking-wider">{isGodMode ? 'Modo Dios' : 'Aislado'}</span>
-             </button>
+    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+      {/* Marca */}
+      <div className={cn("flex h-14 shrink-0 items-center gap-3 border-b border-sidebar-border", collapsed ? "justify-center px-2" : "px-4")}>
+        <div className="shrink-0 cursor-pointer">
+          <EasterEggs onLogoClick={() => { }} />
+        </div>
+        {!collapsed && (
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-sm font-semibold text-foreground">NorDrive</p>
+            <p className="truncate text-xs text-muted-foreground">Gestión de importación</p>
           </div>
         )}
+      </div>
+
+      {/* Secciones */}
+      <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 py-3">
+        {groups.map((group, index) => (
+          <div key={group.label} className={cn(index > 0 && "mt-5")}>
+            {collapsed ? (
+              index > 0 && <div className="mx-2 mb-3 border-t border-sidebar-border" />
+            ) : (
+              <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+                {group.label}
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              {group.items.map((item) => {
+                const Icon = item.icon
+                const isActive = activeTab === item.id
+                return (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => onTabChange(item.id)}
+                      title={collapsed ? item.label : undefined}
+                      aria-current={isActive ? "page" : undefined}
+                      className={cn(
+                        "group relative flex h-9 w-full items-center gap-3 rounded-md text-sm transition-colors",
+                        collapsed ? "justify-center px-0" : "px-3",
+                        isActive
+                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                          : "hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+                      )}
+                    >
+                      {isActive && (
+                        <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-sidebar-primary" />
+                      )}
+                      <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-sidebar-primary" : "text-muted-foreground group-hover:text-sidebar-accent-foreground")} />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setMenuOpen(!menuOpen)}
-        className="md:hidden p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
-        aria-label="Toggle menu"
-      >
-        {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
-
-      {/* Mobile Menu */}
-      {menuOpen && (
-        <div className="md:hidden fixed top-16 left-0 right-0 bg-background border-b border-border shadow-lg z-50">
-          <nav className="flex flex-col">
-            {tabs.map((tab) => {
-              const Icon = tab.icon
-              const isActive = activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    onTabChange(tab.id)
-                    setMenuOpen(false)
-                  }}
-                  className={`flex items-center gap-3 px-4 py-3 border-b border-border/50 transition-colors ${isActive
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                    }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{tab.label}</span>
-                </button>
-              )
-            })}
-          </nav>
-        </div>
-      )}
-    </>
+      {/* Pie */}
+      <div className="shrink-0 space-y-1 border-t border-sidebar-border p-2">
+        {isSuperAdmin && (
+          <button
+            onClick={toggleGodMode}
+            title={isGodMode ? "Modo Dios activado (viendo toda la empresa)" : "Modo aislado (viendo solo tus datos)"}
+            className={cn(
+              "flex h-9 w-full items-center gap-3 rounded-md border text-xs font-medium transition-colors",
+              collapsed ? "justify-center px-0" : "px-3",
+              isGodMode
+                ? "border-warning/40 bg-warning/10 text-warning"
+                : "border-transparent text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+            )}
+          >
+            {isGodMode ? <Eye className="h-4 w-4 shrink-0" /> : <EyeOff className="h-4 w-4 shrink-0" />}
+            {!collapsed && <span>{isGodMode ? "Modo Dios" : "Modo aislado"}</span>}
+          </button>
+        )}
+        {onToggleCollapsed && (
+          <button
+            onClick={onToggleCollapsed}
+            title={collapsed ? "Expandir menú" : "Contraer menú"}
+            className={cn(
+              "flex h-9 w-full items-center gap-3 rounded-md text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+              collapsed ? "justify-center px-0" : "px-3"
+            )}
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {!collapsed && <span>Contraer menú</span>}
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
