@@ -39,7 +39,7 @@ jobs:
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_STRIPE_PAYMENT_WORKER: https://stripe-payment-intent.onebrushes.workers.dev
           NEXT_PUBLIC_STRIPE_SUBSCRIPTION_WORKER: https://stripe-subscription.onebrushes.workers.dev
-          NEXT_PUBLIC_SCRAPE_WORKER: https://car-scrape.onebrushes.workers.dev
+          NEXT_PUBLIC_SCRAPE_WORKER: https://car-scrape.infonordrive.workers.dev
           
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
