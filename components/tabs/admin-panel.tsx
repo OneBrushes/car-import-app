@@ -11,7 +11,10 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Loader2, Shield, Users, Trash2, Database, Lock, Ban, Info, HardDrive, RefreshCw } from "lucide-react"
+import { Loader2, Shield, Users, Trash2, Database, Lock, Ban, Info, HardDrive, RefreshCw, UserPlus } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { inviteTeamMember, TEAM_ROLE_LABEL, type TeamRole } from "@/lib/team-invite"
+import { useAuth } from "@/components/auth-provider"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { ExportImportTools } from "@/components/export-import-tools"
@@ -35,7 +38,74 @@ interface Log {
     profiles: { email: string }
 }
 
+/** Botón + ventana para invitar a alguien del equipo por correo, con su rol */
+function InviteUserButton({ canInviteSuperAdmin, onInvited }: { canInviteSuperAdmin: boolean; onInvited: () => void }) {
+    const [open, setOpen] = useState(false)
+    const [email, setEmail] = useState("")
+    const [firstName, setFirstName] = useState("")
+    const [lastName, setLastName] = useState("")
+    const [role, setRole] = useState<TeamRole>("gestor")
+    const [sending, setSending] = useState(false)
+
+    const send = async () => {
+        if (!/^\S+@\S+\.\S+$/.test(email.trim())) { toast.error("Escribe un correo válido"); return }
+        setSending(true)
+        try {
+            const res = await inviteTeamMember({ email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim(), role })
+            toast.success(res.status === "invited"
+                ? `Invitación enviada a ${res.email}. Entrará como ${TEAM_ROLE_LABEL[role]}.`
+                : `${res.email} ya tenía cuenta: le hemos puesto el rol ${TEAM_ROLE_LABEL[role]}.`)
+            setOpen(false)
+            setEmail(""); setFirstName(""); setLastName(""); setRole("gestor")
+            onInvited()
+        } catch (e: any) {
+            toast.error(e.message)
+        } finally {
+            setSending(false)
+        }
+    }
+
+    const roles = (Object.keys(TEAM_ROLE_LABEL) as TeamRole[]).filter(r => r !== "super_admin" || canInviteSuperAdmin)
+
+    return (
+        <>
+            <Button size="sm" onClick={() => setOpen(true)}><UserPlus className="h-4 w-4" /> Invitar usuario</Button>
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Invitar a alguien del equipo</DialogTitle>
+                        <DialogDescription>Le llega un correo para crear su cuenta y elegir contraseña. Entrará directamente con el rol que elijas.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <div className="space-y-1.5">
+                            <Label>Correo</Label>
+                            <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="nombre@correo.com" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5"><Label>Nombre</Label><Input value={firstName} onChange={e => setFirstName(e.target.value)} /></div>
+                            <div className="space-y-1.5"><Label>Apellidos</Label><Input value={lastName} onChange={e => setLastName(e.target.value)} /></div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Rol</Label>
+                            <Select value={role} onValueChange={v => setRole(v as TeamRole)}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>{roles.map(r => <SelectItem key={r} value={r}>{TEAM_ROLE_LABEL[r]}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+                        <Button onClick={send} disabled={sending}>{sending && <Loader2 className="h-4 w-4 animate-spin" />} Enviar invitación</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
+    )
+}
+
 export function AdminPanel() {
+    const { profile: myProfile } = useAuth()
+    const currentUserRole = myProfile?.role as string | undefined
     const [users, setUsers] = useState<Profile[]>([])
     const [logs, setLogs] = useState<Log[]>([])
     const [loading, setLoading] = useState(true)
@@ -552,7 +622,8 @@ export function AdminPanel() {
 
                 {/* --- USERS TAB --- */}
                 <TabsContent value="users">
-                    <Panel title="Usuarios registrados" description="Gestiona roles y permisos.">
+                    <Panel title="Usuarios registrados" description="Gestiona roles y permisos. Las cuentas «Pendiente» se han creado sin invitación: dales un rol para que puedan entrar."
+                        action={<InviteUserButton canInviteSuperAdmin={currentUserRole === 'super_admin'} onInvited={fetchData} />}>
                         <div className="overflow-x-auto">
                             <Table>
                                 <TableHeader>
@@ -584,6 +655,7 @@ export function AdminPanel() {
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
+                                                        <SelectItem value="pendiente">Pendiente (sin acceso)</SelectItem>
                                                         <SelectItem value="usuario">Usuario</SelectItem>
                                                         <SelectItem value="gestor">Gestor</SelectItem>
                                                         <SelectItem value="importador">Importador</SelectItem>
@@ -900,12 +972,15 @@ function StatCard({ label, icon: Icon, value, sub, percentage }: {
     )
 }
 
-function Panel({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function Panel({ title, description, action, children }: { title: string; description?: string; action?: React.ReactNode; children: React.ReactNode }) {
     return (
         <section className="overflow-hidden rounded-xl border bg-card shadow-xs">
-            <div className="border-b px-5 py-4">
-                <h3 className="text-sm font-semibold">{title}</h3>
-                {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+            <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
+                <div>
+                    <h3 className="text-sm font-semibold">{title}</h3>
+                    {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+                </div>
+                {action}
             </div>
             {children}
         </section>

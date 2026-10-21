@@ -211,6 +211,21 @@ export default function Home() {
 
   if (!user) return null
 
+  // Cuenta creada sin invitación: no ve nada hasta que un admin le dé un rol
+  if (role === 'pendiente') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="max-w-md space-y-4 rounded-2xl border bg-card p-8 text-center shadow-sm">
+          <h1 className="text-xl font-semibold">Tu cuenta está pendiente de aprobación</h1>
+          <p className="text-sm text-muted-foreground">
+            Un administrador de NorDrive tiene que darte acceso. En cuanto lo haga, podrás entrar con tu correo y contraseña.
+          </p>
+          <button onClick={() => signOut()} className="text-sm font-medium text-primary hover:underline">Cerrar sesión</button>
+        </div>
+      </div>
+    )
+  }
+
   const handleToggleTheme = () => {
     setIsDark(!isDark)
   }
