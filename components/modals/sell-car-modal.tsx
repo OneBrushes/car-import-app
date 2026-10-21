@@ -22,6 +22,8 @@ export interface Customer {
   city?: string | null
   postal_code?: string | null
   notes?: string | null
+  /** Puede entrar en el área de clientes de la web con su correo */
+  portal_access?: boolean
   user_id?: string
   created_at?: string
 }

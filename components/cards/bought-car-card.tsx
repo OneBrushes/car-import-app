@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Trash2, ChevronDown, Paperclip, FileText } from "lucide-react"
+import { Plus, Trash2, ChevronDown, Paperclip, FileText, UserRound } from "lucide-react"
 import { MATRICULATION_STEPS, matriculationProgress } from "@/lib/matriculation"
 import { CarHistoryButton } from "@/components/car-history"
 
 import { DocumentsModal, CarDocument } from "@/components/modals/documents-modal"
+import { ClientPortalModal } from "@/components/modals/client-portal-modal"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 
@@ -22,6 +23,7 @@ interface BoughtCarCardProps {
 export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold, onDelete, onUpdateCar, onPrintInvoice }: BoughtCarCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isDocsOpen, setIsDocsOpen] = useState(false)
+  const [isPortalOpen, setIsPortalOpen] = useState(false)
   const [localDocs, setLocalDocs] = useState<CarDocument[]>(car.documents || [])
   const [checklist, setChecklist] = useState<Record<string, boolean>>(car.matriculation_checklist || {})
   const [newExpense, setNewExpense] = useState({
@@ -158,9 +160,13 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
         )}
       </div>
 
-      <div className={`grid ${car.status === "sold" && onPrintInvoice ? "grid-cols-3" : "grid-cols-2"} text-sm border-b`}>
+      <div className={`grid ${car.status === "sold" && onPrintInvoice ? "grid-cols-4" : "grid-cols-3"} text-sm border-b`}>
           <button onClick={() => setIsDocsOpen(true)} className="py-2.5 flex items-center justify-center gap-2 hover:bg-accent font-medium transition-colors border-r">
             <Paperclip className="h-4 w-4 text-muted-foreground" /> Documentos ({localDocs.length})
+          </button>
+
+          <button onClick={() => setIsPortalOpen(true)} className="py-2.5 flex items-center justify-center gap-2 hover:bg-accent font-medium transition-colors border-r" title="Lo que ve el cliente en la web: estado, ubicación, fotos y documentos">
+            <UserRound className="h-4 w-4 text-muted-foreground" /> Área cliente
           </button>
 
           <div className="py-2.5 flex items-center justify-center gap-2 font-medium text-muted-foreground relative" title="Progreso de matriculación">
@@ -333,6 +339,7 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
       )}
 
       {/* Modal Independiente de Documentos */}
+      <ClientPortalModal isOpen={isPortalOpen} onClose={() => setIsPortalOpen(false)} car={car} />
       <DocumentsModal 
          isOpen={isDocsOpen} 
          onClose={() => setIsDocsOpen(false)} 

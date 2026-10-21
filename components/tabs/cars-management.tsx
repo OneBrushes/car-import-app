@@ -136,7 +136,8 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
         imported_car_id: car.imported_car_id,
         invoice_number: car.invoice_number,
         plate: car.plate,
-        vin: car.vin
+        vin: car.vin,
+        mileage: car.mileage != null ? Number(car.mileage) : undefined
       }))
 
       setBoughtCars(formattedCars)

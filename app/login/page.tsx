@@ -59,6 +59,16 @@ export default function LoginPage() {
         fetchSettings()
     }, [])
 
+    // Una cuenta del área de clientes ha intentado entrar en la app de gestión
+    useEffect(() => {
+        try {
+            if (sessionStorage.getItem('nordrive-login-notice') === 'cliente') {
+                sessionStorage.removeItem('nordrive-login-notice')
+                toast.info("Esta cuenta es del área de clientes. Entra en www.nordrivecars.com/clientes para ver tu coche.", { duration: 10000 })
+            }
+        } catch { }
+    }, [])
+
     const toggleMode = () => {
         setIsAnimating(true)
         setTimeout(() => {

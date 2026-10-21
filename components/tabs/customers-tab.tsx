@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Building2, Loader2, Mail, Pencil, Phone, Plus, Search, Trash2, Users } from "lucide-react"
+import { Building2, Copy, Globe, Loader2, Mail, Pencil, Phone, Plus, Search, Trash2, Users } from "lucide-react"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import type { Customer, NewCustomer } from "@/components/modals/sell-car-modal"
 import { INVOICE_COMPANY_SETTING_KEY, type InvoiceCompany } from "@/lib/invoice"
 import { getInvoiceCompany } from "@/lib/sales"
+import { Switch } from "@/components/ui/switch"
+import { invitationText, PORTAL_URL } from "@/lib/client-portal"
 
 interface Sale {
   id: string
@@ -25,7 +27,7 @@ interface Sale {
   invoice_number: string | null
 }
 
-const EMPTY: NewCustomer = { name: "", nif: "", email: "", phone: "", address: "", city: "", postal_code: "", notes: "" }
+const EMPTY: NewCustomer = { name: "", nif: "", email: "", phone: "", address: "", city: "", postal_code: "", notes: "", portal_access: false }
 const EMPTY_COMPANY: InvoiceCompany = { name: "", nif: "", address: "", city: "", postalCode: "", phone: "", email: "", iban: "" }
 
 const eur = (n: number) => n.toLocaleString("es-ES", { maximumFractionDigits: 0 }) + " €"
@@ -102,6 +104,7 @@ export function CustomersTab({ role }: { role?: string | null }) {
       city: customer.city ?? "",
       postal_code: customer.postal_code ?? "",
       notes: customer.notes ?? "",
+      portal_access: !!customer.portal_access,
     })
     setDialogOpen(true)
   }
@@ -111,14 +114,20 @@ export function CustomersTab({ role }: { role?: string | null }) {
       toast.error("El nombre es obligatorio")
       return
     }
+    if (form.portal_access && !form.email?.trim()) {
+      toast.error("Para dar acceso al área de clientes hace falta su correo")
+      return
+    }
     setSaving(true)
-    const payload = { ...form, name: form.name.trim() }
+    const payload = { ...form, name: form.name.trim(), email: form.email?.trim() || null }
     const { error } = editing
       ? await supabase.from("customers").update(payload).eq("id", editing.id)
       : await supabase.from("customers").insert(payload)
     setSaving(false)
     if (error) {
-      toast.error("No se pudo guardar: " + error.message)
+      toast.error(/portal_access/.test(error.message)
+        ? "Falta ejecutar supabase/2026-10_area_clientes.sql en Supabase"
+        : "No se pudo guardar: " + error.message)
       return
     }
     toast.success(editing ? "Cliente actualizado" : "Cliente añadido")
@@ -231,6 +240,15 @@ export function CustomersTab({ role }: { role?: string | null }) {
                 <div className="mt-3 space-y-1 text-sm text-muted-foreground">
                   {customer.phone && <a href={`tel:${customer.phone}`} className="flex items-center gap-2 hover:text-foreground"><Phone className="h-3.5 w-3.5" />{customer.phone}</a>}
                   {customer.email && <a href={`mailto:${customer.email}`} className="flex items-center gap-2 truncate hover:text-foreground"><Mail className="h-3.5 w-3.5" />{customer.email}</a>}
+                  {customer.portal_access && customer.email && (
+                    <div className="flex items-center gap-2 text-primary">
+                      <Globe className="h-3.5 w-3.5" /> Área de clientes activa
+                      <button type="button" className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={async () => { try { await navigator.clipboard.writeText(invitationText(customer.name, customer.email!)); toast.success("Invitación copiada") } catch { toast.error("No se pudo copiar") } }}>
+                        <Copy className="h-3 w-3" /> Invitación
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 border-t pt-3">
@@ -276,6 +294,13 @@ export function CustomersTab({ role }: { role?: string | null }) {
             <Field label="Código postal"><Input value={form.postal_code ?? ""} onChange={e => setField("postal_code", e.target.value)} /></Field>
             <Field label="Ciudad"><Input value={form.city ?? ""} onChange={e => setField("city", e.target.value)} /></Field>
             <Field label="Notas" className="col-span-2"><Textarea rows={3} value={form.notes ?? ""} onChange={e => setField("notes", e.target.value)} /></Field>
+            <label className="col-span-2 flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm">
+              <Switch checked={!!form.portal_access} onCheckedChange={v => setForm(f => ({ ...f, portal_access: v }))} className="mt-0.5" />
+              <span>
+                <span className="font-medium">Acceso al área de clientes</span>
+                <span className="block text-xs text-muted-foreground">Podrá entrar en {PORTAL_URL.replace(/^https?:\/\//, "")} con su correo y ver sus coches (estado, ubicación, fotos y documentos que compartas).</span>
+              </span>
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>

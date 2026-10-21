@@ -44,6 +44,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 
                 if (session?.user) {
                     const { data: profileData } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
+                    // Cuenta del área de clientes de la web: no tiene acceso a la app de gestión
+                    if (profileData?.role === 'cliente') {
+                        try { sessionStorage.setItem('nordrive-login-notice', 'cliente') } catch { }
+                        await supabase.auth.signOut()
+                        setSession(null)
+                        setUser(null)
+                        return
+                    }
                     setProfile(profileData)
                 }
             } catch (error) {
@@ -85,6 +93,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     .single()
 
                 if (profileData?.role === 'banned') {
+                    await supabase.auth.signOut()
+                    return
+                }
+
+                // Cuenta del área de clientes de la web: no tiene acceso a la app de gestión
+                if (profileData?.role === 'cliente') {
+                    try { sessionStorage.setItem('nordrive-login-notice', 'cliente') } catch { }
                     await supabase.auth.signOut()
                     return
                 }
