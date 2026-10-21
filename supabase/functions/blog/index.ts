@@ -15,6 +15,8 @@
 //                                   con su autor y licencia
 //   { action: "ingest", post }    → desde la tarea de Claude: guarda un artículo nuevo. Copia la portada y las fotos del
 //                                   texto al almacenamiento "blog" (así no dependen de otras webs).
+//                                   También acepta gráficos hechos por Claude (SVG: infografías, tablas, esquemas) en
+//                                   post.graphics = [{ name, svg }], citados en el texto como ![alt](grafico:name "pie").
 //                                   Si en la app está activado "publicar automáticamente", se publica y se regenera la web;
 //                                   si no, queda en borrador y avisa en la app para que lo revises.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2"
@@ -25,7 +27,8 @@ const CATEGORIES = ["importacion", "noticias"]
 const UA = "NorDriveBlog/1.0 (https://www.nordrivecars.com)"
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" }
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024
-const MAX_INLINE_IMAGES = 8
+const MAX_INLINE_IMAGES = 10
+const MAX_SVG_BYTES = 300 * 1024
 
 function cors(req: Request) {
   const origin = req.headers.get("Origin") ?? ""
@@ -166,15 +169,38 @@ async function rehost(admin: SupabaseClient, src: string, path: string): Promise
   }
 }
 
+/** SVG hecho por Claude: solo dibujo (sin scripts, eventos, enlaces externos ni HTML incrustado) */
+function safeSvg(svg: string): string | null {
+  const s = svg.trim().replace(/^<\?xml[^>]*>\s*/i, "")
+  if (!/^<svg[\s>]/i.test(s) || !/<\/svg>\s*$/i.test(s)) return null
+  if (new TextEncoder().encode(s).byteLength > MAX_SVG_BYTES) return null
+  if (/<(script|foreignobject|iframe|embed|object|audio|video|use|style|a)[\s/>]/i.test(s)) return null
+  if (/\son[a-z]+\s*=/i.test(s) || /javascript:|data:text|@import/i.test(s)) return null
+  if (/(?:xlink:)?href\s*=\s*["'](?!#)/i.test(s) || /url\(\s*["']?(?!#)/i.test(s)) return null
+  return /xmlns=/.test(s) ? s : s.replace(/^<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"')
+}
+
+async function uploadSvg(admin: SupabaseClient, svg: string, path: string): Promise<string | null> {
+  const clean = safeSvg(svg)
+  if (!clean) return null
+  const file = `${path}.svg`
+  const { error } = await admin.storage.from("blog").upload(file, new TextEncoder().encode(clean), { contentType: "image/svg+xml", upsert: true, cacheControl: "31536000" })
+  if (error) return null
+  return admin.storage.from("blog").getPublicUrl(file).data.publicUrl
+}
+
 /** Copia las fotos del Markdown (![alt](url "crédito")) y cambia sus direcciones. Las que no se copian se quitan. */
-async function rehostInline(admin: SupabaseClient, md: string, folder: string) {
+async function rehostInline(admin: SupabaseClient, md: string, folder: string, graphics: Map<string, string>) {
   const re = /!\[([^\]]*)\]\(\s*(\S+?)(?:\s+"([^"]*)")?\s*\)/g
   const found = [...md.matchAll(re)]
   let copied = 0
   let out = md
   for (const [i, m] of found.entries()) {
     const [whole, alt, url, title] = m
-    const hosted = i < MAX_INLINE_IMAGES ? await rehost(admin, url, `${folder}/foto-${i + 1}`) : null
+    const graphic = url.startsWith("grafico:") ? graphics.get(url.slice(8)) : undefined
+    const hosted = i >= MAX_INLINE_IMAGES ? null
+      : graphic !== undefined ? await uploadSvg(admin, graphic, `${folder}/grafico-${i + 1}`)
+      : await rehost(admin, url, `${folder}/foto-${i + 1}`)
     if (hosted) copied++
     const replacement = hosted ? `![${alt}](${hosted}${title ? ` "${title.replace(/"/g, "'")}"` : ""})` : ""
     out = out.replace(whole, replacement)
@@ -254,7 +280,12 @@ Deno.serve(async (req) => {
   const folder = `posts/${new Date().toISOString().slice(0, 10)}-${slug}`
   const coverSource = typeof p.cover_url === "string" ? p.cover_url : typeof p.cover?.url === "string" ? p.cover.url : ""
   const coverUrl = coverSource ? (await rehost(admin, coverSource, `${folder}/portada`)) ?? (/^https:\/\//.test(coverSource) ? coverSource : null) : null
-  const inline = await rehostInline(admin, rawContent, folder)
+  const graphics = new Map<string, string>(
+    (Array.isArray(p.graphics) ? p.graphics : [])
+      .filter((g: any) => g && typeof g.name === "string" && typeof g.svg === "string")
+      .map((g: any) => [g.name.trim(), g.svg] as [string, string]),
+  )
+  const inline = await rehostInline(admin, rawContent, folder, graphics)
 
   const { data: setting } = await admin.from("app_settings").select("value").eq("key", "blog_auto_publish").maybeSingle()
   const autoPublish = setting?.value === true
@@ -299,7 +330,7 @@ Deno.serve(async (req) => {
     slug: saved.slug,
     category,
     cover: coverUrl ? (coverUrl === coverSource ? "enlace original (no se pudo copiar)" : "copiada") : "sin portada",
-    images: `${inline.copied}/${inline.total} fotos del texto copiadas`,
+    images: `${inline.copied}/${inline.total} imágenes del texto guardadas (las que no se pudieron guardar se han quitado)`,
     rebuild: rebuild.ok ? "ok" : rebuild.message,
   })
 })
