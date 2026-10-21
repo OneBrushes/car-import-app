@@ -143,3 +143,10 @@ describe("datos desconocidos", () => {
         expect(bodyType(null, "Golf Variant")).toBe("estate")
     })
 })
+
+describe("coches de cliente en el garaje", () => {
+    it("«En preparación» va al taller y «Entregado» sale como vendido", () => {
+        expect(toParkStage({ status: "inventory", logistic_status: "preparing" })).toBe("detailing")
+        expect(toParkStage({ status: "inventory", logistic_status: "delivered" })).toBe("sold")
+    })
+})

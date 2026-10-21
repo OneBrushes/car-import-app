@@ -167,7 +167,9 @@ export const STAGE_LABEL: Record<ParkStage, string> = {
 const PARK_STAGES: ParkStage[] = ["purchased", "in_transit", "homologation", "detailing", "ready"]
 
 export function toParkStage(row: { status?: string | null; logistic_status?: string | null }): ParkStage {
-    if (row.status === "sold") return "sold"
+    // "Entregado" a un cliente sale del parking como un vendido; "En preparación" está en el taller
+    if (row.status === "sold" || row.logistic_status === "delivered") return "sold"
+    if (row.logistic_status === "preparing") return "detailing"
     return (PARK_STAGES as string[]).includes(row.logistic_status || "") ? (row.logistic_status as ParkStage) : "purchased"
 }
 

@@ -8,6 +8,7 @@ import { BoughtCarCard } from "@/components/cards/bought-car-card"
 import { MarkAsBoughtModal } from "@/components/modals/mark-as-bought-modal"
 import { SellCarModal } from "@/components/modals/sell-car-modal"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { loadClientCars } from "@/lib/client-cars"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
@@ -108,6 +109,7 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
         .order('created_at', { ascending: false })
 
       if (carsError) throw carsError
+      const clientCars = await loadClientCars()
 
       // Bypass for God Mode or Admins/Importadores
       const isAdminOrGod = isGodMode || profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.role === 'importador'
@@ -137,7 +139,11 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
         invoice_number: car.invoice_number,
         plate: car.plate,
         vin: car.vin,
-        mileage: car.mileage != null ? Number(car.mileage) : undefined
+        mileage: car.mileage != null ? Number(car.mileage) : undefined,
+        // Coche de cliente: no es inversión propia, cobra honorarios
+        client_name: clientCars.get(car.id)?.customerName,
+        client_fee: car.client_fee != null ? Number(car.client_fee) : null,
+        delivered_at: car.delivered_at ?? null
       }))
 
       setBoughtCars(formattedCars)

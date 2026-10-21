@@ -6,6 +6,7 @@ import { RecentSalesSection } from "@/components/dashboard/recent-sales"
 import { HighlightsSection } from "@/components/dashboard/highlights"
 import { DashboardCharts } from "@/components/dashboard/charts"
 import { RemindersWidget } from "@/components/tabs/reminders-tab"
+import { loadClientCars } from "@/lib/client-cars"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 
@@ -131,7 +132,20 @@ export function Dashboard({ isActive = true }: DashboardProps) {
       const daysInInventory: number[] = []
       let totalFacturacion = 0
 
+      // Coches de cliente: no son inversión propia; el beneficio son los honorarios cuando se entregan
+      const clientCars = await loadClientCars()
+      const rawById = new Map((myInventory || []).map((c: any) => [c.id, c]))
+
       formattedInventory.forEach((car) => {
+        if (clientCars.has(car.id)) {
+          const raw: any = rawById.get(car.id)
+          if (raw?.logistic_status === "delivered") {
+            const fee = Number(raw?.client_fee) || 0
+            totalProfit += fee
+            totalFacturacion += fee
+          }
+          return
+        }
         const totalInvested =
           car.initialPrice + car.initialExpenses + (car.expenses?.reduce((sum: number, e: any) => sum + e.amount, 0) || 0)
 

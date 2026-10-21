@@ -44,6 +44,27 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
 
   const totalInvested = safeInitialPrice + safeInitialExpenses + safeAdditionalExpenses
 
+  // Coche de cliente: el cliente paga el coche; lo tuyo son los honorarios
+  const isClientCar = Boolean(car.client_name)
+  const [fee, setFee] = useState<string>(car.client_fee != null ? String(car.client_fee) : "")
+  const [savingFee, setSavingFee] = useState(false)
+  const [delivered, setDelivered] = useState<boolean>(car.logistic_status === "delivered")
+  const saveFee = async () => {
+    const value = fee.trim() === "" ? null : Number(fee)
+    if (value != null && (!Number.isFinite(value) || value < 0)) { toast.error("Importe no válido"); return }
+    setSavingFee(true)
+    const { error } = await supabase.from("inventory_cars").update({ client_fee: value }).eq("id", car.id)
+    setSavingFee(false)
+    if (error) { toast.error(/client_fee/.test(error.message) ? "Falta ejecutar supabase/2026-10_coches_de_cliente.sql en Supabase" : error.message); return }
+    toast.success("Honorarios guardados")
+  }
+  const markDelivered = async () => {
+    const { error } = await supabase.from("inventory_cars").update({ logistic_status: "delivered", delivered_at: new Date().toISOString() }).eq("id", car.id)
+    if (error) { toast.error(/delivered_at/.test(error.message) ? "Falta ejecutar supabase/2026-10_coches_de_cliente.sql en Supabase" : error.message); return }
+    setDelivered(true)
+    toast.success(`Entregado. ${car.client_name} ya lo ve como entregado y puede dejar su opinión.`)
+  }
+
   const profit = car.sellPrice
     ? (typeof car.sellPrice === "number" && !isNaN(car.sellPrice) ? car.sellPrice : 0) - totalInvested
     : 0
@@ -117,8 +138,11 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
               className={`px-2 py-0.5 rounded-full text-xs font-medium ${car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"
                 }`}
             >
-              {car.status === "inventory" ? "En inventario" : "Vendido"}
+              {isClientCar ? (delivered ? "Entregado" : "Coche de cliente") : car.status === "inventory" ? "En inventario" : "Vendido"}
             </span>
+            {isClientCar && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-warning/10 text-warning">{car.client_name}</span>
+            )}
             {car.invoice_number && (
               <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">{car.invoice_number}</span>
             )}
@@ -133,10 +157,39 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
 
       {/* Resumen */}
       <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 border-b text-sm">
+        {isClientCar ? (
+          <>
+            <div>
+              <p className="text-muted-foreground text-xs mb-1">Pagado por cuenta del cliente</p>
+              <p className="font-semibold tabular">{eur(totalInvested)}</p>
+            </div>
+            <div className="col-span-2 md:col-span-3">
+              <p className="text-muted-foreground text-xs mb-1">Mis honorarios por este coche</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveFee() }}
+                  placeholder="0"
+                  className="w-32 rounded-md border bg-background px-2.5 py-1.5 text-sm tabular outline-none focus:ring-2 focus:ring-ring"
+                />
+                <span className="text-muted-foreground">€</span>
+                <button onClick={saveFee} disabled={savingFee || fee === (car.client_fee != null ? String(car.client_fee) : "")}
+                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                  Guardar
+                </button>
+                <span className="text-xs text-muted-foreground">Es tu beneficio: el coche lo paga el cliente.</span>
+              </div>
+            </div>
+          </>
+        ) : (
         <div>
           <p className="text-muted-foreground text-xs mb-1">Inversión total</p>
           <p className="font-semibold tabular">{eur(totalInvested)}</p>
         </div>
+        )}
         {car.status === "sold" && (
           <>
             <div>
@@ -212,15 +265,15 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
           )}
 
           {/* Por dónde va (para el cliente que sigue el coche en la web) */}
-          {car.status !== "sold" && <ClientRouteUpdater carId={car.id} />}
+          {car.status !== "sold" && !delivered && <ClientRouteUpdater carId={car.id} />}
 
           {/* Desglose de inversión */}
           <div>
-            <h4 className="font-semibold mb-3">Desglose de Inversión</h4>
+            <h4 className="font-semibold mb-3">{isClientCar ? "Pagos por cuenta del cliente" : "Desglose de Inversión"}</h4>
             <div className="space-y-2 text-sm">
               {car.expenses.length === 0 && (
                 <p className="text-muted-foreground text-sm italic">
-                  No hay gastos registrados. Añade el precio del coche como primer gasto.
+                  {isClientCar ? "Aún no hay pagos. Apunta aquí lo que pagas por cuenta del cliente (el coche, transporte, impuestos…)." : "No hay gastos registrados. Añade el precio del coche como primer gasto."}
                 </p>
               )}
               {car.expenses.map((expense: any) => (
@@ -249,7 +302,7 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
 
           {/* Añadir gasto */}
           <div className="bg-muted/50 rounded-lg p-4 space-y-3">
-            <h4 className="font-semibold text-sm">Añadir Gasto</h4>
+            <h4 className="font-semibold text-sm">{isClientCar ? "Añadir pago por cuenta del cliente" : "Añadir Gasto"}</h4>
             <input
               type="text"
               placeholder="Concepto"
@@ -324,12 +377,20 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
               importedId={car.imported_car_id}
               title={`${car.brand} ${car.model}${car.year ? ` (${car.year})` : ""}`}
             />
-            {car.status === "inventory" && (
+            {car.status === "inventory" && !isClientCar && (
               <button
                 onClick={onMarkAsSold}
                 className="flex-1 px-3 py-2 bg-success text-success-foreground rounded-lg hover:bg-success/90 transition-colors text-sm font-medium"
               >
                 Marcar como vendido
+              </button>
+            )}
+            {isClientCar && !delivered && (
+              <button
+                onClick={markDelivered}
+                className="flex-1 px-3 py-2 bg-success text-success-foreground rounded-lg hover:bg-success/90 transition-colors text-sm font-medium"
+              >
+                Marcar como entregado
               </button>
             )}
             <button

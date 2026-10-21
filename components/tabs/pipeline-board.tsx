@@ -11,15 +11,18 @@ import { SellCarModal, type SellCarData } from "@/components/modals/sell-car-mod
 import { markImportedCarAsBought, printInvoiceForCar, sellInventoryCar } from "@/lib/sales"
 import { OPEN_CAR_EVENT, type OpenCarDetail } from "@/components/command-palette"
 import { cn } from "@/lib/utils"
+import { loadClientCars, type ClientCarInfo } from "@/lib/client-cars"
 
 type ImportedStage = "found" | "contacted" | "negotiating"
 type LogisticStage = "purchased" | "in_transit" | "homologation" | "detailing" | "ready"
-type StageId = ImportedStage | LogisticStage | "sold"
+/** Solo para coches de cliente (asignados en "Área cliente") */
+type ClientStage = "preparing" | "delivered"
+type StageId = ImportedStage | LogisticStage | ClientStage | "sold"
 
 interface Column {
   id: StageId
   label: string
-  source: "imported" | "inventory"
+  source: "imported" | "inventory" | "client"
   hint: string
 }
 
@@ -33,6 +36,12 @@ const COLUMNS: Column[] = [
   { id: "detailing", label: "Taller", source: "inventory", hint: "Puesta a punto" },
   { id: "ready", label: "A la venta", source: "inventory", hint: "Listo para vender" },
   { id: "sold", label: "Vendido", source: "inventory", hint: "Últimos 60 días" },
+]
+
+/** Se ven solo si hay algún coche de cliente */
+const CLIENT_COLUMNS: Column[] = [
+  { id: "preparing", label: "En preparación", source: "client", hint: "Coche de cliente" },
+  { id: "delivered", label: "Entregado", source: "client", hint: "Coche de cliente · 60 días" },
 ]
 
 const IMPORTED_STAGES: ImportedStage[] = ["found", "contacted", "negotiating"]
@@ -59,6 +68,7 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
   const { user, isGodMode, profile } = useAuth()
   const [imported, setImported] = useState<any[]>([])
   const [inventory, setInventory] = useState<any[]>([])
+  const [clientCars, setClientCars] = useState<Map<string, ClientCarInfo>>(new Map())
   const [loading, setLoading] = useState(true)
   const [dragOver, setDragOver] = useState<StageId | null>(null)
   const [showDiscarded, setShowDiscarded] = useState(false)
@@ -70,7 +80,7 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
 
   const load = async () => {
     setLoading(true)
-    const [imp, inv] = await Promise.all([
+    const [imp, inv, clients] = await Promise.all([
       supabase
         .from("imported_cars")
         .select("id, user_id, shared_with, brand, model, year, mileage, price, total_cost, contacted, pipeline_stage, image_url, images, created_at")
@@ -79,7 +89,9 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
         .from("inventory_cars")
         .select("*, expenses:car_expenses(amount)")
         .order("created_at", { ascending: false }),
+      loadClientCars(),
     ])
+    setClientCars(clients)
     if (imp.error) toast.error("Error al cargar importación")
     if (inv.error) toast.error("Error al cargar inventario")
 
@@ -143,6 +155,27 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
         })
         continue
       }
+      const client = clientCars.get(car.id)
+      if (client) {
+        // Coche de cliente: sus fases propias e importe = honorarios
+        if (car.logistic_status === "delivered" && car.delivered_at && new Date(car.delivered_at).getTime() < soldCutoff) continue
+        const stage: StageId = car.logistic_status === "delivered" ? "delivered"
+          : car.logistic_status === "preparing" ? "preparing"
+          : (LOGISTIC_STAGES as string[]).includes(car.logistic_status) && car.logistic_status !== "ready" ? (car.logistic_status as LogisticStage) : "purchased"
+        result.push({
+          key: `v-${car.id}`,
+          table: "inventory_cars",
+          id: car.id,
+          stage,
+          title: `${car.brand} ${car.model}`,
+          subtitle: [car.year, client.customerName].filter(Boolean).join(" · "),
+          amount: car.client_fee != null ? Number(car.client_fee) : null,
+          amountLabel: "Honorarios",
+          days: daysSince(car.date_purchased),
+          raw: car,
+        })
+        continue
+      }
       const stage = (LOGISTIC_STAGES as string[]).includes(car.logistic_status) ? (car.logistic_status as LogisticStage) : "purchased"
       result.push({
         key: `v-${car.id}`,
@@ -158,7 +191,10 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
       })
     }
     return result
-  }, [imported, inventory, showDiscarded])
+  }, [imported, inventory, showDiscarded, clientCars])
+
+  // Las columnas de cliente solo aparecen si hay algún coche de cliente
+  const columns = useMemo(() => (inventory.some(c => clientCars.has(c.id)) ? [...COLUMNS, ...CLIENT_COLUMNS] : COLUMNS), [inventory, clientCars])
 
   const canEditImported = (car: any) => isGodMode || car.user_id === user?.id
 
@@ -181,13 +217,17 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
     }
   }
 
-  const moveInventory = async (card: BoardCard, stage: LogisticStage) => {
-    setInventory(prev => prev.map(c => (c.id === card.id ? { ...c, logistic_status: stage } : c)))
-    const { error } = await supabase.from("inventory_cars").update({ logistic_status: stage }).eq("id", card.id)
+  const moveInventory = async (card: BoardCard, stage: LogisticStage | ClientStage) => {
+    const patch: Record<string, unknown> = { logistic_status: stage }
+    if (stage === "delivered") patch.delivered_at = new Date().toISOString()
+    setInventory(prev => prev.map(c => (c.id === card.id ? { ...c, ...patch } : c)))
+    const { error } = await supabase.from("inventory_cars").update(patch).eq("id", card.id)
     if (error) {
-      toast.error("No se pudo mover: " + error.message)
+      toast.error(/delivered_at/.test(error.message) ? "Falta ejecutar supabase/2026-10_coches_de_cliente.sql en Supabase" : "No se pudo mover: " + error.message)
       load()
+      return
     }
+    if (stage === "delivered") toast.success("Entregado: el cliente ya lo ve y puede dejar su opinión")
   }
 
   const handleDrop = (stage: StageId, key: string) => {
@@ -204,6 +244,15 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
 
     if (card.stage === "sold") {
       toast.info("Un coche vendido no se puede mover")
+      return
+    }
+    const isClientCar = clientCars.has(card.id)
+    if (stage === "preparing" || stage === "delivered") {
+      if (!isClientCar) { toast.info("Estas columnas son para coches de cliente (asígnalo en «Área cliente»)"); return }
+      return moveInventory(card, stage)
+    }
+    if (isClientCar && (stage === "ready" || stage === "sold")) {
+      toast.info("Es un coche de cliente: usa «En preparación» y «Entregado»")
       return
     }
     if (stage === "sold") return setSellCar(toSellModalCar(card.raw))
@@ -277,10 +326,10 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
       </div>
 
       <div className="scrollbar-thin -mx-4 flex gap-3 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        {COLUMNS.map((column, index) => {
+        {columns.map((column, index) => {
           const columnCards = cards.filter(c => c.stage === column.id)
           const total = totals.get(column.id)
-          const isBoundary = index > 0 && COLUMNS[index - 1].source !== column.source
+          const isBoundary = index > 0 && columns[index - 1].source !== column.source
           return (
             <div key={column.id} className={cn("flex shrink-0", isBoundary && "border-l-2 border-dashed pl-3")}>
               <div
