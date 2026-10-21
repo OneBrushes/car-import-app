@@ -10,6 +10,7 @@
 //
 // Acciones (POST, JSON):
 //   { action: "rebuild" }         → desde la app (sesión del equipo): vuelve a generar la web con los artículos publicados
+//   { action: "deploy_status" }   → desde la app: estado del último despliegue de la web (para la barra de progreso)
 //   { action: "titles" }          → desde la tarea de Claude (cabecera x-blog-token): títulos que ya existen
 //   { action: "images", query }   → desde la tarea de Claude: busca fotos libres (Pexels, Wikimedia Commons, Openverse)
 //                                   con su autor y licencia
@@ -59,6 +60,20 @@ async function rebuildSite(): Promise<{ ok: boolean; message?: string }> {
   })
   if (res.status === 204) return { ok: true }
   return { ok: false, message: `GitHub respondió ${res.status}: ${(await res.text()).slice(0, 200)}` }
+}
+
+/** Último despliegue de la web en GitHub Actions (para la barra de progreso de la app) */
+async function lastDeploy() {
+  const token = Deno.env.get("GITHUB_TOKEN")
+  const repo = Deno.env.get("GITHUB_REPO") || "OneBrushes/nordrive-landing"
+  if (!token) return null
+  const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/pages.yml/runs?per_page=1`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "nordrive-blog" },
+  })
+  if (!res.ok) return null
+  const run = (await res.json()).workflow_runs?.[0]
+  if (!run) return null
+  return { status: run.status, conclusion: run.conclusion, created_at: run.created_at, updated_at: run.updated_at, started_at: run.run_started_at, url: run.html_url }
 }
 
 // ---- Búsqueda de fotos libres ----------------------------------------------------------------------------------------
@@ -229,13 +244,14 @@ Deno.serve(async (req) => {
     return json({ error: "Petición no válida" }, 400)
   }
 
-  // ---- Desde la app: regenerar la web ----
-  if (body.action === "rebuild") {
+  // ---- Desde la app: regenerar la web y ver cómo va ----
+  if (body.action === "rebuild" || body.action === "deploy_status") {
     const asUser = createClient(url, anonKey, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } })
     const { data: { user } } = await asUser.auth.getUser()
     if (!user) return json({ error: "Sesión no válida" }, 401)
     const { data: me } = await asUser.from("profiles").select("role").eq("id", user.id).single()
     if (!me || !STAFF_ROLES.includes(me.role)) return json({ error: "Sin permiso" }, 403)
+    if (body.action === "deploy_status") return json({ run: await lastDeploy() })
     const r = await rebuildSite()
     return r.ok ? json({ status: "rebuilding" }) : json({ error: r.message }, 502)
   }

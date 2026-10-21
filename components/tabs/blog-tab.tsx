@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ArrowLeft, Bot, Eye, ExternalLink, FileText, ImagePlus, Loader2, PenLine, Plus, Rocket, Trash2, Users } from "lucide-react"
+import { ArrowLeft, Bot, Check, Eye, ExternalLink, FileText, ImagePlus, Loader2, PenLine, Plus, Rocket, Search, Trash2, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
@@ -11,9 +11,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { BlogDeployProgress } from "@/components/blog-deploy-progress"
+import { startDeploy } from "@/lib/blog-deploy"
+import { seoReport, seoTone } from "@/lib/blog-seo"
 import {
-  deletePost, getAutoPublish, isFuture, listPosts, postState, readingMinutes, rebuildSite, savePost, setAutoPublish, siteStats, slugify, uploadCover,
-  SITE_URL, CATEGORY_LABEL, type BlogCategory, type BlogPost, type BlogPostInput, type SiteStats,
+  deletePost, getAutoPublish, isFuture, listPosts, postState, postStats, readingMinutes, rebuildSite, savePost, setAutoPublish, siteStats, slugify, uploadCover,
+  SITE_URL, CATEGORY_LABEL, type BlogCategory, type BlogPost, type BlogPostInput, type PostStats, type SiteStats,
 } from "@/lib/blog"
 
 const STATE_LABEL = { draft: "Borrador", scheduled: "Programado", published: "Publicado" } as const
@@ -45,6 +48,7 @@ export function BlogTab({ isActive = true }: { isActive?: boolean }) {
   const [autoPublish, setAuto] = useState(false)
   const [stats, setStats] = useState<SiteStats | null>(null)
   const [days, setDays] = useState(30)
+  const [perPost, setPerPost] = useState<Map<string, PostStats>>(new Map())
 
   const load = async () => {
     setLoading(true)
@@ -64,6 +68,7 @@ export function BlogTab({ isActive = true }: { isActive?: boolean }) {
   useEffect(() => {
     if (!isActive) return
     siteStats(days).then(setStats).catch(() => setStats(null))
+    postStats(days).then(setPerPost).catch(() => setPerPost(new Map()))
   }, [isActive, days])
 
   const viewsBySlug = useMemo(() => new Map((stats?.top_posts ?? []).map((p) => [p.slug, p])), [stats])
@@ -83,6 +88,8 @@ export function BlogTab({ isActive = true }: { isActive?: boolean }) {
     return (
       <PostEditor
         post={editing === "new" ? null : editing}
+        stats={editing === "new" ? undefined : perPost.get(editing.slug)}
+        days={days}
         onBack={() => { setEditing(null); load() }}
       />
     )
@@ -90,6 +97,7 @@ export function BlogTab({ isActive = true }: { isActive?: boolean }) {
 
   return (
     <div className="space-y-6 animate-in">
+      <BlogDeployProgress />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Blog del motor</h2>
@@ -136,7 +144,7 @@ export function BlogTab({ isActive = true }: { isActive?: boolean }) {
           <Bot className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
           <div>
             <p className="text-sm font-semibold">Artículos de Claude</p>
-            <p className="text-xs text-muted-foreground">Claude escribe un artículo cada semana y te llega un aviso. {autoPublish ? "Se publica solo en la web." : "Queda en borrador: revísalo y pulsa «Subir a la web»."}</p>
+            <p className="text-xs text-muted-foreground">Claude escribe una guía de importación (lunes, miércoles y viernes) y una noticia del motor (martes, jueves, sábado y domingo), y te llega un aviso. {autoPublish ? "Se publica solo en la web." : "Queda en borrador: revísalo y pulsa «Subir a la web»."}</p>
           </div>
         </div>
         <label className={`flex items-center gap-2 text-sm ${isAdmin ? "cursor-pointer" : "opacity-60"}`} title={isAdmin ? "" : "Solo un administrador puede cambiarlo"}>
@@ -157,6 +165,8 @@ export function BlogTab({ isActive = true }: { isActive?: boolean }) {
           {posts.map((p) => {
             const state = postState(p)
             const v = viewsBySlug.get(p.slug)
+            const ps = perPost.get(p.slug)
+            const seo = seoReport(p).score
             return (
               <div key={p.id} className="flex items-center gap-3 p-3">
                 <div className="h-14 w-20 shrink-0 overflow-hidden rounded-md bg-muted">
@@ -169,7 +179,9 @@ export function BlogTab({ isActive = true }: { isActive?: boolean }) {
                     <span className="rounded-full bg-muted px-2 py-0.5">{CATEGORY_LABEL[p.category] ?? CATEGORY_LABEL.importacion}</span>
                     {p.source === "claude" && <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3" /> Claude</span>}
                     <span>{p.published_at ? new Date(p.published_at).toLocaleDateString("es-ES") : `Editado ${new Date(p.updated_at).toLocaleDateString("es-ES")}`}</span>
-                    {v && <span className="inline-flex items-center gap-1"><Eye className="h-3 w-3" /> {v.views} visitas</span>}
+                    <span className={`rounded-full px-2 py-0.5 font-medium ${seoTone(seo)}`} title="Nota SEO: lo bien preparado que está para Google">SEO {seo}</span>
+                    {(ps || v) && <span className="inline-flex items-center gap-1"><Eye className="h-3 w-3" /> {(ps?.views ?? v?.views ?? 0).toLocaleString("es-ES")} visitas</span>}
+                    {ps && ps.search_visitors > 0 && <span className="inline-flex items-center gap-1" title="Visitantes que llegaron desde Google u otros buscadores"><Search className="h-3 w-3" /> {ps.search_visitors} desde Google</span>}
                   </p>
                 </button>
                 {state === "published" && (
@@ -221,7 +233,7 @@ function DailyChart({ data }: { data: SiteStats["by_day"] }) {
 
 // =====================================================================================================================
 
-function PostEditor({ post, onBack }: { post: BlogPost | null; onBack: () => void }) {
+function PostEditor({ post, stats, days, onBack }: { post: BlogPost | null; stats?: PostStats; days: number; onBack: () => void }) {
   const [current, setCurrent] = useState<BlogPost | null>(post)
   const [form, setForm] = useState<BlogPostInput>(post ? { ...post } : { ...EMPTY })
   const [slugTouched, setSlugTouched] = useState(Boolean(post))
@@ -236,6 +248,8 @@ function PostEditor({ post, onBack }: { post: BlogPost | null; onBack: () => voi
   const state = current ? postState(current) : "draft"
   const seoTitle = (form.seo_title || form.title || "Título del artículo").slice(0, 70)
   const seoDesc = (form.seo_description || form.excerpt || "Resumen del artículo…").slice(0, 170)
+
+  const seo = useMemo(() => seoReport({ ...form, tags: tagsText.split(",").map((t) => t.trim()).filter(Boolean) }), [form, tagsText])
 
   const problems = [
     !form.title.trim() && "Falta el título",
@@ -262,10 +276,16 @@ function PostEditor({ post, onBack }: { post: BlogPost | null; onBack: () => voi
       setCurrent(saved)
       setForm({ ...saved })
       setScheduleAt(toLocalInput(saved.published_at))
+      const wasLive = current ? postState(current) === "published" : false
       if (publish === "keep") {
         toast.success(saved.status === "published" ? "Guardado. Pulsa «Subir a la web» para que se vean los cambios." : "Borrador guardado")
       } else {
         await rebuildSite()
+        if (publish === "unpublish") {
+          if (wasLive) startDeploy({ slug: saved.slug, title: saved.title, expect: "gone" })
+        } else if (postState(saved) === "published") {
+          startDeploy({ slug: saved.slug, title: saved.title, expect: wasLive ? "update" : "live" })
+        }
         toast.success(publish === "publish"
           ? (postState(saved) === "scheduled" ? `Programado para el ${new Date(saved.published_at!).toLocaleString("es-ES")}` : "Subiendo a la web… estará visible en 2-3 minutos")
           : "Quitado de la web (tarda 2-3 minutos)")
@@ -281,7 +301,11 @@ function PostEditor({ post, onBack }: { post: BlogPost | null; onBack: () => voi
     if (!current || !confirm("¿Borrar este artículo? No se puede deshacer.")) return
     try {
       await deletePost(current.id)
-      if (state !== "draft") await rebuildSite().catch(() => undefined)
+      if (state !== "draft") {
+        await rebuildSite().then(() => {
+          if (state === "published") startDeploy({ slug: current.slug, title: current.title, expect: "gone" })
+        }).catch(() => undefined)
+      }
       toast.success("Artículo borrado")
       onBack()
     } catch (e: any) {
@@ -303,6 +327,7 @@ function PostEditor({ post, onBack }: { post: BlogPost | null; onBack: () => voi
 
   return (
     <div className="space-y-5 animate-in">
+      <BlogDeployProgress />
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Blog</Button>
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATE_CLASS[state]}`}>{STATE_LABEL[state]}</span>
@@ -347,6 +372,7 @@ function PostEditor({ post, onBack }: { post: BlogPost | null; onBack: () => voi
         </div>
 
         <aside className="space-y-4">
+          <SeoPanel report={seo} stats={stats} days={days} published={state === "published"} />
           <div className="space-y-2 rounded-xl border bg-card p-4">
             <Label className="text-xs text-muted-foreground">Portada</Label>
             <button type="button" onClick={() => coverInput.current?.click()} className="relative block aspect-[16/9] w-full overflow-hidden rounded-lg border border-dashed bg-muted">
@@ -413,6 +439,65 @@ function PostEditor({ post, onBack }: { post: BlogPost | null; onBack: () => voi
           </div>
         </aside>
       </div>
+    </div>
+  )
+}
+
+/** Lo que aporta el artículo al SEO de la web: nota de preparación para Google y visitas reales desde buscadores */
+function SeoPanel({ report, stats, days, published }: { report: ReturnType<typeof seoReport>; stats?: PostStats; days: number; published: boolean }) {
+  const [open, setOpen] = useState(false)
+  const failing = report.checks.filter((c) => !c.ok)
+  return (
+    <div className="space-y-3 rounded-xl border bg-card p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold">Lo que suma al SEO</p>
+        <span className={`rounded-full px-2.5 py-0.5 text-sm font-semibold tabular ${seoTone(report.score)}`}>{report.score}/100</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full ${report.score >= 80 ? "bg-success" : report.score >= 55 ? "bg-warning" : "bg-destructive"}`} style={{ width: `${report.score}%` }} />
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {report.score >= 80 ? "Muy bien preparado para posicionar en Google." : report.score >= 55 ? "Puede posicionar, pero hay mejoras fáciles." : "Le falta bastante para competir en Google."}
+        {report.keyword ? <> Palabra clave: <span className="font-medium text-foreground">{report.keyword}</span>.</> : " Añade etiquetas: la primera es la palabra clave."}
+      </p>
+
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-lg bg-muted/40 p-2">
+          <p className="tabular text-base font-semibold">{(stats?.views ?? 0).toLocaleString("es-ES")}</p>
+          <p className="text-[10px] text-muted-foreground">visitas</p>
+        </div>
+        <div className="rounded-lg bg-muted/40 p-2">
+          <p className="tabular text-base font-semibold">{(stats?.visitors ?? 0).toLocaleString("es-ES")}</p>
+          <p className="text-[10px] text-muted-foreground">visitantes</p>
+        </div>
+        <div className="rounded-lg bg-muted/40 p-2">
+          <p className="tabular text-base font-semibold text-primary">{(stats?.search_visitors ?? 0).toLocaleString("es-ES")}</p>
+          <p className="text-[10px] text-muted-foreground">desde Google</p>
+        </div>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {published
+          ? `Últimos ${days} días. Google suele tardar de 2 a 8 semanas en empezar a mandar visitas a un artículo nuevo.`
+          : "Las visitas aparecen cuando el artículo está en la web."}
+      </p>
+
+      <button type="button" onClick={() => setOpen((o) => !o)} className="text-xs font-medium text-primary hover:underline">
+        {open ? "Ocultar detalle" : failing.length ? `Cómo subir la nota (${failing.length} mejoras)` : "Ver detalle"}
+      </button>
+      {open && (
+        <ul className="space-y-1.5">
+          {report.checks.map((c) => (
+            <li key={c.label} className="flex gap-2 text-xs">
+              {c.ok ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />}
+              <span>
+                <span className={c.ok ? "" : "font-medium"}>{c.label}</span>
+                <span className="text-muted-foreground"> · {c.points}/{c.max}</span>
+                {!c.ok && <span className="block text-[11px] text-muted-foreground">{c.tip}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

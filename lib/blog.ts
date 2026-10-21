@@ -126,3 +126,45 @@ export async function siteStats(days = 30): Promise<SiteStats> {
   if (error) throw blogError(error)
   return data as SiteStats
 }
+
+// ---- Subida a la web (barra de progreso) ----
+
+export interface DeployRun {
+  status: string // queued | in_progress | completed | waiting | requested | pending
+  conclusion: string | null // success | failure | cancelled…
+  created_at: string
+  updated_at: string
+  started_at: string | null
+  url: string
+}
+
+/** Último despliegue de la web (GitHub Actions), o null si no se puede saber */
+export async function getDeployStatus(): Promise<DeployRun | null> {
+  const { data, error } = await supabase.functions.invoke("blog", { body: { action: "deploy_status" } })
+  if (error) return null
+  return (data?.run as DeployRun) ?? null
+}
+
+/** ¿Está ya la página del artículo en la web? true / false (404) / null (no se pudo comprobar) */
+export async function pageOnSite(slug: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`${SITE_URL}/blog/${slug}/?v=${Date.now()}`, { cache: "no-store" })
+    if (res.ok) return true
+    return res.status === 404 ? false : null
+  } catch {
+    return null
+  }
+}
+
+// ---- Lo que aporta cada artículo ----
+
+export interface PostStats { slug: string; views: number; visitors: number; search_visitors: number; first_view: string }
+
+export const MISSING_SEO_STATS_HINT = "Para ver las visitas desde Google por artículo, ejecuta supabase/2026-10_blog_seo.sql en Supabase."
+
+/** Visitas por artículo y cuántas llegan desde buscadores (Google, Bing…) */
+export async function postStats(days = 30): Promise<Map<string, PostStats>> {
+  const { data, error } = await supabase.rpc("blog_post_stats", { days })
+  if (error) throw new Error(error.code === "PGRST202" ? MISSING_SEO_STATS_HINT : error.message)
+  return new Map(((data as PostStats[]) ?? []).map((r) => [r.slug, { ...r, views: Number(r.views), visitors: Number(r.visitors), search_visitors: Number(r.search_visitors) }]))
+}
