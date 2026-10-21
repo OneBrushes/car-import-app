@@ -25,6 +25,7 @@ import { CustomersTab } from "@/components/tabs/customers-tab"
 import { FiscalSummary } from "@/components/tabs/fiscal-summary"
 import { DonationsTab } from "@/components/tabs/donations-tab"
 import { RemindersTab } from "@/components/tabs/reminders-tab"
+import { BlogTab } from "@/components/tabs/blog-tab"
 import { exportToExcel } from "@/lib/excel-export"
 import { toast } from "sonner"
 import { CommandPalette, CommandPaletteTrigger, OPEN_CAR_EVENT } from "@/components/command-palette"
@@ -47,7 +48,7 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-type TabType = "dashboard" | "import" | "spain" | "comparison" | "calculator" | "customers" | "fiscal" | "reminders" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations" | "map" | "roadmap" | "expenses"
+type TabType = "dashboard" | "import" | "spain" | "comparison" | "calculator" | "customers" | "fiscal" | "reminders" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations" | "map" | "roadmap" | "expenses" | "blog"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
@@ -89,7 +90,7 @@ export default function Home() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tab = params.get("tab")
-    const valid: TabType[] = ["dashboard", "import", "spain", "comparison", "calculator", "customers", "fiscal", "reminders", "management", "report", "profitable", "admin", "checklist", "donations", "map", "roadmap", "expenses"]
+    const valid: TabType[] = ["dashboard", "import", "spain", "comparison", "calculator", "customers", "fiscal", "reminders", "management", "report", "profitable", "admin", "checklist", "donations", "map", "roadmap", "expenses", "blog"]
     if (tab && (valid as string[]).includes(tab)) setActiveTab(tab as TabType)
     const car = params.get("car")
     const table = params.get("table")
@@ -383,6 +384,9 @@ export default function Home() {
             </div>
             <div className={activeTab === "fiscal" && (role === 'importador' || role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
               <FiscalSummary isActive={activeTab === "fiscal"} />
+            </div>
+            <div className={activeTab === "blog" && (role === 'gestor' || role === 'importador' || role === 'admin' || role === 'super_admin') ? "block animate-in fade-in duration-300" : "hidden"}>
+              <BlogTab isActive={activeTab === "blog"} />
             </div>
             <div className={activeTab === "reminders" ? "block animate-in fade-in duration-300" : "hidden"}>
               <RemindersTab isActive={activeTab === "reminders"} />

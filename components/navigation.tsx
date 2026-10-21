@@ -2,7 +2,7 @@
 
 import {
   Car, MapPin, Scale, Archive, Home, FileText, TrendingUp, CheckSquare, Heart,
-  Map as MapIcon, Network, Wallet, EyeOff, Eye, Shield, PanelLeftClose, PanelLeftOpen, Calculator, Users, BellRing, Landmark, Warehouse,
+  Map as MapIcon, Network, Wallet, EyeOff, Eye, Shield, PanelLeftClose, PanelLeftOpen, Calculator, Users, Newspaper, Landmark, Warehouse,
   type LucideIcon,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -35,7 +35,6 @@ export function getNavGroups(role: string | null | undefined, donationsVisible: 
       label: "General",
       items: [
         { id: "dashboard", label: "Dashboard", icon: Home, roles: ALL_ROLES },
-        { id: "reminders", label: "Recordatorios", icon: BellRing, roles: MANAGER_ROLES },
       ],
     },
     {
@@ -68,6 +67,12 @@ export function getNavGroups(role: string | null | undefined, donationsVisible: 
           ? [{ id: "donations", label: "Donaciones", icon: Heart, roles: ALL_ROLES }]
           : []),
         { id: "admin", label: "Administración", icon: Shield, roles: ADMIN_ROLES },
+      ],
+    },
+    {
+      label: "Web",
+      items: [
+        { id: "blog", label: "Blog", icon: Newspaper, roles: MANAGER_ROLES },
       ],
     },
   ]
