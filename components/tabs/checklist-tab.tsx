@@ -7,74 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { Loader2, Save, CheckCircle2, AlertCircle } from "lucide-react"
-
-const CHECKLIST_SECTIONS = {
-    exterior: {
-        title: "Exterior",
-        items: [
-            "Estado de la pintura (arañazos, golpes)",
-            "Lunas y espejos",
-            "Llantas y neumáticos (profundidad, marca)",
-            "Luces y faros (funcionamiento, roturas)",
-            "Ajuste de puertas y capó"
-        ]
-    },
-    interior: {
-        title: "Interior",
-        items: [
-            "Tapicería y asientos",
-            "Volante y palanca de cambios",
-            "Botones y mandos",
-            "Aire acondicionado / Climatizador",
-            "Cuadro de instrumentos (testigos)"
-        ]
-    },
-    motor: {
-        title: "Motor y Mecánica",
-        items: [
-            "Nivel de aceite",
-            "Nivel de refrigerante",
-            "Fugas visibles",
-            "Ruidos extraños al arrancar",
-            "Estado de correas (visual)"
-        ]
-    },
-    prueba: {
-        title: "Prueba Dinámica",
-        items: [
-            "Arranque en frío",
-            "Frenada",
-            "Dirección (holguras, ruidos)",
-            "Cambio de marchas (suavidad)",
-            "Suspensión (ruidos)"
-        ]
-    },
-    documentacion: {
-        title: "Documentación",
-        items: [
-            "Permiso de circulación",
-            "Ficha técnica",
-            "Libro de mantenimiento",
-            "Número de llaves",
-            "COC (Certificado de Conformidad)"
-        ]
-    },
-    herramientas: {
-        title: "Herramientas / Diagnóstico",
-        items: [
-            "Espesómetro (Pintura original)",
-            "Lectura OBD (Códigos de error)"
-        ]
-    }
-}
-
-interface ChecklistData {
-    [key: string]: {
-        checked: boolean
-        note: string
-    }
-}
+import { Loader2, Save, CheckCircle2, AlertCircle, Camera, X } from "lucide-react"
+import { CHECKLIST_SECTIONS, withLabels, type ChecklistData } from "@/lib/checklist"
 
 export function ChecklistTab() {
     const [cars, setCars] = useState<any[]>([])
@@ -82,6 +16,7 @@ export function ChecklistTab() {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [checklistData, setChecklistData] = useState<ChecklistData>({})
+    const [uploadingItem, setUploadingItem] = useState<string | null>(null)
 
     useEffect(() => {
         fetchCars()
@@ -140,6 +75,7 @@ export function ChecklistTab() {
         setChecklistData(prev => ({
             ...prev,
             [item]: {
+                ...prev[item],
                 checked,
                 note: prev[item]?.note || ""
             }
@@ -150,10 +86,67 @@ export function ChecklistTab() {
         setChecklistData(prev => ({
             ...prev,
             [item]: {
+                ...prev[item],
                 checked: prev[item]?.checked || false,
                 note
             }
         }))
+    }
+
+    /** Guarda en Supabase (con el texto y la sección de cada punto, para el área de clientes) */
+    const persist = async (data: ChecklistData) => {
+        const { error } = await supabase
+            .from('car_checklists')
+            .upsert({
+                car_id: selectedCarId,
+                data: withLabels(data),
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'car_id' })
+        if (error) throw error
+    }
+
+    /** Fotos de un punto: se suben a car-images/checklists/<coche>/ y se guardan al momento */
+    const addPhotos = async (item: string, files: FileList | null) => {
+        if (!files?.length || !selectedCarId) return
+        setUploadingItem(item)
+        try {
+            const urls: string[] = []
+            for (const file of Array.from(files)) {
+                const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+                const path = `checklists/${selectedCarId}/${item}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`
+                const { error } = await supabase.storage.from('car-images').upload(path, file, { contentType: file.type || undefined })
+                if (error) throw error
+                urls.push(supabase.storage.from('car-images').getPublicUrl(path).data.publicUrl)
+            }
+            const next: ChecklistData = {
+                ...checklistData,
+                [item]: { ...checklistData[item], checked: checklistData[item]?.checked || false, note: checklistData[item]?.note || "", photos: [...(checklistData[item]?.photos || []), ...urls] }
+            }
+            setChecklistData(next)
+            await persist(next)
+            toast.success(urls.length === 1 ? "Foto añadida" : `${urls.length} fotos añadidas`)
+        } catch (error) {
+            console.error("Error uploading checklist photo:", error)
+            toast.error("No se pudo subir la foto")
+        } finally {
+            setUploadingItem(null)
+        }
+    }
+
+    const removePhoto = async (item: string, url: string) => {
+        const next: ChecklistData = {
+            ...checklistData,
+            [item]: { ...checklistData[item], photos: (checklistData[item]?.photos || []).filter(u => u !== url) }
+        }
+        setChecklistData(next)
+        try {
+            await persist(next)
+            const path = url.split('/car-images/')[1]
+            if (path) await supabase.storage.from('car-images').remove([decodeURIComponent(path)])
+        } catch (error) {
+            console.error("Error removing checklist photo:", error)
+            toast.error("No se pudo quitar la foto")
+        }
     }
 
     const saveChecklist = async () => {
@@ -163,16 +156,7 @@ export function ChecklistTab() {
         try {
             // Usar upsert para manejar crear/actualizar automáticamente
             // Requiere que car_id tenga restricción UNIQUE en la DB
-            const { error } = await supabase
-                .from('car_checklists')
-                .upsert({
-                    car_id: selectedCarId,
-                    data: checklistData,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'car_id' })
-
-            if (error) throw error
-
+            await persist(checklistData)
             toast.success("Checklist guardado correctamente")
         } catch (error) {
             console.error("Error saving checklist:", error)
@@ -299,12 +283,36 @@ export function ChecklistTab() {
                                                             {item}
                                                         </label>
 
-                                                        <Input
-                                                            placeholder="Notas / observaciones…"
-                                                            value={note}
-                                                            onChange={(e) => handleNote(itemKey, e.target.value)}
-                                                            className="h-8 text-xs"
-                                                        />
+                                                        <div className="flex gap-2">
+                                                            <Input
+                                                                placeholder="Notas / observaciones…"
+                                                                value={note}
+                                                                onChange={(e) => handleNote(itemKey, e.target.value)}
+                                                                className="h-8 text-xs"
+                                                            />
+                                                            <label
+                                                                className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                                                title="Añadir fotos de este punto (las verá el cliente si tiene el coche asignado)"
+                                                            >
+                                                                {uploadingItem === itemKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                                                                <span className="hidden sm:inline">Foto</span>
+                                                                <input type="file" accept="image/*" multiple hidden disabled={uploadingItem === itemKey}
+                                                                    onChange={(e) => { addPhotos(itemKey, e.target.files); e.target.value = "" }} />
+                                                            </label>
+                                                        </div>
+                                                        {(checklistData[itemKey]?.photos?.length ?? 0) > 0 && (
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {checklistData[itemKey]!.photos!.map(url => (
+                                                                    <div key={url} className="group relative h-14 w-20 overflow-hidden rounded-md border bg-muted">
+                                                                        <a href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt="" className="h-full w-full object-cover" /></a>
+                                                                        <button type="button" onClick={() => removePhoto(itemKey, url)} title="Quitar foto"
+                                                                            className="absolute right-0.5 top-0.5 hidden rounded-full bg-background/90 p-0.5 text-destructive shadow group-hover:block">
+                                                                            <X className="h-3 w-3" />
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>

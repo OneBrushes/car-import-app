@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Building2, Copy, Globe, Loader2, Mail, Pencil, Phone, Plus, Search, Trash2, Users } from "lucide-react"
+import { Building2, Copy, Globe, Loader2, Mail, Pencil, Phone, Plus, Search, Send, Trash2, Users } from "lucide-react"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
@@ -15,6 +15,7 @@ import { INVOICE_COMPANY_SETTING_KEY, type InvoiceCompany } from "@/lib/invoice"
 import { getInvoiceCompany } from "@/lib/sales"
 import { Switch } from "@/components/ui/switch"
 import { invitationText, PORTAL_URL } from "@/lib/client-portal"
+import { ProposalsModal } from "@/components/modals/proposals-modal"
 
 interface Sale {
   id: string
@@ -48,8 +49,24 @@ export function CustomersTab({ role }: { role?: string | null }) {
 
   const [company, setCompany] = useState<InvoiceCompany>(EMPTY_COMPANY)
   const [companyOpen, setCompanyOpen] = useState(false)
+  const [proposeTo, setProposeTo] = useState<Customer | null>(null)
+  const [proposalStats, setProposalStats] = useState<Map<string, { total: number; liked: number; favorite: string | null }>>(new Map())
+
+  const loadProposalStats = async () => {
+    const { data } = await supabase.from("client_proposals").select("customer_id, reaction, is_favorite, imported_cars(brand, model)")
+    const stats = new Map<string, { total: number; liked: number; favorite: string | null }>()
+    for (const p of (data as any[]) ?? []) {
+      const s = stats.get(p.customer_id) ?? { total: 0, liked: 0, favorite: null }
+      s.total++
+      if (p.reaction === "like") s.liked++
+      if (p.is_favorite) s.favorite = `${p.imported_cars?.brand ?? ""} ${p.imported_cars?.model ?? ""}`.trim()
+      stats.set(p.customer_id, s)
+    }
+    setProposalStats(stats)
+  }
 
   const load = async () => {
+    loadProposalStats()
     setLoading(true)
     const [c, s] = await Promise.all([
       supabase.from("customers").select("*").order("name"),
@@ -240,6 +257,16 @@ export function CustomersTab({ role }: { role?: string | null }) {
                 <div className="mt-3 space-y-1 text-sm text-muted-foreground">
                   {customer.phone && <a href={`tel:${customer.phone}`} className="flex items-center gap-2 hover:text-foreground"><Phone className="h-3.5 w-3.5" />{customer.phone}</a>}
                   {customer.email && <a href={`mailto:${customer.email}`} className="flex items-center gap-2 truncate hover:text-foreground"><Mail className="h-3.5 w-3.5" />{customer.email}</a>}
+                  {canEdit && (
+                    <button type="button" onClick={() => setProposeTo(customer)} className="flex w-full items-center gap-2 text-left hover:text-foreground">
+                      <Send className="h-3.5 w-3.5" />
+                      {(() => {
+                        const st = proposalStats.get(customer.id)
+                        if (!st?.total) return "Proponer coches"
+                        return `${st.total} ${st.total === 1 ? "coche propuesto" : "coches propuestos"}${st.favorite ? ` · ★ ${st.favorite}` : st.liked ? ` · 👍 ${st.liked}` : ""}`
+                      })()}
+                    </button>
+                  )}
                   {customer.portal_access && customer.email && (
                     <div className="flex items-center gap-2 text-primary">
                       <Globe className="h-3.5 w-3.5" /> Área de clientes activa
@@ -279,6 +306,10 @@ export function CustomersTab({ role }: { role?: string | null }) {
       )}
 
       {/* Alta / edición de cliente */}
+      {proposeTo && (
+        <ProposalsModal isOpen onClose={() => setProposeTo(null)} customer={proposeTo} onSaved={loadProposalStats} />
+      )}
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>

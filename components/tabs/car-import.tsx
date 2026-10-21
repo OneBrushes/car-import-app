@@ -8,6 +8,7 @@ import { CarCard } from "@/components/cards/car-card"
 import { ShareCarModal } from "@/components/modals/share-car-modal"
 import { SellerContactModal } from "@/components/modals/seller-contact-modal"
 import { ConversationsModal } from "@/components/modals/conversations-modal"
+import { ProposalsModal } from "@/components/modals/proposals-modal"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
@@ -38,6 +39,8 @@ interface Car {
   vehicleType?: string
   contacted?: boolean
   seller_sold_at?: string | null
+  /** Propuestas a clientes de este coche y lo que han contestado */
+  proposals?: any[]
 }
 
 interface CarImportProps {
@@ -63,6 +66,7 @@ export function CarImport({ role }: CarImportProps) {
   const [sellerConversationId, setSellerConversationId] = useState<string | undefined>(undefined)
   const [isSellerOpen, setIsSellerOpen] = useState(false)
   const [isConversationsOpen, setIsConversationsOpen] = useState(false)
+  const [proposeCar, setProposeCar] = useState<Car | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("date")
@@ -123,6 +127,17 @@ export function CarImport({ role }: CarImportProps) {
 
       if (error) throw error
 
+      // Propuestas a clientes (si aún no existe la tabla, simplemente no hay)
+      const { data: proposalRows } = await supabase
+        .from('client_proposals')
+        .select('id, imported_car_id, reaction, is_favorite, client_comment, customers(name)')
+      const proposalsByCar = new Map<string, any[]>()
+      for (const p of proposalRows ?? []) {
+        const list = proposalsByCar.get((p as any).imported_car_id) ?? []
+        list.push(p)
+        proposalsByCar.set((p as any).imported_car_id, list)
+      }
+
       // Filter cars: show only user's cars OR cars shared with user (unless God Mode is active)
       const filteredData = isGodMode ? data : data.filter((car: any) =>
         car.user_id === user?.id ||
@@ -153,7 +168,8 @@ export function CarImport({ role }: CarImportProps) {
         steering: car.steering,
         // Asegurar que expenses se pasa
         expenses: car.expenses || [],
-        contacted: !!car.contacted
+        contacted: !!car.contacted,
+        proposals: proposalsByCar.get(car.id) ?? []
       }))
 
       setCars(formattedCars)
@@ -539,6 +555,7 @@ export function CarImport({ role }: CarImportProps) {
                   onToggleContacted={(carId, currentStatus) => toggleContacted(carId, currentStatus)}
                   onWriteSeller={() => openSeller(car)}
                   onToggleSellerSold={() => toggleSellerSold(car)}
+                  onPropose={() => setProposeCar(car)}
                 />
               ))}
             </div>
@@ -661,6 +678,15 @@ export function CarImport({ role }: CarImportProps) {
         conversationId={sellerConversationId}
         onSent={markContactedAfterSend}
       />
+
+      {proposeCar && (
+        <ProposalsModal
+          isOpen
+          onClose={() => setProposeCar(null)}
+          car={proposeCar}
+          onSaved={fetchCars}
+        />
+      )}
 
       <ConversationsModal
         isOpen={isConversationsOpen}

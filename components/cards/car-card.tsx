@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ExternalLink, Trash2, Share2, Users, Mail, MailOpen, MessageSquareText, BadgeX } from "lucide-react"
+import { ExternalLink, Trash2, Share2, Users, Mail, MailOpen, MessageSquareText, BadgeX, Send } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ImageCarousel } from "@/components/ui/image-carousel"
@@ -21,9 +21,11 @@ interface CarCardProps {
   onWriteSeller?: (car: any) => void
   /** Marca / desmarca "el vendedor ya lo ha vendido" (los datos se borran a los 30 días) */
   onToggleSellerSold?: (car: any) => void
+  /** Proponer este coche a uno o varios clientes */
+  onPropose?: (car: any) => void
 }
 
-export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMode = false, onToggleContacted, onWriteSeller, onToggleSellerSold }: CarCardProps) {
+export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMode = false, onToggleContacted, onWriteSeller, onToggleSellerSold, onPropose }: CarCardProps) {
   const purgeDays = daysUntilPurge(car.seller_sold_at)
   const [ownerName, setOwnerName] = useState<string>("")
   const finalPrice = (car.price || 0) + (car.totalExpenses || 0)
@@ -124,6 +126,28 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
           )}
         </div>
 
+        {/* Propuestas a clientes: lo que han contestado */}
+        {Array.isArray(car.proposals) && car.proposals.length > 0 && (
+          <div className="flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
+            {car.proposals.map((p: any) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onPropose?.(car)}
+                title={p.client_comment ? `«${p.client_comment}»` : "Propuesto a este cliente"}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                  p.is_favorite ? "border-warning/50 bg-warning/10 text-warning"
+                    : p.reaction === "like" ? "border-success/40 bg-success/10 text-success"
+                    : p.reaction === "dislike" ? "border-destructive/30 bg-destructive/5 text-destructive"
+                    : "text-muted-foreground"}`}
+              >
+                {p.is_favorite ? "★" : p.reaction === "like" ? "👍" : p.reaction === "dislike" ? "👎" : "⏳"} {p.customers?.name?.split(" ")[0] ?? "Cliente"}
+                {p.client_comment ? " 💬" : ""}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Botones */}
         <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
           {car.url && (
@@ -142,6 +166,17 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
           <CarHistoryButton importedId={car.id} title={`${car.brand} ${car.model}${car.year ? ` (${car.year})` : ""}`} />
           {isOwner && (
             <>
+              {onPropose && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  onClick={() => onPropose(car)}
+                  title="Proponer este coche a un cliente (lo verá en su área de la web)"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              )}
               {onWriteSeller && (
                 <Button
                   variant="ghost"

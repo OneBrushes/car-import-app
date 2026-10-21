@@ -1,31 +1,26 @@
-// Área de clientes: lo que el cliente ve de su coche en www.nordrivecars.com/clientes
-// (tabla client_portal_cars y bucket privado client-portal, ver supabase/2026-10_area_clientes.sql).
-// Solo se guarda aquí lo que se quiere enseñar: nunca precios de compra, gastos ni márgenes.
+// Área de clientes (www.nordrivecars.com/clientes): enlace coche comprado ↔ cliente (tabla client_portal_cars)
+// y sus fotos/documentos extra (bucket privado client-portal). Los datos del coche, su fase y los checks los
+// lee la web directamente de la app con portal_my_cars() (supabase/2026-10_area_clientes_v2.sql), sin precios.
 import { supabase } from "@/lib/supabase"
 
 export const PORTAL_URL = process.env.NEXT_PUBLIC_PORTAL_URL || "https://www.nordrivecars.com/clientes/"
 export const PORTAL_BUCKET = "client-portal"
 
-export type StepStatus = "completed" | "current" | "pending"
-export type RouteStatus = "passed" | "current" | "pending"
-export type TransportMode = "camion" | "conduciendo" | "tren" | "barco" | ""
+export type TransportMode = "conduciendo" | "camion"
 
-export interface PortalStep {
-  key: string
-  title: string
-  desc: string
-  status: StepStatus
-  /** Fecha en texto libre ("12/05/2026") */
-  date?: string
-  /** Lo que se explica al cliente al abrir el paso */
-  note?: string
-  bullets?: string[]
+export const TRANSPORT_LABEL: Record<TransportMode, string> = {
+  conduciendo: "Conduciendo (lo llevo yo)",
+  camion: "En camión",
 }
 
-export interface RouteCity {
-  name: string
-  label?: string
-  status: RouteStatus
+/** Fases del tablero de Comprados tal y como las ve el cliente */
+export const STAGE_LABEL: Record<string, string> = {
+  purchased: "Comprado",
+  in_transit: "De camino a España",
+  homologation: "Homologación y matrícula",
+  detailing: "Preparación",
+  ready: "Listo para entregar",
+  delivered: "Entregado",
 }
 
 export interface PortalFile {
@@ -34,49 +29,17 @@ export interface PortalFile {
   size?: number
 }
 
+/** Enlace coche ↔ cliente. El resto de datos (modelo, km, fotos, fase, checks) salen de la app. */
 export interface PortalCar {
   id: string
   inventory_car_id: string
   customer_id: string
-  title: string
-  year: number | null
-  mileage: number | null
-  color: string | null
-  origin: string | null
-  destination: string | null
-  status_text: string | null
-  current_location: string | null
   transport_mode: TransportMode | null
-  route: RouteCity[]
-  steps: PortalStep[]
+  note: string | null
   photos: PortalFile[]
   documents: PortalFile[]
   published: boolean
   updated_at: string
-}
-
-export const STEP_STATUS_LABEL: Record<StepStatus, string> = { completed: "Completado", current: "En curso", pending: "Pendiente" }
-export const ROUTE_STATUS_LABEL: Record<RouteStatus, string> = { passed: "Pasado", current: "Aquí ahora", pending: "Pendiente" }
-export const TRANSPORT_LABEL: Record<Exclude<TransportMode, "">, string> = { camion: "En camión", conduciendo: "Conduciendo", tren: "En tren", barco: "En barco" }
-
-/** Los mismos pasos que enseña la web */
-export const DEFAULT_STEPS: PortalStep[] = [
-  { key: "search", title: "Búsqueda y selección", desc: "Encontramos el coche que encaja contigo", status: "completed" },
-  { key: "inspection", title: "Inspección mecánica", desc: "Revisión completa antes de comprar", status: "pending" },
-  { key: "purchase", title: "Compra y papeleo", desc: "Contrato, pago y documentación", status: "pending" },
-  { key: "transport", title: "Transporte y ruta", desc: "El coche viaja hacia España", status: "pending" },
-  { key: "delivery", title: "Matriculación y entrega", desc: "ITV, matrícula española y entrega", status: "pending" },
-]
-
-/** Pasos según la fase logística del coche en la app (para rellenar el área la primera vez) */
-export function stepsForLogistic(logistic: string | null | undefined): PortalStep[] {
-  const order = ["purchased", "in_transit", "homologation", "detailing", "ready"]
-  const at = Math.max(0, order.indexOf(logistic || "purchased"))
-  // purchased → compra en curso; in_transit → transporte; homologation/detailing → matriculación; ready → todo hecho
-  const currentKey = at === 0 ? "purchase" : at === 1 ? "transport" : at >= 4 ? null : "delivery"
-  const keys = DEFAULT_STEPS.map((s) => s.key)
-  const currentIndex = currentKey ? keys.indexOf(currentKey) : keys.length
-  return DEFAULT_STEPS.map((s, i) => ({ ...s, status: i < currentIndex ? "completed" : i === currentIndex ? "current" : "pending" }))
 }
 
 export async function loadPortalCar(inventoryCarId: string): Promise<PortalCar | null> {
@@ -87,8 +50,14 @@ export async function loadPortalCar(inventoryCarId: string): Promise<PortalCar |
 
 export type PortalCarInput = Omit<PortalCar, "id" | "updated_at">
 
+/** Solo se guardan las columnas del enlace (las antiguas de la v1 se quedan con sus valores por defecto) */
+const pick = (i: PortalCarInput) => ({
+  inventory_car_id: i.inventory_car_id, customer_id: i.customer_id, transport_mode: i.transport_mode || "conduciendo",
+  note: i.note?.trim() || null, photos: i.photos, documents: i.documents, published: i.published,
+})
+
 export async function savePortalCar(existing: PortalCar | null, input: PortalCarInput): Promise<PortalCar> {
-  const payload = { ...input, updated_at: new Date().toISOString() }
+  const payload = { ...pick(input), updated_at: new Date().toISOString() }
   const query = existing
     ? supabase.from("client_portal_cars").update(payload).eq("id", existing.id).select("*").single()
     : supabase.from("client_portal_cars").insert(payload).select("*").single()
@@ -147,7 +116,7 @@ export function invitationText(name: string, email: string) {
   const first = name.trim().split(/\s+/)[0] || ""
   return `Hola${first ? ` ${first}` : ""}:
 
-Ya puedes seguir tu coche en tiempo real en el área de clientes de NorDrive: en qué paso está, dónde se encuentra, las fotos y los documentos.
+Ya puedes seguir tu coche en el área de clientes de NorDrive: en qué fase está, la inspección con sus fotos y los documentos. Allí también verás los coches que te propongamos.
 
 1. Entra en ${PORTAL_URL}
 2. Escribe tu correo (${email}) y te llegará un enlace para entrar.

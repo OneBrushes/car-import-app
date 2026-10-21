@@ -1,22 +1,20 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Copy, ExternalLink, FileText, ImagePlus, Loader2, MapPin, Plus, Trash2, Upload, UserRound, X } from "lucide-react"
+import { CheckCircle2, Copy, ExternalLink, FileText, ImagePlus, Loader2, Trash2, Upload, UserRound } from "lucide-react"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Customer } from "@/components/modals/sell-car-modal"
 import {
-  copyCarDocument, deletePortalCar, invitationText, loadPortalCar, PORTAL_URL, removePortalFile, ROUTE_STATUS_LABEL, savePortalCar,
-  signedUrls, STEP_STATUS_LABEL, stepsForLogistic, TRANSPORT_LABEL, uploadPortalFiles,
-  type PortalCar, type PortalCarInput, type PortalFile, type PortalStep, type RouteCity, type RouteStatus, type StepStatus, type TransportMode,
+  copyCarDocument, deletePortalCar, invitationText, loadPortalCar, PORTAL_URL, removePortalFile, savePortalCar, signedUrls,
+  STAGE_LABEL, TRANSPORT_LABEL, uploadPortalFiles,
+  type PortalCar, type PortalCarInput, type PortalFile, type TransportMode,
 } from "@/lib/client-portal"
 
 interface ClientPortalModalProps {
@@ -24,8 +22,6 @@ interface ClientPortalModalProps {
   onClose: () => void
   /** Coche comprado (inventory_cars, ya formateado por Comprados) */
   car: any
-  /** Si se elige cliente aquí, también se guarda en el coche (el mismo cliente sale luego en la factura) */
-  onCustomerChange?: (carId: string, customerId: string) => void
 }
 
 type CustomerRow = Customer & { portal_access?: boolean }
@@ -36,7 +32,11 @@ async function copyText(text: string, ok: string) {
   try { await navigator.clipboard.writeText(text); toast.success(ok) } catch { toast.error("No se pudo copiar") }
 }
 
-export function ClientPortalModal({ isOpen, onClose, car, onCustomerChange }: ClientPortalModalProps) {
+/**
+ * Asigna un coche comprado a un cliente para que lo siga en la web. Los datos del coche, la fase del tablero
+ * y los checks de la inspección salen solos de la app; aquí solo se elige el cliente y lo que se añade a mano.
+ */
+export function ClientPortalModal({ isOpen, onClose, car }: ClientPortalModalProps) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
@@ -44,10 +44,12 @@ export function ClientPortalModal({ isOpen, onClose, car, onCustomerChange }: Cl
   const [customers, setCustomers] = useState<CustomerRow[]>([])
   const [form, setForm] = useState<PortalCarInput | null>(null)
   const [urls, setUrls] = useState<Record<string, string>>({})
+  const [checks, setChecks] = useState<{ done: number; total: number; photos: number } | null>(null)
   const photoInput = useRef<HTMLInputElement>(null)
   const docInput = useRef<HTMLInputElement>(null)
 
-  const carTitle = [car?.brand, car?.model].filter(Boolean).join(" ")
+  const carTitle = [car?.brand, car?.model].filter(Boolean).join(" ") + (car?.year ? ` (${car.year})` : "")
+  const stage = car?.status === "sold" ? "delivered" : car?.logistic_status || "purchased"
 
   useEffect(() => {
     if (!isOpen || !car?.id) return
@@ -55,35 +57,22 @@ export function ClientPortalModal({ isOpen, onClose, car, onCustomerChange }: Cl
     setLoading(true)
     ;(async () => {
       try {
-        const [portal, customersRes, importedRes] = await Promise.all([
+        const [portal, customersRes, checklistRes] = await Promise.all([
           loadPortalCar(car.id),
           supabase.from("customers").select("*").order("name"),
           car.imported_car_id
-            ? supabase.from("imported_cars").select("origin, location, color, mileage").eq("id", car.imported_car_id).maybeSingle()
+            ? supabase.from("car_checklists").select("data").eq("car_id", car.imported_car_id).maybeSingle()
             : Promise.resolve({ data: null }),
         ])
         if (cancelled) return
         setCustomers((customersRes.data as CustomerRow[]) ?? [])
         setExisting(portal)
-        const imported = (importedRes as { data: any }).data
-        setForm(portal ? { ...portal } : {
-          inventory_car_id: car.id,
-          customer_id: car.customer_id ?? "",
-          title: `${carTitle}`.trim(),
-          year: car.year ?? null,
-          mileage: car.mileage ?? imported?.mileage ?? null,
-          color: imported?.color ?? null,
-          origin: imported?.location || imported?.origin || null,
-          destination: "España",
-          status_text: null,
-          current_location: imported?.location ?? null,
-          transport_mode: "",
-          route: [],
-          steps: stepsForLogistic(car.logistic_status),
-          photos: [],
-          documents: [],
-          published: true,
-        })
+        const data = ((checklistRes as { data: { data?: Record<string, { checked?: boolean; photos?: string[] }> } | null }).data?.data) ?? {}
+        const entries = Object.values(data)
+        setChecks({ done: entries.filter((e) => e?.checked).length, total: entries.length, photos: entries.reduce((n, e) => n + (e?.photos?.length ?? 0), 0) })
+        setForm(portal
+          ? { inventory_car_id: portal.inventory_car_id, customer_id: portal.customer_id, transport_mode: portal.transport_mode || "conduciendo", note: portal.note, photos: portal.photos, documents: portal.documents, published: portal.published }
+          : { inventory_car_id: car.id, customer_id: car.customer_id ?? "", transport_mode: "conduciendo", note: null, photos: [], documents: [], published: true })
         if (portal) setUrls(await signedUrls(portal.photos.map((p) => p.path)))
       } catch (e: any) {
         toast.error(e.message)
@@ -96,12 +85,9 @@ export function ClientPortalModal({ isOpen, onClose, car, onCustomerChange }: Cl
   }, [isOpen, car?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const customer = useMemo(() => customers.find((c) => c.id === form?.customer_id) ?? null, [customers, form?.customer_id])
-
   const set = <K extends keyof PortalCarInput>(key: K, value: PortalCarInput[K]) => setForm((f) => (f ? { ...f, [key]: value } : f))
-  const setStep = (i: number, patch: Partial<PortalStep>) => set("steps", form!.steps.map((s, j) => (j === i ? { ...s, ...patch } : s)))
-  const setCity = (i: number, patch: Partial<RouteCity>) => set("route", form!.route.map((c, j) => (j === i ? { ...c, ...patch } : c)))
 
-  /** Guarda (crea la ficha la primera vez). Devuelve la ficha guardada. */
+  /** Guarda (crea el enlace la primera vez) */
   const save = async (override?: Partial<PortalCarInput>, quiet = false): Promise<PortalCar | null> => {
     if (!form) return null
     const next = { ...form, ...override }
@@ -110,12 +96,9 @@ export function ClientPortalModal({ isOpen, onClose, car, onCustomerChange }: Cl
     try {
       const saved = await savePortalCar(existing, next)
       setExisting(saved)
-      setForm({ ...saved })
-      if (next.customer_id !== car.customer_id) {
-        await supabase.from("inventory_cars").update({ customer_id: next.customer_id }).eq("id", car.id)
-        onCustomerChange?.(car.id, next.customer_id)
-      }
-      if (!quiet) toast.success("Área del cliente guardada")
+      setForm({ ...next, photos: saved.photos, documents: saved.documents })
+      if (next.customer_id !== car.customer_id) await supabase.from("inventory_cars").update({ customer_id: next.customer_id }).eq("id", car.id)
+      if (!quiet) toast.success(existing ? "Guardado" : "Coche asignado al cliente")
       return saved
     } catch (e: any) {
       toast.error(e.message)
@@ -129,7 +112,7 @@ export function ClientPortalModal({ isOpen, onClose, car, onCustomerChange }: Cl
     if (!customer) return
     if (!customer.email) { toast.error("Este cliente no tiene correo. Añádelo en Clientes."); return }
     const { error } = await supabase.from("customers").update({ portal_access: true }).eq("id", customer.id)
-    if (error) { toast.error(/portal_access/.test(error.message) ? "Falta ejecutar supabase/2026-10_area_clientes.sql" : error.message); return }
+    if (error) { toast.error(error.message); return }
     setCustomers((list) => list.map((c) => (c.id === customer.id ? { ...c, portal_access: true } : c)))
     toast.success("Acceso activado. Mándale la invitación.")
   }
@@ -141,8 +124,7 @@ export function ClientPortalModal({ isOpen, onClose, car, onCustomerChange }: Cl
       const saved = existing ?? (await save(undefined, true))
       if (!saved) return
       const uploaded = await uploadPortalFiles(saved.id, Array.from(files))
-      const list = [...form[kind], ...uploaded]
-      await save({ [kind]: list } as Partial<PortalCarInput>, true)
+      await save({ [kind]: [...form[kind], ...uploaded] } as Partial<PortalCarInput>, true)
       if (kind === "photos") setUrls({ ...urls, ...(await signedUrls(uploaded.map((u) => u.path))) })
       toast.success(kind === "photos" ? "Fotos añadidas" : "Documentos añadidos")
     } catch (e: any) {
@@ -175,10 +157,10 @@ export function ClientPortalModal({ isOpen, onClose, car, onCustomerChange }: Cl
   }
 
   const removeAll = async () => {
-    if (!existing || !confirm("¿Quitar el área de cliente de este coche? El cliente dejará de verlo y se borrarán sus fotos y documentos del área.")) return
+    if (!existing || !confirm("¿Dejar de compartir este coche con el cliente? Se borrarán las fotos y documentos añadidos aquí.")) return
     try {
       await deletePortalCar(existing)
-      toast.success("Área del cliente eliminada")
+      toast.success("El cliente ya no ve este coche")
       onClose()
     } catch (e: any) {
       toast.error(e.message)
@@ -190,207 +172,153 @@ export function ClientPortalModal({ isOpen, onClose, car, onCustomerChange }: Cl
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col gap-0 p-0">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0">
         <DialogHeader className="border-b p-5">
           <DialogTitle className="flex items-center gap-2"><UserRound className="h-5 w-5 text-primary" /> Área del cliente</DialogTitle>
-          <DialogDescription>{carTitle} · lo que el cliente ve en {PORTAL_URL.replace(/^https?:\/\//, "")}</DialogDescription>
+          <DialogDescription>{carTitle} · el cliente lo sigue en {PORTAL_URL.replace(/^https?:\/\//, "")}</DialogDescription>
         </DialogHeader>
 
         {loading || !form ? (
           <div className="flex justify-center p-12">{loading ? <Loader2 className="h-6 w-6 animate-spin text-primary" /> : <p className="text-sm text-muted-foreground">No se pudo cargar.</p>}</div>
         ) : (
           <>
-            <Tabs defaultValue="client" className="flex min-h-0 flex-1 flex-col">
-              <div className="border-b px-5 py-3">
-                <TabsList>
-                  <TabsTrigger value="client">Cliente y ficha</TabsTrigger>
-                  <TabsTrigger value="steps">Estado y ruta</TabsTrigger>
-                  <TabsTrigger value="files">Fotos y documentos{form.photos.length + form.documents.length ? ` (${form.photos.length + form.documents.length})` : ""}</TabsTrigger>
-                </TabsList>
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+              {/* Cliente */}
+              <div className="space-y-2">
+                <Label>Cliente</Label>
+                <Select value={form.customer_id || undefined} onValueChange={(v) => set("customer_id", v)}>
+                  <SelectTrigger><SelectValue placeholder="Elige el cliente (se crean en la pestaña Clientes)" /></SelectTrigger>
+                  <SelectContent>
+                    {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` · ${c.email}` : " · sin correo"}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {customer && (
+                  <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                    {!customer.email ? (
+                      <p className="text-warning">Este cliente no tiene correo: añádelo en la pestaña Clientes para que pueda entrar.</p>
+                    ) : customer.portal_access ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>Acceso activado para <b>{customer.email}</b>.</span>
+                        <Button type="button" size="sm" variant="outline" onClick={() => copyText(invitationText(customer.name, customer.email!), "Invitación copiada: mándasela por WhatsApp o correo")}>
+                          <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar invitación
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>{customer.email} aún no tiene acceso al área de clientes.</span>
+                        <Button type="button" size="sm" onClick={enablePortal}>Activar acceso</Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* ---------- Cliente y ficha ---------- */}
-              <TabsContent value="client" className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-                <div className="space-y-2">
-                  <Label>Cliente</Label>
-                  <Select value={form.customer_id || undefined} onValueChange={(v) => set("customer_id", v)}>
-                    <SelectTrigger><SelectValue placeholder="Elige el cliente (se crean en la pestaña Clientes)" /></SelectTrigger>
+              {/* Lo que sale solo de la app */}
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="mb-2 font-medium">Lo que verá el cliente (sale solo de la app)</p>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" /> Datos y fotos del coche: {carTitle || "—"}</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" /> Fase actual: <b className="text-foreground">{STAGE_LABEL[stage] ?? stage}</b> (cambia al mover la tarjeta en el tablero)</li>
+                  <li className="flex gap-2">
+                    <CheckCircle2 className={`mt-0.5 h-4 w-4 shrink-0 ${checks?.total ? "text-success" : "text-muted-foreground/40"}`} />
+                    {checks?.total
+                      ? <>Checks de la inspección: {checks.done} de {checks.total} revisados{checks.photos ? `, ${checks.photos} fotos` : ""}</>
+                      : car?.imported_car_id ? "Checks de la inspección: aún no hay (pestaña Checklist)" : "Checks: este coche no viene de Importación"}
+                  </li>
+                </ul>
+                <p className="mt-2 text-xs text-muted-foreground">Nunca se enseñan precios de compra, gastos ni márgenes.</p>
+              </div>
+
+              {/* Cómo viaja + nota */}
+              <div className="grid gap-3 sm:grid-cols-[14rem_1fr]">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Cuando esté de camino</Label>
+                  <Select value={form.transport_mode || "conduciendo"} onValueChange={(v) => set("transport_mode", v as TransportMode)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` · ${c.email}` : " · sin correo"}</SelectItem>)}
+                      {(Object.keys(TRANSPORT_LABEL) as TransportMode[]).map((k) => <SelectItem key={k} value={k}>{TRANSPORT_LABEL[k]}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  {customer && (
-                    <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                      {!customer.email ? (
-                        <p className="text-warning">Este cliente no tiene correo: añádelo en la pestaña Clientes para que pueda entrar.</p>
-                      ) : customer.portal_access ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span>Acceso activado para <b>{customer.email}</b>.</span>
-                          <Button type="button" size="sm" variant="outline" onClick={() => copyText(invitationText(customer.name, customer.email!), "Invitación copiada: mándasela por WhatsApp o correo")}>
-                            <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar invitación
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span>{customer.email} aún no tiene acceso al área de clientes.</span>
-                          <Button type="button" size="sm" onClick={enablePortal}>Activar acceso</Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Coche (como lo verá el cliente)" className="sm:col-span-2"><Input value={form.title} onChange={(e) => set("title", e.target.value)} /></Field>
-                  <Field label="Año"><Input type="number" value={form.year ?? ""} onChange={(e) => set("year", e.target.value ? Number(e.target.value) : null)} /></Field>
-                  <Field label="Kilómetros"><Input type="number" value={form.mileage ?? ""} onChange={(e) => set("mileage", e.target.value ? Number(e.target.value) : null)} /></Field>
-                  <Field label="Color"><Input value={form.color ?? ""} onChange={(e) => set("color", e.target.value || null)} /></Field>
-                  <Field label="Origen"><Input value={form.origin ?? ""} onChange={(e) => set("origin", e.target.value || null)} placeholder="Frankfurt, Alemania" /></Field>
-                  <Field label="Destino"><Input value={form.destination ?? ""} onChange={(e) => set("destination", e.target.value || null)} placeholder="Madrid, España" /></Field>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Nota para el cliente (opcional)</Label>
+                  <Textarea rows={2} value={form.note ?? ""} onChange={(e) => set("note", e.target.value)} placeholder="Ej.: Lo recojo el lunes y llegamos el miércoles por la noche." />
                 </div>
-              </TabsContent>
+              </div>
 
-              {/* ---------- Estado y ruta ---------- */}
-              <TabsContent value="steps" className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Titular del estado"><Input value={form.status_text ?? ""} onChange={(e) => set("status_text", e.target.value || null)} placeholder="En transporte" /></Field>
-                  <Field label="Dónde está ahora"><Input value={form.current_location ?? ""} onChange={(e) => set("current_location", e.target.value || null)} placeholder="Burdeos, Francia" /></Field>
-                  <Field label="Cómo viaja">
-                    <Select value={form.transport_mode || "none"} onValueChange={(v) => set("transport_mode", (v === "none" ? "" : v) as TransportMode)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">—</SelectItem>
-                        {(Object.keys(TRANSPORT_LABEL) as (keyof typeof TRANSPORT_LABEL)[]).map((k) => <SelectItem key={k} value={k}>{TRANSPORT_LABEL[k]}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </Field>
+              {/* Fotos extra */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Fotos extra <span className="font-normal text-muted-foreground">(además de las del coche)</span></Label>
+                  <Button type="button" size="sm" variant="outline" disabled={busy === "photos"} onClick={() => photoInput.current?.click()}>
+                    {busy === "photos" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="mr-1.5 h-3.5 w-3.5" />} Subir
+                  </Button>
+                  <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={(e) => { addFiles("photos", e.target.files); e.target.value = "" }} />
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Pasos</Label>
-                  {form.steps.map((step, i) => (
-                    <div key={step.key} className="space-y-2 rounded-lg border p-3">
-                      <div className="grid gap-2 sm:grid-cols-[1fr_9rem_8rem]">
-                        <Input value={step.title} onChange={(e) => setStep(i, { title: e.target.value })} className="font-medium" />
-                        <Select value={step.status} onValueChange={(v) => setStep(i, { status: v as StepStatus })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>{(Object.keys(STEP_STATUS_LABEL) as StepStatus[]).map((s) => <SelectItem key={s} value={s}>{STEP_STATUS_LABEL[s]}</SelectItem>)}</SelectContent>
-                        </Select>
-                        <Input value={step.date ?? ""} onChange={(e) => setStep(i, { date: e.target.value })} placeholder="12/05/2026" />
+                {form.photos.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                    {form.photos.map((p) => (
+                      <div key={p.path} className="group relative aspect-[4/3] overflow-hidden rounded-lg border bg-muted">
+                        {urls[p.path] ? <img src={urls[p.path]} alt={p.name} className="h-full w-full object-cover" /> : null}
+                        <button type="button" onClick={() => removeFile("photos", p)} title="Quitar"
+                          className="absolute right-1 top-1 hidden rounded-full bg-background/90 p-1 text-destructive shadow group-hover:block"><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
-                      <Textarea rows={2} value={step.note ?? ""} onChange={(e) => setStep(i, { note: e.target.value })} placeholder="Lo que quieres contarle al cliente de este paso (opcional)" />
-                      <Textarea rows={2} value={(step.bullets ?? []).join("\n")} onChange={(e) => setStep(i, { bullets: e.target.value.split("\n").filter((l) => l.trim()) })}
-                        placeholder="Puntos sueltos, uno por línea (opcional): Frenos revisados, Neumáticos al 70 %…" />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-1.5"><MapPin className="h-4 w-4" /> Ruta (mapa del cliente)</Label>
-                    <Button type="button" size="sm" variant="outline" onClick={() => set("route", [...form.route, { name: "", status: "pending" }])}><Plus className="mr-1 h-3.5 w-3.5" /> Ciudad</Button>
+                    ))}
                   </div>
-                  {form.route.length === 0 && <p className="text-xs text-muted-foreground">Añade las ciudades del viaje en orden (origen, paradas y destino) y marca dónde está ahora.</p>}
-                  {form.route.map((city, i) => (
-                    <div key={i} className="grid grid-cols-[1fr_8rem_8rem_auto] gap-2">
-                      <Input value={city.name} onChange={(e) => setCity(i, { name: e.target.value })} placeholder="Frankfurt" />
-                      <Input value={city.label ?? ""} onChange={(e) => setCity(i, { label: e.target.value })} placeholder="Origen" />
-                      <Select value={city.status} onValueChange={(v) => setCity(i, { status: v as RouteStatus })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>{(Object.keys(ROUTE_STATUS_LABEL) as RouteStatus[]).map((s) => <SelectItem key={s} value={s}>{ROUTE_STATUS_LABEL[s]}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <Button type="button" variant="ghost" size="icon" onClick={() => set("route", form.route.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
+                )}
+              </div>
 
-              {/* ---------- Fotos y documentos ---------- */}
-              <TabsContent value="files" className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Fotos</Label>
-                    <Button type="button" size="sm" variant="outline" disabled={busy === "photos"} onClick={() => photoInput.current?.click()}>
-                      {busy === "photos" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="mr-1.5 h-3.5 w-3.5" />} Subir fotos
-                    </Button>
-                    <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={(e) => { addFiles("photos", e.target.files); e.target.value = "" }} />
+              {/* Documentos */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Documentos para el cliente</Label>
+                  <Button type="button" size="sm" variant="outline" disabled={busy === "documents"} onClick={() => docInput.current?.click()}>
+                    {busy === "documents" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />} Subir
+                  </Button>
+                  <input ref={docInput} type="file" accept=".pdf,image/*,.doc,.docx" multiple hidden onChange={(e) => { addFiles("documents", e.target.files); e.target.value = "" }} />
+                </div>
+                {form.documents.map((d) => (
+                  <div key={d.path} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                    <span className="text-xs text-muted-foreground">{formatSize(d.size)}</span>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeFile("documents", d)}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
-                  {form.photos.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Fotos del coche, de la inspección, de la carga en el camión… El cliente las ve en su área.</p>
-                  ) : (
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {form.photos.map((p) => (
-                        <div key={p.path} className="group relative aspect-[4/3] overflow-hidden rounded-lg border bg-muted">
-                          {urls[p.path] ? <img src={urls[p.path]} alt={p.name} className="h-full w-full object-cover" /> : null}
-                          <button type="button" onClick={() => removeFile("photos", p)} title="Quitar"
-                            className="absolute right-1 top-1 hidden rounded-full bg-background/90 p-1 text-destructive shadow group-hover:block"><Trash2 className="h-3.5 w-3.5" /></button>
+                ))}
+                {carDocs.length > 0 && (
+                  <div className="rounded-lg border border-dashed p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Documentos del coche (el cliente no los ve hasta que los compartas):</p>
+                    <div className="space-y-1.5">
+                      {carDocs.map((doc) => (
+                        <div key={doc.url} className="flex items-center gap-2 text-sm">
+                          <span className="min-w-0 flex-1 truncate">{doc.name}</span>
+                          {sharedNames.has(doc.name) ? <span className="text-xs text-success">Compartido</span> : (
+                            <Button type="button" size="sm" variant="outline" disabled={busy === doc.url} onClick={() => shareCarDocument(doc)}>
+                              {busy === doc.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Compartir"}
+                            </Button>
+                          )}
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Documentos</Label>
-                    <Button type="button" size="sm" variant="outline" disabled={busy === "documents"} onClick={() => docInput.current?.click()}>
-                      {busy === "documents" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />} Subir documentos
-                    </Button>
-                    <input ref={docInput} type="file" accept=".pdf,image/*,.doc,.docx" multiple hidden onChange={(e) => { addFiles("documents", e.target.files); e.target.value = "" }} />
                   </div>
-                  {form.documents.length === 0 && <p className="text-xs text-muted-foreground">Contrato, informe de inspección, permiso de circulación escaneado… Solo este cliente puede abrirlos.</p>}
-                  {form.documents.map((d) => (
-                    <div key={d.path} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate">{d.name}</span>
-                      <span className="text-xs text-muted-foreground">{formatSize(d.size)}</span>
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeFile("documents", d)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                    </div>
-                  ))}
-                  {carDocs.length > 0 && (
-                    <div className="rounded-lg border border-dashed p-3">
-                      <p className="mb-2 text-xs font-medium text-muted-foreground">Documentos que ya tienes en este coche (no los ve el cliente hasta que los compartas):</p>
-                      <div className="space-y-1.5">
-                        {carDocs.map((doc) => (
-                          <div key={doc.url} className="flex items-center gap-2 text-sm">
-                            <span className="min-w-0 flex-1 truncate">{doc.name}</span>
-                            {sharedNames.has(doc.name) ? <span className="text-xs text-success">Compartido</span> : (
-                              <Button type="button" size="sm" variant="outline" disabled={busy === doc.url} onClick={() => shareCarDocument(doc)}>
-                                {busy === doc.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Compartir"}
-                              </Button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            </Tabs>
+                )}
+              </div>
+            </div>
 
             <div className="flex flex-wrap items-center gap-3 border-t p-4">
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <Switch checked={form.published} onCheckedChange={(v) => set("published", v)} />
                 {form.published ? "Visible para el cliente" : "Oculto al cliente"}
               </label>
-              {existing && <Button type="button" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={removeAll}><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Quitar área</Button>}
+              {existing && <Button type="button" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={removeAll}><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Dejar de compartir</Button>}
               <a href={PORTAL_URL} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
                 <ExternalLink className="h-3.5 w-3.5" /> Abrir la web
               </a>
-              <Button type="button" onClick={() => save()} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar</Button>
+              <Button type="button" onClick={() => save()} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{existing ? "Guardar" : "Asignar al cliente"}</Button>
             </div>
           </>
         )}
       </DialogContent>
     </Dialog>
-  )
-}
-
-function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
-  return (
-    <div className={`space-y-1.5 ${className ?? ""}`}>
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {children}
-    </div>
   )
 }
