@@ -14,7 +14,7 @@ import type { Customer, NewCustomer } from "@/components/modals/sell-car-modal"
 import { INVOICE_COMPANY_SETTING_KEY, type InvoiceCompany } from "@/lib/invoice"
 import { getInvoiceCompany } from "@/lib/sales"
 import { Switch } from "@/components/ui/switch"
-import { invitationText, PORTAL_URL } from "@/lib/client-portal"
+import { invitationText, inviteCustomer, PORTAL_URL } from "@/lib/client-portal"
 import { ProposalsModal } from "@/components/modals/proposals-modal"
 
 interface Sale {
@@ -50,6 +50,8 @@ export function CustomersTab({ role }: { role?: string | null }) {
   const [company, setCompany] = useState<InvoiceCompany>(EMPTY_COMPANY)
   const [companyOpen, setCompanyOpen] = useState(false)
   const [proposeTo, setProposeTo] = useState<Customer | null>(null)
+  const [invitingId, setInvitingId] = useState<string | null>(null)
+  const [reviews, setReviews] = useState<Map<string, { rating: number; liked: string | null; improve: string | null; car: string; date: string }[]>>(new Map())
   const [proposalStats, setProposalStats] = useState<Map<string, { total: number; liked: number; favorite: string | null }>>(new Map())
 
   const loadProposalStats = async () => {
@@ -65,8 +67,34 @@ export function CustomersTab({ role }: { role?: string | null }) {
     setProposalStats(stats)
   }
 
+  const loadReviews = async () => {
+    const { data } = await supabase.from("client_reviews").select("customer_id, rating, liked, improve, updated_at, inventory_cars(brand, model)").order("updated_at", { ascending: false })
+    const map = new Map<string, { rating: number; liked: string | null; improve: string | null; car: string; date: string }[]>()
+    for (const r of (data as any[]) ?? []) {
+      const list = map.get(r.customer_id) ?? []
+      list.push({ rating: r.rating, liked: r.liked, improve: r.improve, car: `${r.inventory_cars?.brand ?? ""} ${r.inventory_cars?.model ?? ""}`.trim(), date: r.updated_at })
+      map.set(r.customer_id, list)
+    }
+    setReviews(map)
+  }
+
+  const sendInvite = async (customer: Customer) => {
+    if (!customer.email) { toast.error("Este cliente no tiene correo"); return }
+    setInvitingId(customer.id)
+    try {
+      const status = await inviteCustomer(customer.id)
+      toast.success(status === "invited" ? `Invitación enviada a ${customer.email}` : "Ya tenía cuenta: le hemos enviado un enlace para entrar")
+      load()
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setInvitingId(null)
+    }
+  }
+
   const load = async () => {
     loadProposalStats()
+    loadReviews()
     setLoading(true)
     const [c, s] = await Promise.all([
       supabase.from("customers").select("*").order("name"),
@@ -267,15 +295,32 @@ export function CustomersTab({ role }: { role?: string | null }) {
                       })()}
                     </button>
                   )}
-                  {customer.portal_access && customer.email && (
-                    <div className="flex items-center gap-2 text-primary">
-                      <Globe className="h-3.5 w-3.5" /> Área de clientes activa
-                      <button type="button" className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={async () => { try { await navigator.clipboard.writeText(invitationText(customer.name, customer.email!)); toast.success("Invitación copiada") } catch { toast.error("No se pudo copiar") } }}>
-                        <Copy className="h-3 w-3" /> Invitación
+                  {customer.email && canEdit && (
+                    <div className={`flex items-center gap-2 ${customer.portal_access ? "text-primary" : ""}`}>
+                      <Globe className="h-3.5 w-3.5" /> {customer.portal_access ? "Área de clientes activa" : "Sin acceso al área de clientes"}
+                      <button type="button" disabled={invitingId === customer.id} onClick={() => sendInvite(customer)}
+                        className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        title="Le llega un correo para crear su cuenta (solo así se pueden crear cuentas de cliente)">
+                        {invitingId === customer.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />} {customer.portal_access ? "Reenviar acceso" : "Invitar por correo"}
                       </button>
+                      {customer.portal_access && (
+                        <button type="button" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" title="Copiar el texto para mandarlo por WhatsApp"
+                          onClick={async () => { try { await navigator.clipboard.writeText(invitationText(customer.name, customer.email!)); toast.success("Texto copiado") } catch { toast.error("No se pudo copiar") } }}>
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
                   )}
+                  {(reviews.get(customer.id) ?? []).map((r, i) => (
+                    <div key={i} className="rounded-lg border bg-muted/30 p-2.5 text-xs text-foreground">
+                      <p className="flex items-center justify-between gap-2 font-medium">
+                        <span className="text-warning">{"★".repeat(r.rating)}<span className="text-muted-foreground/40">{"★".repeat(5 - r.rating)}</span></span>
+                        <span className="truncate text-muted-foreground">{r.car} · {new Date(r.date).toLocaleDateString("es-ES")}</span>
+                      </p>
+                      {r.liked && <p className="mt-1"><span className="text-muted-foreground">Le gustó:</span> {r.liked}</p>}
+                      {r.improve && <p className="mt-1"><span className="text-muted-foreground">Cambiaría:</span> {r.improve}</p>}
+                    </div>
+                  ))}
                 </div>
 
                 <div className="mt-4 border-t pt-3">

@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { CheckCircle2, Copy, ExternalLink, FileText, ImagePlus, Loader2, Trash2, Upload, UserRound } from "lucide-react"
+import { CheckCircle2, Copy, ExternalLink, FileText, ImagePlus, Loader2, Mail, MapPin, Trash2, Upload, UserRound } from "lucide-react"
+import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -12,7 +13,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Customer } from "@/components/modals/sell-car-modal"
 import {
-  copyCarDocument, deletePortalCar, invitationText, loadPortalCar, PORTAL_URL, removePortalFile, savePortalCar, signedUrls,
+  copyCarDocument, deletePortalCar, invitationText, inviteCustomer, loadPortalCar, PORTAL_URL, removePortalFile, savePortalCar, signedUrls,
   STAGE_LABEL, TRANSPORT_LABEL, uploadPortalFiles,
   type PortalCar, type PortalCarInput, type PortalFile, type TransportMode,
 } from "@/lib/client-portal"
@@ -71,8 +72,8 @@ export function ClientPortalModal({ isOpen, onClose, car }: ClientPortalModalPro
         const entries = Object.values(data)
         setChecks({ done: entries.filter((e) => e?.checked).length, total: entries.length, photos: entries.reduce((n, e) => n + (e?.photos?.length ?? 0), 0) })
         setForm(portal
-          ? { inventory_car_id: portal.inventory_car_id, customer_id: portal.customer_id, transport_mode: portal.transport_mode || "conduciendo", note: portal.note, photos: portal.photos, documents: portal.documents, published: portal.published }
-          : { inventory_car_id: car.id, customer_id: car.customer_id ?? "", transport_mode: "conduciendo", note: null, photos: [], documents: [], published: true })
+          ? { inventory_car_id: portal.inventory_car_id, customer_id: portal.customer_id, transport_mode: portal.transport_mode || "conduciendo", note: portal.note, current_location: portal.current_location ?? null, location_updated_at: portal.location_updated_at ?? null, photos: portal.photos, documents: portal.documents, published: portal.published }
+          : { inventory_car_id: car.id, customer_id: car.customer_id ?? "", transport_mode: "conduciendo", note: null, current_location: null, location_updated_at: null, photos: [], documents: [], published: true })
         if (portal) setUrls(await signedUrls(portal.photos.map((p) => p.path)))
       } catch (e: any) {
         toast.error(e.message)
@@ -108,13 +109,21 @@ export function ClientPortalModal({ isOpen, onClose, car }: ClientPortalModalPro
     }
   }
 
-  const enablePortal = async () => {
+  const [inviting, setInviting] = useState(false)
+  /** Activa su acceso y le manda el correo para crear su cuenta (o entrar, si ya la tiene) */
+  const sendInvite = async () => {
     if (!customer) return
     if (!customer.email) { toast.error("Este cliente no tiene correo. Añádelo en Clientes."); return }
-    const { error } = await supabase.from("customers").update({ portal_access: true }).eq("id", customer.id)
-    if (error) { toast.error(error.message); return }
-    setCustomers((list) => list.map((c) => (c.id === customer.id ? { ...c, portal_access: true } : c)))
-    toast.success("Acceso activado. Mándale la invitación.")
+    setInviting(true)
+    try {
+      const status = await inviteCustomer(customer.id)
+      setCustomers((list) => list.map((c) => (c.id === customer.id ? { ...c, portal_access: true } : c)))
+      toast.success(status === "invited" ? `Invitación enviada a ${customer.email}` : `Ya tenía cuenta: le hemos enviado un enlace para entrar`)
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setInviting(false)
+    }
   }
 
   const addFiles = async (kind: "photos" | "documents", files: FileList | null) => {
@@ -199,14 +208,19 @@ export function ClientPortalModal({ isOpen, onClose, car }: ClientPortalModalPro
                     ) : customer.portal_access ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <span>Acceso activado para <b>{customer.email}</b>.</span>
-                        <Button type="button" size="sm" variant="outline" onClick={() => copyText(invitationText(customer.name, customer.email!), "Invitación copiada: mándasela por WhatsApp o correo")}>
-                          <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar invitación
+                        <Button type="button" size="sm" variant="outline" disabled={inviting} onClick={sendInvite}>
+                          {inviting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Mail className="mr-1.5 h-3.5 w-3.5" />} Reenviar acceso por correo
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => copyText(invitationText(customer.name, customer.email!), "Texto copiado: mándaselo por WhatsApp")}>
+                          <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar texto
                         </Button>
                       </div>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2">
-                        <span>{customer.email} aún no tiene acceso al área de clientes.</span>
-                        <Button type="button" size="sm" onClick={enablePortal}>Activar acceso</Button>
+                        <span>{customer.email} aún no tiene cuenta en el área de clientes.</span>
+                        <Button type="button" size="sm" disabled={inviting} onClick={sendInvite}>
+                          {inviting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Mail className="mr-1.5 h-3.5 w-3.5" />} Enviar invitación por correo
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -244,6 +258,27 @@ export function ClientPortalModal({ isOpen, onClose, car }: ClientPortalModalPro
                   <Label className="text-xs text-muted-foreground">Nota para el cliente (opcional)</Label>
                   <Textarea rows={2} value={form.note ?? ""} onChange={(e) => set("note", e.target.value)} placeholder="Ej.: Lo recojo el lunes y llegamos el miércoles por la noche." />
                 </div>
+              </div>
+
+              {/* Por dónde va (cuando está en ruta) */}
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="h-3.5 w-3.5" /> Por dónde va ahora (cuando esté de camino)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={form.current_location ?? ""}
+                    onChange={(e) => set("current_location", e.target.value)}
+                    placeholder="Ej.: Lyon, Francia · Pasando la frontera por La Jonquera"
+                  />
+                  <Button type="button" variant="outline" disabled={saving}
+                    onClick={() => save({ current_location: form.current_location, location_updated_at: form.current_location?.trim() ? new Date().toISOString() : null })}>
+                    Actualizar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {form.location_updated_at
+                    ? `El cliente lo ve como «Ahora en: ${form.current_location}» · actualizado el ${new Date(form.location_updated_at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                    : "Escríbelo cuando pares (gasolinera, frontera, hotel…) y pulsa Actualizar: el cliente lo verá en la fase «De camino a España»."}
+                </p>
               </div>
 
               {/* Fotos extra */}

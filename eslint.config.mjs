@@ -11,7 +11,7 @@ const config = [
       "react-hooks/set-state-in-effect": "warn",
     },
   },
-  { ignores: [".next/**", "out/**", "node_modules/**", "scripts/**", "next-env.d.ts"] },
+  { ignores: [".next/**", "out/**", "node_modules/**", "scripts/**", "supabase/functions/**", "next-env.d.ts"] },
 ]
 
 export default config

@@ -36,6 +36,9 @@ export interface PortalCar {
   customer_id: string
   transport_mode: TransportMode | null
   note: string | null
+  /** Por dónde va cuando está en ruta (texto libre) y cuándo se actualizó */
+  current_location: string | null
+  location_updated_at: string | null
   photos: PortalFile[]
   documents: PortalFile[]
   published: boolean
@@ -57,7 +60,12 @@ const pick = (i: PortalCarInput) => ({
 })
 
 export async function savePortalCar(existing: PortalCar | null, input: PortalCarInput): Promise<PortalCar> {
-  const payload = { ...pick(input), updated_at: new Date().toISOString() }
+  const payload: Record<string, unknown> = { ...pick(input), updated_at: new Date().toISOString() }
+  // Las columnas de ubicación llegan con supabase/2026-10_resenas_ubicacion.sql: solo se mandan si ya existen o se usan
+  if (input.current_location?.trim() || (existing && "location_updated_at" in existing)) {
+    payload.current_location = input.current_location?.trim() || null
+    payload.location_updated_at = input.current_location?.trim() ? input.location_updated_at : null
+  }
   const query = existing
     ? supabase.from("client_portal_cars").update(payload).eq("id", existing.id).select("*").single()
     : supabase.from("client_portal_cars").insert(payload).select("*").single()
@@ -124,4 +132,21 @@ Ya puedes seguir tu coche en el área de clientes de NorDrive: en qué fase est�
 
 Cualquier duda, aquí estamos.
 NorDrive`
+}
+
+/**
+ * Manda al cliente el correo de invitación para crear su cuenta (Edge Function invite-client de Supabase).
+ * Si ya tenía cuenta, le llega un enlace para entrar. También activa su acceso al área de clientes.
+ */
+export async function inviteCustomer(customerId: string): Promise<"invited" | "magic_link"> {
+  const { data, error } = await supabase.functions.invoke("invite-client", { body: { customer_id: customerId } })
+  if (error) {
+    let message = ""
+    try { message = (await (error as { context?: Response }).context?.json())?.error ?? "" } catch { /* sin cuerpo */ }
+    if (!message && /Failed to send|404|not found/i.test(error.message)) {
+      message = "Falta desplegar la función invite-client en Supabase (Edge Functions)."
+    }
+    throw new Error(message || error.message || "No se pudo enviar la invitación")
+  }
+  return (data?.status as "invited" | "magic_link") ?? "invited"
 }
