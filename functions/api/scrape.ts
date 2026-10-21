@@ -6,7 +6,7 @@
 //
 // Se usa de dos formas:
 //  - como Cloudflare Pages Function (si la web se aloja en Cloudflare Pages), y
-//  - como Worker independiente (workers/car-scrape.js, generado con `npm run build:scrape-worker`),
+//  - como Worker independiente (workers/car-scrape.js, generado con `npm run build:workers`),
 //    que es lo que usa la web alojada en GitHub Pages.
 // Variables de entorno: SUPABASE_URL, SUPABASE_ANON_KEY
 

@@ -8,7 +8,7 @@
     "lint": "eslint .",
     "start": "next start",
     "test": "vitest run",
-    "build:scrape-worker": "node scripts/build-scrape-worker.mjs",
+    "build:workers": "node scripts/build-workers.mjs",
     "screenshots:garage": "node scripts/garage-screenshots.mjs screenshots"
   },
   "dependencies": {
@@ -86,6 +86,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.137.0",
     "@playwright/test": "^1.52.0",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/canvas-confetti": "^1.9.0",

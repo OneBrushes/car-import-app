@@ -1,4 +1,4 @@
-// Generado con `npm run build:scrape-worker` desde workers/src/car-scrape.ts. No editar a mano.
+// Generado con `npm run build:workers` desde workers/src/car-scrape.ts. No editar a mano.
 
 // lib/listing-parser.ts
 function parseListing(html, url) {
@@ -218,22 +218,24 @@ async function handleScrape(request, env) {
   return json(car);
 }
 
-// workers/src/car-scrape.ts
+// workers/src/cors.ts
 var DEFAULT_ORIGINS = ["https://app.nordrivecars.com", "http://localhost:3000"];
-function cors(request, env) {
+function cors(request, env, methods) {
   const origin = request.headers.get("Origin") || "";
   const allowed = (env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(",") : DEFAULT_ORIGINS).map((o) => o.trim());
   return {
     "Access-Control-Allow-Origin": allowed.includes(origin) ? origin : allowed[0],
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": `${methods}, OPTIONS`,
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin"
   };
 }
+
+// workers/src/car-scrape.ts
 var car_scrape_default = {
   async fetch(request, env) {
-    const headers = cors(request, env);
+    const headers = cors(request, env, "GET");
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
     if (request.method !== "GET") return new Response(JSON.stringify({ error: "M\xE9todo no permitido" }), { status: 405, headers: { ...headers, "Content-Type": "application/json" } });
     const res = await handleScrape(request, env);

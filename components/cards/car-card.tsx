@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ExternalLink, Trash2, Share2, Users, Mail, MailOpen } from "lucide-react"
+import { ExternalLink, Trash2, Share2, Users, Mail, MailOpen, MessageSquareText, BadgeX } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ImageCarousel } from "@/components/ui/image-carousel"
 import { supabase } from "@/lib/supabase"
 import { CarHistoryButton } from "@/components/car-history"
+import { daysUntilPurge } from "@/lib/conversations"
 
 interface CarCardProps {
   car: any
@@ -16,9 +17,14 @@ interface CarCardProps {
   currentUserId?: string
   isGodMode?: boolean
   onToggleContacted?: (carId: string, currentStatus: boolean) => void
+  /** Abre el generador de mensajes y la conversación con el vendedor */
+  onWriteSeller?: (car: any) => void
+  /** Marca / desmarca "el vendedor ya lo ha vendido" (los datos se borran a los 30 días) */
+  onToggleSellerSold?: (car: any) => void
 }
 
-export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMode = false, onToggleContacted }: CarCardProps) {
+export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMode = false, onToggleContacted, onWriteSeller, onToggleSellerSold }: CarCardProps) {
+  const purgeDays = daysUntilPurge(car.seller_sold_at)
   const [ownerName, setOwnerName] = useState<string>("")
   const finalPrice = (car.price || 0) + (car.totalExpenses || 0)
   const images = car.images && car.images.length > 0 ? car.images : (car.image_url ? [car.image_url] : [])
@@ -53,7 +59,9 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
     <div
       onClick={() => onEdit(car)} // Permitir ver tanto propios como compartidos
       className={`bg-card border rounded-xl overflow-hidden shadow-xs transition-all group relative cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${
-        car.contacted
+        purgeDays != null
+          ? 'border-border opacity-70 hover:opacity-100'
+          : car.contacted
           ? 'border-success/40'
           : isSharedWithMe
             ? 'border-primary/40'
@@ -62,7 +70,12 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
     >
       {/* Badges de Estado */}
       <div className="absolute top-2.5 left-2.5 z-10 flex flex-wrap gap-1">
-        {car.contacted && (
+        {purgeDays != null && (
+          <Badge className="border-transparent bg-foreground/85 text-background shadow-sm" title="Los datos del coche se borran a los 30 días; la conversación se conserva">
+            <BadgeX className="w-3 h-3" /> Vendido por el vendedor · se borra en {purgeDays} {purgeDays === 1 ? "día" : "días"}
+          </Badge>
+        )}
+        {car.contacted && purgeDays == null && (
           <Badge className="border-transparent bg-success text-success-foreground shadow-sm">
             <MailOpen className="w-3 h-3" /> Contactado
           </Badge>
@@ -129,6 +142,28 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
           <CarHistoryButton importedId={car.id} title={`${car.brand} ${car.model}${car.year ? ` (${car.year})` : ""}`} />
           {isOwner && (
             <>
+              {onWriteSeller && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  onClick={() => onWriteSeller(car)}
+                  title="Escribir al vendedor (mensaje y conversación)"
+                >
+                  <MessageSquareText className="w-4 h-4" />
+                </Button>
+              )}
+              {onToggleSellerSold && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-9 w-9 transition-colors ${purgeDays != null ? "text-foreground bg-accent hover:bg-accent" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+                  onClick={() => onToggleSellerSold(car)}
+                  title={purgeDays != null ? "Ya no está vendido (deshacer)" : "Vendido por el vendedor: borrar los datos del coche en 30 días"}
+                >
+                  <BadgeX className="w-4 h-4" />
+                </Button>
+              )}
               {onToggleContacted && (
                 <Button
                   variant="ghost"

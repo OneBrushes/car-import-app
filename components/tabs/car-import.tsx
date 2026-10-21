@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Search, Filter, Trash2, Edit, ChevronDown, ChevronUp, Image as ImageIcon, Loader2, LayoutGrid, List, Mail, MailOpen } from "lucide-react"
+import { Plus, Search, Filter, Trash2, Edit, ChevronDown, ChevronUp, Image as ImageIcon, Loader2, LayoutGrid, List, Mail, MailOpen, MessageSquare } from "lucide-react"
 import { AddCarModal } from "@/components/modals/add-car-modal"
 import { Button } from "@/components/ui/button"
 import { CarCard } from "@/components/cards/car-card"
 import { ShareCarModal } from "@/components/modals/share-car-modal"
+import { SellerContactModal } from "@/components/modals/seller-contact-modal"
+import { ConversationsModal } from "@/components/modals/conversations-modal"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
@@ -35,6 +37,7 @@ interface Car {
   expenses?: any[]
   vehicleType?: string
   contacted?: boolean
+  seller_sold_at?: string | null
 }
 
 interface CarImportProps {
@@ -55,6 +58,11 @@ export function CarImport({ role }: CarImportProps) {
     setCarToShare(car)
     setIsShareModalOpen(true)
   }
+  // Escribir al vendedor / conversaciones
+  const [sellerCar, setSellerCar] = useState<Car | null>(null)
+  const [sellerConversationId, setSellerConversationId] = useState<string | undefined>(undefined)
+  const [isSellerOpen, setIsSellerOpen] = useState(false)
+  const [isConversationsOpen, setIsConversationsOpen] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("date")
@@ -102,6 +110,10 @@ export function CarImport({ role }: CarImportProps) {
   const fetchCars = async () => {
     try {
       setLoading(true)
+
+      // Coches marcados "vendido por el vendedor" hace más de 30 días: se borran (la conversación se queda).
+      // Si aún no se ha ejecutado supabase/2026-10_conversaciones_vendedor.sql la función no existe: se ignora.
+      await supabase.rpc('purge_seller_sold_cars').then(() => undefined, () => undefined)
 
       // Get all cars from database
       const { data, error } = await supabase
@@ -373,6 +385,33 @@ export function CarImport({ role }: CarImportProps) {
     }
   }
 
+  const toggleSellerSold = async (car: Car) => {
+    const next = car.seller_sold_at ? null : new Date().toISOString()
+    const { error } = await supabase.from('imported_cars').update({ seller_sold_at: next }).eq('id', car.id)
+    if (error) {
+      console.error("Error marking seller sold:", error)
+      toast.error(/seller_sold_at/.test(error.message)
+        ? "Falta ejecutar supabase/2026-10_conversaciones_vendedor.sql en Supabase"
+        : "No se pudo actualizar el coche")
+      return
+    }
+    setCars(prev => prev.map(c => c.id === car.id ? { ...c, seller_sold_at: next } : c))
+    toast.success(next
+      ? "Marcado como vendido por el vendedor. Los datos del coche se borrarán en 30 días; la conversación se conserva."
+      : "Desmarcado: el coche ya no se borrará")
+  }
+
+  const openSeller = (car: Car | null, conversationId?: string) => {
+    setSellerCar(car)
+    setSellerConversationId(conversationId)
+    setIsSellerOpen(true)
+  }
+
+  const markContactedAfterSend = (carId: string) => {
+    const car = cars.find(c => c.id === carId)
+    if (car && !car.contacted) toggleContacted(carId, false)
+  }
+
   const handleEdit = (car: Car) => {
     setEditingCar(car)
     setIsModalOpen(true)
@@ -415,12 +454,18 @@ export function CarImport({ role }: CarImportProps) {
           <h2 className="text-2xl font-semibold tracking-tight">Importación de Coches</h2>
           <p className="text-muted-foreground">Gestiona y calcula costes de importación</p>
         </div>
-        {role !== 'usuario' && (
-          <Button onClick={() => setIsModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Añadir Coche
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsConversationsOpen(true)}>
+            <MessageSquare className="w-4 h-4 mr-2" />
+            Conversaciones
           </Button>
-        )}
+          {role !== 'usuario' && (
+            <Button onClick={() => setIsModalOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Añadir Coche
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Búsqueda y Filtros */}
@@ -492,6 +537,8 @@ export function CarImport({ role }: CarImportProps) {
                   currentUserId={user?.id}
                   isGodMode={isGodMode}
                   onToggleContacted={(carId, currentStatus) => toggleContacted(carId, currentStatus)}
+                  onWriteSeller={() => openSeller(car)}
+                  onToggleSellerSold={() => toggleSellerSold(car)}
                 />
               ))}
             </div>
@@ -605,6 +652,24 @@ export function CarImport({ role }: CarImportProps) {
         }}
         onSubmit={addCar}
         initialData={editingCar}
+      />
+
+      <SellerContactModal
+        isOpen={isSellerOpen}
+        onClose={() => setIsSellerOpen(false)}
+        car={sellerCar ?? undefined}
+        conversationId={sellerConversationId}
+        onSent={markContactedAfterSend}
+      />
+
+      <ConversationsModal
+        isOpen={isConversationsOpen}
+        onClose={() => setIsConversationsOpen(false)}
+        onOpen={(conversation) => {
+          setIsConversationsOpen(false)
+          const car = conversation.car_id ? cars.find(c => c.id === conversation.car_id) ?? null : null
+          openSeller(car, car ? undefined : conversation.id)
+        }}
       />
 
       {carToShare && (
