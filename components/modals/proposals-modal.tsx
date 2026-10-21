@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Copy, Loader2, Send } from "lucide-react"
+import { Copy, Loader2, MessageSquare, Send } from "lucide-react"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { invitationText } from "@/lib/client-portal"
-import { deleteProposals, listProposals, reactionLabel, upsertProposals, type Proposal } from "@/lib/proposals"
+import { deleteProposals, listProposals, reactionLabel, replyToProposal, threadOf, upsertProposals, type Proposal, type ThreadMessage } from "@/lib/proposals"
 
 interface ProposalsModalProps {
   isOpen: boolean
@@ -140,7 +140,8 @@ export function ProposalsModal({ isOpen, onClose, customer, car, onSaved }: Prop
                   {rows.map((r) => {
                     const p = byKey.get(r.id)
                     return (
-                      <div key={r.id} className={`flex items-center gap-3 p-3 ${r.disabled ? "opacity-60" : ""}`}>
+                      <div key={r.id} className={r.disabled ? "opacity-60" : ""}>
+                      <div className="flex items-center gap-3 p-3">
                         <Checkbox checked={!!selected[r.id]} disabled={!!r.disabled} onCheckedChange={(v) => setSelected((s) => ({ ...s, [r.id]: !!v }))} />
                         {mode === "customer" && (
                           <div className="h-10 w-14 shrink-0 overflow-hidden rounded bg-muted">{r.image ? <img src={r.image} alt="" className="h-full w-full object-cover" /> : null}</div>
@@ -151,7 +152,7 @@ export function ProposalsModal({ isOpen, onClose, customer, car, onSaved }: Prop
                           {p && (
                             <p className="mt-0.5 text-xs">
                               <span className={p.is_favorite || p.reaction === "like" ? "text-success" : p.reaction === "dislike" ? "text-destructive" : "text-muted-foreground"}>{reactionLabel(p)}</span>
-                              {p.client_comment && <span className="text-muted-foreground"> · «{p.client_comment}»</span>}
+                              {threadOf(p).length > 0 && <span className="text-muted-foreground"> · {threadOf(p).length} {threadOf(p).length === 1 ? "mensaje" : "mensajes"}</span>}
                             </p>
                           )}
                         </div>
@@ -159,6 +160,13 @@ export function ProposalsModal({ isOpen, onClose, customer, car, onSaved }: Prop
                           <Input type="number" inputMode="numeric" className="h-8 w-32" placeholder="Precio €" title="Precio para el cliente (opcional)"
                             value={prices[r.id] ?? ""} onChange={(e) => setPrices((x) => ({ ...x, [r.id]: e.target.value }))} />
                         )}
+                      </div>
+                      {p && threadOf(p).length > 0 && (
+                        <ProposalThread
+                          proposal={p}
+                          onThread={(thread) => setExisting((list) => list.map((x) => (x.id === p.id ? { ...x, thread } : x)))}
+                        />
+                      )}
                       </div>
                     )
                   })}
@@ -184,5 +192,59 @@ export function ProposalsModal({ isOpen, onClose, customer, car, onSaved }: Prop
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Conversación con el cliente sobre un coche propuesto, con caja para contestar */
+function ProposalThread({ proposal, onThread }: { proposal: Proposal; onThread: (thread: ThreadMessage[]) => void }) {
+  const thread = threadOf(proposal)
+  const waiting = thread[thread.length - 1]?.from === "client"
+  const [open, setOpen] = useState(waiting)
+  const [text, setText] = useState("")
+  const [sending, setSending] = useState(false)
+
+  const send = async () => {
+    if (!text.trim()) return
+    setSending(true)
+    try {
+      onThread(await replyToProposal(proposal.id, text.trim()))
+      setText("")
+      toast.success("Respuesta enviada: el cliente la verá en su área")
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="border-t bg-muted/20 px-3 py-2">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
+        <MessageSquare className="h-3.5 w-3.5" />
+        Conversación ({thread.length})
+        {waiting && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">Pendiente de contestar</span>}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {thread.map((m, i) => (
+            <div key={i} className={`flex ${m.from === "nordrive" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-1.5 text-sm ${m.from === "nordrive" ? "bg-primary text-primary-foreground" : "bg-background border"}`}>
+                <p className={`text-[10px] ${m.from === "nordrive" ? "text-primary-foreground/75" : "text-muted-foreground"}`}>
+                  {m.from === "nordrive" ? "Tú" : proposal.customers?.name?.split(" ")[0] ?? "Cliente"} · {new Date(m.at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </p>
+                {m.text}
+              </div>
+            </div>
+          ))}
+          <div className="flex gap-2">
+            <Textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Escribe tu respuesta al cliente…" className="bg-background text-sm"
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send() } }} />
+            <Button type="button" size="sm" onClick={send} disabled={sending || !text.trim()} className="self-end">
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

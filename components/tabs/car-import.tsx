@@ -130,7 +130,7 @@ export function CarImport({ role }: CarImportProps) {
       // Propuestas a clientes (si aún no existe la tabla, simplemente no hay)
       const { data: proposalRows } = await supabase
         .from('client_proposals')
-        .select('id, imported_car_id, reaction, is_favorite, client_comment, customers(name)')
+        .select('id, imported_car_id, reaction, is_favorite, client_comment, thread, customers(name)')
       const proposalsByCar = new Map<string, any[]>()
       for (const p of proposalRows ?? []) {
         const list = proposalsByCar.get((p as any).imported_car_id) ?? []

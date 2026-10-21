@@ -5,6 +5,13 @@ import { supabase } from "@/lib/supabase"
 
 export type Reaction = "like" | "dislike"
 
+/** Mensaje de la conversación de una propuesta */
+export interface ThreadMessage {
+  from: "client" | "nordrive"
+  text: string
+  at: string
+}
+
 export interface Proposal {
   id: string
   customer_id: string
@@ -15,6 +22,8 @@ export interface Proposal {
   client_comment: string | null
   is_favorite: boolean
   reacted_at: string | null
+  /** Conversación con el cliente sobre este coche (supabase/2026-10_propuestas_conversacion.sql) */
+  thread?: ThreadMessage[] | null
   created_at: string
   customers?: { name: string } | null
 }
@@ -40,6 +49,26 @@ export async function upsertProposals(rows: { customer_id: string; imported_car_
   if (!rows.length) return
   const { error } = await supabase.from("client_proposals").upsert(rows, { onConflict: "customer_id,imported_car_id" })
   if (error) throw proposalError(error)
+}
+
+/** Contesta al cliente en la conversación de una propuesta; devuelve la conversación actualizada */
+export async function replyToProposal(id: string, text: string): Promise<ThreadMessage[]> {
+  const { data, error } = await supabase.rpc("reply_proposal", { proposal: id, body: text })
+  if (error) {
+    if (error.code === "PGRST202" || /reply_proposal/.test(error.message || "")) {
+      throw new Error("Falta preparar las respuestas: ejecuta supabase/2026-10_propuestas_conversacion.sql en Supabase.")
+    }
+    throw new Error(error.message || "No se pudo enviar la respuesta")
+  }
+  // reply_proposal devuelve la conversación entera (jsonb); null si no se ha podido escribir (sin permiso)
+  if (!Array.isArray(data)) throw new Error("No se pudo enviar la respuesta")
+  return data as ThreadMessage[]
+}
+
+/** La conversación (con el comentario antiguo como primer mensaje si aún no hay conversación) */
+export function threadOf(p: Pick<Proposal, "thread" | "client_comment" | "reacted_at" | "created_at">): ThreadMessage[] {
+  if (Array.isArray(p.thread) && p.thread.length) return p.thread
+  return p.client_comment ? [{ from: "client", text: p.client_comment, at: p.reacted_at || p.created_at }] : []
 }
 
 export async function deleteProposals(ids: string[]) {

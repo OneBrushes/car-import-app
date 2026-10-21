@@ -142,7 +142,9 @@ export function CarCard({ car, onDelete, onEdit, onShare, currentUserId, isGodMo
                     : "text-muted-foreground"}`}
               >
                 {p.is_favorite ? "★" : p.reaction === "like" ? "👍" : p.reaction === "dislike" ? "👎" : "⏳"} {p.customers?.name?.split(" ")[0] ?? "Cliente"}
-                {p.client_comment ? " 💬" : ""}
+                {Array.isArray(p.thread) && p.thread.length
+                  ? (p.thread[p.thread.length - 1]?.from === "client" ? " 💬 sin contestar" : " 💬")
+                  : p.client_comment ? " 💬" : ""}
               </button>
             ))}
           </div>
