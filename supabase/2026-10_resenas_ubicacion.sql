@@ -2,8 +2,9 @@
 -- NorDrive · Reseñas de los clientes y "por dónde va el coche"
 -- Ejecutar una vez en Supabase → SQL Editor, DESPUÉS de 2026-10_area_clientes_v2.sql (se puede repetir sin problema).
 --
---  · client_portal_cars.current_location + location_updated_at: por dónde va el coche cuando está en ruta
---    (lo escribes tú desde la app; el cliente lo ve en la web).
+--  · client_portal_cars.destination ("Camino a …") + current_location ("Ahora en …") + location_updated_at:
+--    por dónde va el coche cuando está en ruta (lo escribes tú en la tarjeta del coche en Comprados, debajo de
+--    "Trámites de matriculación"; el cliente lo ve en la web).
 --  · client_reviews: cuando el coche está entregado, el cliente deja su valoración (estrellas, qué le ha gustado y
 --    qué cambiaría). Tú la ves en su ficha de cliente y te llega un aviso.
 -- =====================================================================================================================
@@ -88,6 +89,7 @@ returns table (
   delivered_on text,
   transport_mode text,
   note text,
+  destination text,          -- "Camino a …" (lo escribes tú en la tarjeta del coche)
   current_location text,
   location_updated_at timestamptz,
   checklist jsonb,
@@ -112,6 +114,7 @@ as $$
          case when i.status = 'sold' then left(i.date_sold::text, 10) end,
          coalesce(nullif(p.transport_mode, ''), 'conduciendo'),
          p.note,
+         nullif(trim(p.destination), ''),
          p.current_location,
          p.location_updated_at,
          coalesce(cl.data::jsonb, '{}'::jsonb),

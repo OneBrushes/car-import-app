@@ -7,6 +7,7 @@ import { CarHistoryButton } from "@/components/car-history"
 
 import { DocumentsModal, CarDocument } from "@/components/modals/documents-modal"
 import { ClientPortalModal } from "@/components/modals/client-portal-modal"
+import { ClientRouteUpdater } from "@/components/client-route-updater"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 
@@ -209,6 +210,9 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
               </div>
             </div>
           )}
+
+          {/* Por dónde va (para el cliente que sigue el coche en la web) */}
+          {car.status !== "sold" && <ClientRouteUpdater carId={car.id} />}
 
           {/* Desglose de inversión */}
           <div>

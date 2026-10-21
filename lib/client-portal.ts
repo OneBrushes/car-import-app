@@ -61,11 +61,7 @@ const pick = (i: PortalCarInput) => ({
 
 export async function savePortalCar(existing: PortalCar | null, input: PortalCarInput): Promise<PortalCar> {
   const payload: Record<string, unknown> = { ...pick(input), updated_at: new Date().toISOString() }
-  // Las columnas de ubicación llegan con supabase/2026-10_resenas_ubicacion.sql: solo se mandan si ya existen o se usan
-  if (input.current_location?.trim() || (existing && "location_updated_at" in existing)) {
-    payload.current_location = input.current_location?.trim() || null
-    payload.location_updated_at = input.current_location?.trim() ? input.location_updated_at : null
-  }
+  // La ubicación ("Camino a / Ahora en") se guarda aparte, desde la tarjeta del coche (ClientRouteUpdater)
   const query = existing
     ? supabase.from("client_portal_cars").update(payload).eq("id", existing.id).select("*").single()
     : supabase.from("client_portal_cars").insert(payload).select("*").single()

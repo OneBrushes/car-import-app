@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { CheckCircle2, Copy, ExternalLink, FileText, ImagePlus, Loader2, Mail, MapPin, Trash2, Upload, UserRound } from "lucide-react"
-import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -260,26 +259,7 @@ export function ClientPortalModal({ isOpen, onClose, car }: ClientPortalModalPro
                 </div>
               </div>
 
-              {/* Por dónde va (cuando está en ruta) */}
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="h-3.5 w-3.5" /> Por dónde va ahora (cuando esté de camino)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={form.current_location ?? ""}
-                    onChange={(e) => set("current_location", e.target.value)}
-                    placeholder="Ej.: Lyon, Francia · Pasando la frontera por La Jonquera"
-                  />
-                  <Button type="button" variant="outline" disabled={saving}
-                    onClick={() => save({ current_location: form.current_location, location_updated_at: form.current_location?.trim() ? new Date().toISOString() : null })}>
-                    Actualizar
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {form.location_updated_at
-                    ? `El cliente lo ve como «Ahora en: ${form.current_location}» · actualizado el ${new Date(form.location_updated_at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
-                    : "Escríbelo cuando pares (gasolinera, frontera, hotel…) y pulsa Actualizar: el cliente lo verá en la fase «De camino a España»."}
-                </p>
-              </div>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="h-3.5 w-3.5" /> «Camino a» y «Ahora en» se actualizan en la tarjeta del coche, debajo de Trámites de matriculación.</p>
 
               {/* Fotos extra */}
               <div className="space-y-2">
