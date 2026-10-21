@@ -3,7 +3,18 @@
 // marcan como spam los textos repetidos). Idioma según el portal / país del anuncio.
 
 export type SellerLanguage = "de" | "en" | "fr" | "nl" | "it" | "es"
-export type MessageKind = "first" | "offer"
+export type MessageKind = "first" | "offer" | ReplyKind
+/** Respuestas genéricas para seguir la conversación cuando el vendedor ya ha contestado */
+export type ReplyKind = "visit" | "photos" | "accept" | "decline"
+
+export const KIND_LABEL: Record<MessageKind, string> = {
+  first: "Primer contacto",
+  offer: "Negociar precio",
+  visit: "Quedar para verlo / recogerlo",
+  photos: "Pedir más fotos y bastidor",
+  accept: "Aceptar y pedir datos de pago",
+  decline: "No me interesa",
+}
 export type QuestionKey = "defects" | "papers" | "service" | "inspection"
 
 export const LANGUAGE_LABEL: Record<SellerLanguage, string> = {
@@ -36,8 +47,10 @@ export interface MessageOptions {
   /** Tu nombre para la firma */
   name?: string
   phone?: string
-  /** Precio que ofreces (solo en negociación) */
+  /** Precio que ofreces (negociación) o acordado (aceptar) */
   offer?: number | null
+  /** Día u hora propuestos para verlo o recogerlo (texto libre, p. ej. "el sábado 25 por la mañana") */
+  when?: string
   questions: QuestionKey[]
   /** Cambia las frases elegidas: cada número da otra versión */
   seed: number
@@ -275,6 +288,122 @@ const P: Record<SellerLanguage, Pools> = {
   },
 }
 
+
+/** Cuerpo de las respuestas genéricas: cada idioma tiene dos versiones por tipo ({car} {when} {offer}) */
+const REPLIES: Record<SellerLanguage, Record<ReplyKind, string[]>> = {
+  de: {
+    visit: [
+      "Ich würde mir den {car} gerne ansehen und ihn bei Gefallen direkt mitnehmen. Würde Ihnen {when} passen?",
+      "Passt es Ihnen, wenn ich {when} vorbeikomme? Wenn alles wie beschrieben ist, würde ich den {car} gleich kaufen und mitnehmen.",
+    ],
+    photos: [
+      "Könnten Sie mir noch ein paar Fotos schicken, vor allem vom Unterboden, den Reifen und eventuellen Kratzern? Und wie lautet die Fahrgestellnummer (FIN)?",
+      "Hätten Sie noch weitere Bilder vom Innenraum, Motorraum und Unterboden? Die Fahrgestellnummer (FIN) wäre auch hilfreich.",
+    ],
+    accept: [
+      "Prima, dann sind wir uns bei {offer} einig. Können Sie mir bitte einen Kaufvertrag und die Bankdaten für die Überweisung schicken?",
+      "Super, {offer} passt für mich. Wie möchten Sie die Zahlung abwickeln? Gerne per Überweisung, wenn Sie mir die Bankdaten und den Kaufvertrag schicken.",
+    ],
+    decline: [
+      "Vielen Dank für Ihre Mühe. Leider passt es für mich aktuell nicht, ich wünsche Ihnen aber viel Erfolg beim Verkauf.",
+      "Danke für die Infos. Ich habe mich anders entschieden, wünsche Ihnen aber einen schnellen Verkauf.",
+    ],
+  },
+  en: {
+    visit: [
+      "I'd like to come and see the {car} and, if it's as described, take it with me. Would {when} suit you?",
+      "Would it be OK if I came by {when}? If everything is as described, I'd buy the {car} on the spot.",
+    ],
+    photos: [
+      "Could you send me a few more photos, especially of the underside, the tyres and any scratches? And could you share the VIN?",
+      "Do you have more pictures of the interior, the engine bay and the underside? The VIN would also help.",
+    ],
+    accept: [
+      "Great, we have a deal at {offer}. Could you send me a sales contract and your bank details for the transfer?",
+      "Perfect, {offer} works for me. How would you like to handle payment? A bank transfer is fine if you send me your details and the contract.",
+    ],
+    decline: [
+      "Thank you for your time. Unfortunately it doesn't work for me right now, but good luck with the sale.",
+      "Thanks for the information. I've decided to go another way, but I hope it sells quickly.",
+    ],
+  },
+  fr: {
+    visit: [
+      "Je souhaiterais venir voir le {car} et, s'il correspond à l'annonce, repartir avec. Est-ce que {when} vous conviendrait ?",
+      "Est-ce que je peux passer {when} ? Si tout est conforme, j'achèterais le {car} sur place.",
+    ],
+    photos: [
+      "Pourriez-vous m'envoyer quelques photos supplémentaires, surtout du dessous, des pneus et des éventuelles rayures ? Et le numéro de châssis (VIN) ?",
+      "Auriez-vous d'autres photos de l'intérieur, du compartiment moteur et du dessous ? Le numéro VIN m'aiderait aussi.",
+    ],
+    accept: [
+      "Parfait, nous sommes d'accord à {offer}. Pourriez-vous m'envoyer un certificat de cession et vos coordonnées bancaires pour le virement ?",
+      "Très bien, {offer} me convient. Comment souhaitez-vous procéder pour le paiement ? Un virement me va si vous m'envoyez votre RIB et le contrat.",
+    ],
+    decline: [
+      "Merci pour votre temps. Malheureusement cela ne me convient pas pour le moment, mais je vous souhaite une bonne vente.",
+      "Merci pour les informations. J'ai finalement choisi une autre option, mais je vous souhaite de le vendre rapidement.",
+    ],
+  },
+  nl: {
+    visit: [
+      "Ik kom de {car} graag bekijken en neem hem, als alles klopt, meteen mee. Zou {when} u schikken?",
+      "Is het goed als ik {when} langskom? Als alles is zoals beschreven, koop ik de {car} direct.",
+    ],
+    photos: [
+      "Kunt u mij nog een paar foto's sturen, vooral van de onderkant, de banden en eventuele krassen? En wat is het chassisnummer (VIN)?",
+      "Heeft u nog meer foto's van het interieur, de motorruimte en de onderkant? Het VIN-nummer zou ook helpen.",
+    ],
+    accept: [
+      "Prima, dan zijn we het eens voor {offer}. Kunt u mij een koopcontract en uw bankgegevens voor de overschrijving sturen?",
+      "Top, {offer} is goed voor mij. Hoe wilt u de betaling regelen? Een overschrijving is prima als u mij de gegevens en het contract stuurt.",
+    ],
+    decline: [
+      "Bedankt voor uw moeite. Helaas past het op dit moment niet voor mij, maar veel succes met de verkoop.",
+      "Dank voor de informatie. Ik heb voor iets anders gekozen, maar ik hoop dat hij snel verkocht wordt.",
+    ],
+  },
+  it: {
+    visit: [
+      "Vorrei venire a vedere la {car} e, se è come descritta, portarla via subito. Le andrebbe bene {when}?",
+      "Posso passare {when}? Se è tutto come descritto, comprerei la {car} sul posto.",
+    ],
+    photos: [
+      "Potrebbe mandarmi qualche foto in più, soprattutto del sottoscocca, delle gomme e di eventuali graffi? E il numero di telaio (VIN)?",
+      "Ha altre foto degli interni, del vano motore e del sottoscocca? Anche il numero di telaio mi sarebbe utile.",
+    ],
+    accept: [
+      "Perfetto, allora siamo d'accordo a {offer}. Potrebbe mandarmi un contratto di vendita e i dati bancari per il bonifico?",
+      "Benissimo, {offer} per me va bene. Come preferisce gestire il pagamento? Un bonifico va bene se mi manda i dati e il contratto.",
+    ],
+    decline: [
+      "Grazie per il suo tempo. Purtroppo al momento non fa per me, ma le auguro una buona vendita.",
+      "Grazie per le informazioni. Ho deciso diversamente, ma spero che la venda presto.",
+    ],
+  },
+  es: {
+    visit: [
+      "Me gustaría ir a ver el {car} y, si está como en el anuncio, llevármelo. ¿Le vendría bien {when}?",
+      "¿Le parece bien si paso {when}? Si todo está como se describe, compraría el {car} en el momento.",
+    ],
+    photos: [
+      "¿Podría enviarme alguna foto más, sobre todo de los bajos, los neumáticos y posibles arañazos? ¿Y el número de bastidor?",
+      "¿Tiene más fotos del interior, el motor y los bajos? El número de bastidor también me ayudaría.",
+    ],
+    accept: [
+      "Perfecto, entonces quedamos en {offer}. ¿Me puede enviar un contrato de compraventa y los datos bancarios para la transferencia?",
+      "Genial, {offer} me parece bien. ¿Cómo prefiere hacer el pago? Por transferencia me va bien si me pasa los datos y el contrato.",
+    ],
+    decline: [
+      "Muchas gracias por su tiempo. Por ahora no me encaja, pero le deseo suerte con la venta.",
+      "Gracias por la información. Al final me he decidido por otra opción, pero espero que lo venda pronto.",
+    ],
+  },
+}
+
+/** "[día]" en el idioma del vendedor cuando no se ha indicado cuándo */
+const WHEN_PLACEHOLDER: Record<SellerLanguage, string> = { de: "[Tag/Uhrzeit]", en: "[day/time]", fr: "[jour/heure]", nl: "[dag/tijd]", it: "[giorno/ora]", es: "[día/hora]" }
+
 const LOCALE: Record<SellerLanguage, string> = { de: "de-DE", en: "en-GB", fr: "fr-FR", nl: "nl-NL", it: "it-IT", es: "es-ES" }
 
 /** Elige una frase de la lista de forma estable según la versión y la posición */
@@ -305,6 +434,7 @@ export function buildMessage(car: SellerCar, opts: MessageOptions): string {
     .replace("{city}", cityPart)
     .replace("{offer}", opts.offer ? formatEuro(opts.offer, opts.language) : "—")
     .replace("{phone}", opts.phone || "")
+    .replace("{when}", opts.when?.trim() || WHEN_PLACEHOLDER[opts.language])
 
   const lines: string[] = [pick(L.greet, s, 1), ""]
 
@@ -317,8 +447,13 @@ export function buildMessage(car: SellerCar, opts: MessageOptions): string {
     const available = pick(L.available, s, 2).replace("{car}", name).replace(" ({details})", details ? ` (${details})` : "")
     const questions = opts.questions.map((k, i) => pick(L.q[k], s, 4 + i))
     lines.push(available, "", [fill(pick(L.intent, s, 3)), ...questions].join(" "), "", pick(L.close, s, 9))
-  } else {
+  } else if (opts.kind === "offer") {
     lines.push(pick(L.thanks, s, 2), "", `${fill(pick(L.like, s, 3))} ${fill(pick(L.ask, s, 4))}`, "", pick(L.closeOffer, s, 5))
+  } else {
+    const body = fill(pick(REPLIES[opts.language][opts.kind], s, 3))
+    // al rechazar no se repite el agradecimiento: la propia respuesta ya da las gracias
+    if (opts.kind === "decline") lines.push(body)
+    else lines.push(pick(L.thanks, s, 2), "", body)
   }
 
   if (opts.phone) lines.push(fill(L.phone))

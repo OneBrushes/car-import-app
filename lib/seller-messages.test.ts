@@ -31,3 +31,29 @@ describe("seller messages", () => {
         expect(text.split("\n")[2][0]).toBe(text.split("\n")[2][0].toUpperCase())
     })
 })
+
+describe("respuestas genéricas", () => {
+    it("quedar: usa el día indicado o deja un hueco para rellenar", () => {
+        const withDay = buildMessage(up, { kind: "visit", language: "de", when: "am Samstag", questions: [], seed: 0 })
+        expect(withDay).toContain("am Samstag")
+        const noDay = buildMessage(up, { kind: "visit", language: "fr", questions: [], seed: 0 })
+        expect(noDay).toContain("[jour/heure]")
+    })
+
+    it("aceptar con el precio acordado y pedir datos de pago", () => {
+        const text = buildMessage(up, { kind: "accept", language: "nl", offer: 1800, questions: [], seed: 0 })
+        expect(text).toContain("1.800 €")
+        expect(text).toMatch(/bankgegevens|gegevens/)
+    })
+
+    it("rechazar sin repetir el agradecimiento", () => {
+        const text = buildMessage(up, { kind: "decline", language: "es", questions: [], seed: 0 })
+        expect(text.match(/gracias/gi)?.length).toBe(1)
+    })
+
+    it("todas las respuestas existen en todos los idiomas", () => {
+        for (const language of ["de", "en", "fr", "nl", "it", "es"] as const)
+            for (const kind of ["visit", "photos", "accept", "decline"] as const)
+                expect(buildMessage(up, { kind, language, offer: 1500, questions: [], seed: 3 })).not.toMatch(/\{(car|when|offer|city|phone)\}|undefined/)
+    })
+})

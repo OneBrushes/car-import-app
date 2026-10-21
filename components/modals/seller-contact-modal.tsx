@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Check, Copy, Loader2, MessageSquare, RefreshCw, Send, Sparkles, Trash2, User, Store } from "lucide-react"
+import { Check, Copy, Loader2, MessageSquare, RefreshCw, Reply, Trash2, User, Store } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -11,12 +11,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  buildMessage, detectLanguage, LANGUAGE_LABEL, QUESTION_LABEL,
-  type MessageKind, type QuestionKey, type SellerCar, type SellerLanguage,
+  buildMessage, detectLanguage, KIND_LABEL, LANGUAGE_LABEL, QUESTION_LABEL,
+  type MessageKind, type QuestionKey, type ReplyKind, type SellerCar, type SellerLanguage,
 } from "@/lib/seller-messages"
 import {
-  ASSISTANT_URL, daysUntilPurge, draftReplyWithAi, loadConversation, loadConversationForCar, saveConversation, snapshotOf, titleOf,
-  type AiReply, type Conversation, type ConversationMessage,
+  daysUntilPurge, loadConversation, loadConversationForCar, saveConversation, snapshotOf, titleOf,
+  type Conversation, type ConversationMessage,
 } from "@/lib/conversations"
 
 interface SellerContactModalProps {
@@ -32,6 +32,9 @@ interface SellerContactModalProps {
 
 const PROFILE_KEY = "nordrive-seller-profile"
 const ALL_QUESTIONS: QuestionKey[] = ["defects", "papers", "service", "inspection"]
+const ALL_KINDS: MessageKind[] = ["first", "offer", "visit", "photos", "accept", "decline"]
+/** Respuestas para cuando el vendedor ya ha contestado */
+const REPLY_KINDS: (MessageKind & ("offer" | ReplyKind))[] = ["offer", "visit", "photos", "accept", "decline"]
 
 function readProfile(): { name: string; phone: string } {
   try { return { name: "", phone: "", ...JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}") } } catch { return { name: "", phone: "" } }
@@ -62,6 +65,7 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
   const [kind, setKind] = useState<MessageKind>("first")
   const [questions, setQuestions] = useState<QuestionKey[]>(["defects", "papers"])
   const [offer, setOffer] = useState("")
+  const [when, setWhen] = useState("")
   const [seed, setSeed] = useState(0)
   const [profile, setProfile] = useState({ name: "", phone: "" })
   const [draft, setDraft] = useState("")
@@ -69,10 +73,6 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
   // conversación
   const [newText, setNewText] = useState("")
   const [newFrom, setNewFrom] = useState<"seller" | "me">("seller")
-  const [instruction, setInstruction] = useState("")
-  const [ai, setAi] = useState<AiReply | null>(null)
-  const [aiReply, setAiReply] = useState("")
-  const [aiLoading, setAiLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // cargar la conversación al abrir
@@ -80,7 +80,7 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
     if (!isOpen) return
     let cancelled = false
     setProfile(readProfile())
-    setAi(null); setAiReply(""); setNewText(""); setInstruction("")
+    setNewText(""); setWhen("")
     setLoading(true)
     const load = car?.id ? loadConversationForCar(car.id) : conversationId ? loadConversation(conversationId) : Promise.resolve(null)
     load
@@ -106,9 +106,10 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
       kind, language, questions, seed,
       name: profile.name.trim() || undefined,
       phone: profile.phone.trim() || undefined,
-      offer: kind === "offer" && Number(offer) > 0 ? Number(offer) : null,
+      offer: (kind === "offer" || kind === "accept") && Number(offer) > 0 ? Number(offer) : null,
+      when: when.trim() || undefined,
     }))
-  }, [isOpen, snapshotKey, kind, language, questions, seed, offer, profile]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, snapshotKey, kind, language, questions, seed, offer, when, profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateProfile = (patch: Partial<typeof profile>) => {
     const next = { ...profile, ...patch }
@@ -151,23 +152,11 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
     await persist(messages.filter((_, i) => i !== index))
   }
 
-  const generateAi = async () => {
-    setAiLoading(true)
-    setAi(null)
-    try {
-      const result = await draftReplyWithAi({
-        car: snapshot, language, messages,
-        instruction: instruction.trim() || undefined,
-        offer: Number(offer) > 0 ? Number(offer) : null,
-        name: profile.name.trim() || undefined,
-      })
-      setAi(result)
-      setAiReply(result.reply)
-    } catch (e: any) {
-      toast.error(e.message || "No se pudo generar la respuesta")
-    } finally {
-      setAiLoading(false)
-    }
+  /** Desde la conversación: abre la pestaña de mensaje con la respuesta elegida */
+  const replyWith = (k: MessageKind) => {
+    setKind(k)
+    setSeed((x) => x + 1)
+    setTab("write")
   }
 
   const purgeDays = daysUntilPurge(car?.seller_sold_at ?? conversation?.seller_sold_at)
@@ -207,8 +196,9 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
             {/* ---------------- Mensaje con plantilla ---------------- */}
             <TabsContent value="write" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
               <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant={kind === "first" ? "default" : "outline"} onClick={() => setKind("first")}>Primer contacto</Button>
-                <Button type="button" size="sm" variant={kind === "offer" ? "default" : "outline"} onClick={() => setKind("offer")}>Negociar precio</Button>
+                {ALL_KINDS.map((k) => (
+                  <Button key={k} type="button" size="sm" variant={kind === k ? "default" : "outline"} onClick={() => setKind(k)}>{KIND_LABEL[k]}</Button>
+                ))}
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -220,10 +210,16 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
                   <span className="text-muted-foreground">Teléfono (opcional)</span>
                   <Input value={profile.phone} onChange={(e) => updateProfile({ phone: e.target.value })} placeholder="+34 …" />
                 </label>
-                {kind === "offer" && (
+                {(kind === "offer" || kind === "accept") && (
                   <label className="space-y-1 text-sm">
-                    <span className="text-muted-foreground">Precio que ofreces (€)</span>
+                    <span className="text-muted-foreground">{kind === "offer" ? "Precio que ofreces (€)" : "Precio acordado (€)"}</span>
                     <Input type="number" inputMode="numeric" value={offer} onChange={(e) => setOffer(e.target.value)} />
+                  </label>
+                )}
+                {kind === "visit" && (
+                  <label className="space-y-1 text-sm">
+                    <span className="text-muted-foreground">Cuándo (en su idioma, opcional)</span>
+                    <Input value={when} onChange={(e) => setWhen(e.target.value)} placeholder="am Samstag, 25.10., um 11 Uhr" />
                   </label>
                 )}
               </div>
@@ -246,7 +242,7 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
               <p className="text-xs text-muted-foreground">
                 {kind === "first"
                   ? "Corto y sin oferta: los vendedores contestan más a un primer mensaje natural. El precio, mejor cuando te respondan."
-                  : "Úsalo cuando el vendedor ya te haya contestado. Puedes editar el texto antes de copiarlo."}
+                  : "Respuesta genérica para cuando el vendedor ya te ha contestado: revísala y edítala antes de copiarla. Lo que va entre corchetes, cámbialo tú."}
               </p>
 
               <div className="flex flex-wrap gap-2">
@@ -258,7 +254,7 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
               </div>
             </TabsContent>
 
-            {/* ---------------- Conversación + respuesta con IA ---------------- */}
+            {/* ---------------- Conversación + respuestas con plantilla ---------------- */}
             <TabsContent value="chat" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
               {messages.length === 0 ? (
                 <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
@@ -298,38 +294,14 @@ export function SellerContactModal({ isOpen, onClose, car, conversationId, onSen
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
-                <p className="flex items-center gap-1.5 text-sm font-medium"><Sparkles className="h-4 w-4 text-primary" /> Responder con IA</p>
-                <div className="grid gap-2 sm:grid-cols-[1fr_9rem]">
-                  <Input value={instruction} onChange={(e) => setInstruction(e.target.value)}
-                    placeholder="¿Qué quieres conseguir? Ej.: quedar el sábado, preguntar por la distribución, negociar…" />
-                  <Input type="number" inputMode="numeric" value={offer} onChange={(e) => setOffer(e.target.value)} placeholder="Oferta €" title="Precio que ofreces (opcional)" />
+              <div className="space-y-2 rounded-lg border p-3">
+                <p className="flex items-center gap-1.5 text-sm font-medium"><Reply className="h-4 w-4 text-primary" /> Responder con una plantilla</p>
+                <div className="flex flex-wrap gap-2">
+                  {REPLY_KINDS.map((k) => (
+                    <Button key={k} type="button" size="sm" variant="outline" onClick={() => replyWith(k)}>{KIND_LABEL[k]}</Button>
+                  ))}
                 </div>
-                {!ASSISTANT_URL && (
-                  <p className="text-xs text-warning">El asistente de IA aún no está configurado (Worker car-assistant). Mientras tanto puedes usar la plantilla «Negociar precio».</p>
-                )}
-                <Button type="button" onClick={generateAi} disabled={aiLoading || !ASSISTANT_URL}>
-                  {aiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  {messages.length ? "Generar respuesta" : "Generar primer mensaje"}
-                </Button>
-
-                {ai && (
-                  <div className="space-y-2">
-                    {ai.seller_summary_es && <p className="text-sm"><span className="font-medium">Lo que dice el vendedor:</span> {ai.seller_summary_es}</p>}
-                    <Textarea value={aiReply} onChange={(e) => setAiReply(e.target.value)} rows={8} className="bg-background text-sm leading-relaxed" />
-                    <details className="text-sm text-muted-foreground">
-                      <summary className="cursor-pointer">Traducción al español</summary>
-                      <p className="mt-1 whitespace-pre-wrap">{ai.translation_es}</p>
-                    </details>
-                    {ai.advice_es && <p className="text-xs text-muted-foreground">Consejo: {ai.advice_es}</p>}
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" onClick={() => copy(aiReply)}><Copy className="mr-2 h-4 w-4" /> Copiar</Button>
-                      <Button type="button" onClick={async () => { if (await addMessage("me", aiReply)) { setAi(null); setAiReply(""); toast.success("Guardado en la conversación") } }} disabled={saving || !aiReply.trim()}>
-                        <Send className="mr-2 h-4 w-4" /> Lo he enviado
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <p className="text-xs text-muted-foreground">Se abre en la pestaña «Mensaje» en {LANGUAGE_LABEL[language].toLowerCase()}, lista para revisar y copiar.</p>
               </div>
             </TabsContent>
           </Tabs>

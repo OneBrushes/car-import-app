@@ -16,12 +16,3 @@ export function cors(request: Request, env: CorsEnv, methods: string): Record<st
         Vary: 'Origin',
     }
 }
-
-/** Comprueba la sesión de Supabase del usuario (el token que manda la app) */
-export async function isSignedIn(request: Request, env: { SUPABASE_URL?: string; SUPABASE_ANON_KEY?: string }) {
-    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false
-    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
-        headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: request.headers.get('Authorization') || '' },
-    })
-    return res.ok
-}

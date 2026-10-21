@@ -107,38 +107,3 @@ export function daysUntilPurge(sellerSoldAt: string | null | undefined) {
   const ms = new Date(sellerSoldAt).getTime() + 30 * 86_400_000 - Date.now()
   return Math.max(0, Math.ceil(ms / 86_400_000))
 }
-
-// ---------------------------------------------------------------------------------------------------------------------
-// Respuesta con IA (Worker car-assistant)
-// ---------------------------------------------------------------------------------------------------------------------
-
-export interface AiReply {
-  reply: string
-  translation_es: string
-  seller_summary_es: string
-  advice_es: string
-}
-
-export const ASSISTANT_URL = process.env.NEXT_PUBLIC_ASSISTANT_WORKER || ""
-
-export async function draftReplyWithAi(params: {
-  car: SellerCar
-  language: SellerLanguage
-  messages: ConversationMessage[]
-  instruction?: string
-  offer?: number | null
-  name?: string
-}): Promise<AiReply> {
-  if (!ASSISTANT_URL) throw new Error("Falta configurar el asistente de IA (NEXT_PUBLIC_ASSISTANT_WORKER).")
-  const { data: { session } } = await supabase.auth.getSession()
-  const res = await fetch(ASSISTANT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
-    body: JSON.stringify({ ...params, messages: params.messages.map(({ from, text }) => ({ from, text })) }),
-  })
-  const type = res.headers.get("content-type") || ""
-  if (!type.includes("application/json")) throw new Error("El asistente de IA no responde bien. Revisa el Worker car-assistant en Cloudflare.")
-  const body = await res.json()
-  if (!res.ok) throw new Error(body.error || "No se pudo generar la respuesta")
-  return body as AiReply
-}
