@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import {
   deletePost, getAutoPublish, isFuture, listPosts, postState, readingMinutes, rebuildSite, savePost, setAutoPublish, siteStats, slugify, uploadCover,
-  SITE_URL, type BlogPost, type BlogPostInput, type SiteStats,
+  SITE_URL, CATEGORY_LABEL, type BlogCategory, type BlogPost, type BlogPostInput, type SiteStats,
 } from "@/lib/blog"
 
 const STATE_LABEL = { draft: "Borrador", scheduled: "Programado", published: "Publicado" } as const
@@ -24,7 +24,7 @@ const STATE_CLASS = {
 } as const
 
 const EMPTY: BlogPostInput = {
-  slug: "", title: "", excerpt: "", content: "", cover_url: null, cover_alt: null, tags: [], author: "NorDrive",
+  slug: "", title: "", excerpt: "", content: "", cover_url: null, cover_alt: null, cover_credit: null, category: "importacion", tags: [], author: "NorDrive",
   seo_title: null, seo_description: null, status: "draft", published_at: null, source: "manual", reading_minutes: null,
 }
 
@@ -166,6 +166,7 @@ export function BlogTab({ isActive = true }: { isActive?: boolean }) {
                   <p className="truncate font-medium">{p.title || "(sin título)"}</p>
                   <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span className={`rounded-full px-2 py-0.5 font-medium ${STATE_CLASS[state]}`}>{STATE_LABEL[state]}</span>
+                    <span className="rounded-full bg-muted px-2 py-0.5">{CATEGORY_LABEL[p.category] ?? CATEGORY_LABEL.importacion}</span>
                     {p.source === "claude" && <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3" /> Claude</span>}
                     <span>{p.published_at ? new Date(p.published_at).toLocaleDateString("es-ES") : `Editado ${new Date(p.updated_at).toLocaleDateString("es-ES")}`}</span>
                     {v && <span className="inline-flex items-center gap-1"><Eye className="h-3 w-3" /> {v.views} visitas</span>}
@@ -357,9 +358,21 @@ function PostEditor({ post, onBack }: { post: BlogPost | null; onBack: () => voi
             </button>
             <input ref={coverInput} type="file" accept="image/*" hidden onChange={(e) => { onCover(e.target.files?.[0]); e.target.value = "" }} />
             <Input value={form.cover_alt ?? ""} onChange={(e) => set("cover_alt", e.target.value || null)} placeholder="Descripción de la imagen (para Google)" className="text-xs" />
+            <Input value={form.cover_credit ?? ""} onChange={(e) => set("cover_credit", e.target.value || null)} placeholder="Crédito de la foto (Foto: autor / fuente · licencia)" className="text-xs" />
           </div>
 
           <div className="space-y-3 rounded-xl border bg-card p-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Categoría</Label>
+              <div className="grid grid-cols-2 gap-1 rounded-md border bg-background p-1">
+                {(Object.keys(CATEGORY_LABEL) as BlogCategory[]).map((c) => (
+                  <button key={c} type="button" onClick={() => set("category", c)}
+                    className={`rounded px-2 py-1 text-xs ${(form.category ?? "importacion") === c ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"}`}>
+                    {CATEGORY_LABEL[c]}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Dirección</Label>
               <div className="flex items-center rounded-md border bg-background text-xs">

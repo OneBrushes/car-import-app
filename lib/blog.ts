@@ -12,6 +12,9 @@ export interface BlogPost {
   content: string
   cover_url: string | null
   cover_alt: string | null
+  /** Autor y licencia de la foto de portada */
+  cover_credit: string | null
+  category: BlogCategory
   tags: string[]
   author: string
   seo_title: string | null
@@ -23,6 +26,10 @@ export interface BlogPost {
   created_at: string
   updated_at: string
 }
+
+export type BlogCategory = "importacion" | "noticias"
+
+export const CATEGORY_LABEL: Record<BlogCategory, string> = { importacion: "Importación", noticias: "Noticias del motor" }
 
 export type BlogPostInput = Omit<BlogPost, "id" | "created_at" | "updated_at">
 
@@ -37,11 +44,13 @@ export interface SiteStats {
 }
 
 export const MISSING_BLOG_HINT = "Falta preparar el blog: ejecuta supabase/2026-10_blog.sql en Supabase."
+export const MISSING_BLOG_V2_HINT = "Falta actualizar el blog: ejecuta supabase/2026-10_blog_v2.sql en Supabase."
 
 function blogError(error: { code?: string; message?: string }) {
   if (error.code === "42P01" || error.code === "PGRST205" || error.code === "PGRST202" || /blog_posts|site_stats/.test(error.message || "")) {
     return new Error(MISSING_BLOG_HINT)
   }
+  if (/category|cover_credit/.test(error.message || "") && /column|schema cache/i.test(error.message || "")) return new Error(MISSING_BLOG_V2_HINT)
   if (/blog_posts_slug_key|duplicate key/.test(error.message || "")) return new Error("Ya hay un artículo con esa dirección (slug). Cámbiala.")
   if (/slug_check|blog_posts_slug_check/.test(error.message || "")) return new Error("La dirección (slug) solo puede tener minúsculas, números y guiones.")
   return new Error(error.message || "Error del blog")
