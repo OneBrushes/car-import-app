@@ -220,7 +220,7 @@ export default function Home() {
   const currentItem = currentGroup?.items.find(item => item.id === activeTab)
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex relative w-full overflow-x-hidden">
+    <div className="min-h-screen bg-background text-foreground flex relative w-full overflow-x-clip">
       <LiveCursors />
       <CommandPalette navGroups={navGroups} onNavigate={(tab) => handleTabSelect(tab as TabType)} />
       {/* Connection Status Indicator */}
