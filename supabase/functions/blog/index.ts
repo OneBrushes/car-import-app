@@ -9,6 +9,7 @@
 //
 // Acciones (POST, JSON):
 //   { action: "rebuild" }      → desde la app (sesión del equipo): vuelve a generar la web con los artículos publicados
+//   { action: "titles" }       → desde la tarea de Claude (cabecera x-blog-token): títulos que ya existen
 //   { action: "ingest", post } → desde la tarea de Claude (cabecera x-blog-token): guarda un artículo nuevo.
 //                                Si en la app está activado "publicar automáticamente", se publica y se regenera la web;
 //                                si no, queda en borrador y avisa en la app para que lo revises.
@@ -74,6 +75,14 @@ Deno.serve(async (req) => {
     if (!me || !STAFF_ROLES.includes(me.role)) return json({ error: "Sin permiso" }, 403)
     const r = await rebuildSite()
     return r.ok ? json({ status: "rebuilding" }) : json({ error: r.message }, 502)
+  }
+
+  // ---- Desde la tarea de Claude: qué artículos hay ya (también borradores), para no repetir temas ----
+  if (body.action === "titles") {
+    const expected = Deno.env.get("BLOG_INGEST_TOKEN")
+    if (!expected || req.headers.get("x-blog-token") !== expected) return json({ error: "Clave no válida" }, 401)
+    const { data } = await admin.from("blog_posts").select("title, slug, tags, status, created_at").order("created_at", { ascending: false }).limit(200)
+    return json({ posts: data ?? [] })
   }
 
   // ---- Desde la tarea de Claude: nuevo artículo ----
