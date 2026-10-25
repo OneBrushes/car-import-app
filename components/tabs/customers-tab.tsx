@@ -14,7 +14,7 @@ import type { Customer, NewCustomer } from "@/components/modals/sell-car-modal"
 import { INVOICE_COMPANY_SETTING_KEY, type InvoiceCompany } from "@/lib/invoice"
 import { getInvoiceCompany } from "@/lib/sales"
 import { Switch } from "@/components/ui/switch"
-import { invitationText, inviteCustomer, PORTAL_URL } from "@/lib/client-portal"
+import { invitationText, inviteCustomer, loadPortalStatus, ONLINE_WINDOW_MS, PORTAL_URL, timeAgo, type PortalStatus } from "@/lib/client-portal"
 import { ProposalsModal } from "@/components/modals/proposals-modal"
 
 interface Sale {
@@ -52,6 +52,8 @@ export function CustomersTab({ role }: { role?: string | null }) {
   const [proposeTo, setProposeTo] = useState<Customer | null>(null)
   const [invitingId, setInvitingId] = useState<string | null>(null)
   const [reviews, setReviews] = useState<Map<string, { rating: number; liked: string | null; improve: string | null; car: string; date: string }[]>>(new Map())
+  const [portalStatus, setPortalStatus] = useState<Map<string, PortalStatus>>(new Map())
+  const [now, setNow] = useState(() => Date.now())
   const [proposalStats, setProposalStats] = useState<Map<string, { total: number; liked: number; favorite: string | null }>>(new Map())
 
   const loadProposalStats = async () => {
@@ -93,6 +95,7 @@ export function CustomersTab({ role }: { role?: string | null }) {
   }
 
   const load = async () => {
+    loadPortalStatus().then(setPortalStatus)
     loadProposalStats()
     loadReviews()
     setLoading(true)
@@ -109,6 +112,16 @@ export function CustomersTab({ role }: { role?: string | null }) {
     setSales((s.data as Sale[]) || [])
     setLoading(false)
   }
+
+  // Estado del área de clientes (en línea / última conexión): se refresca cada minuto
+  useEffect(() => {
+    if (!user) return
+    const timer = setInterval(() => {
+      setNow(Date.now())
+      if (document.visibilityState === "visible") loadPortalStatus().then(setPortalStatus)
+    }, 60_000)
+    return () => clearInterval(timer)
+  }, [user])
 
   useEffect(() => {
     if (!user) return
@@ -311,6 +324,7 @@ export function CustomersTab({ role }: { role?: string | null }) {
                       )}
                     </div>
                   )}
+                  {customer.email && canEdit && customer.portal_access && <PortalStatusLine status={portalStatus.get(customer.id)} now={now} />}
                   {(reviews.get(customer.id) ?? []).map((r, i) => (
                     <div key={i} className="rounded-lg border bg-muted/30 p-2.5 text-xs text-foreground">
                       <p className="flex items-center justify-between gap-2 font-medium">
@@ -418,5 +432,40 @@ function Field({ label, className, children }: { label: string; className?: stri
       <Label className="text-[13px]">{label}</Label>
       {children}
     </div>
+  )
+}
+
+/** Si el cliente ya se ha registrado en el área de clientes, su última conexión y si está en línea ahora */
+function PortalStatusLine({ status, now }: { status?: PortalStatus; now: number }) {
+  if (!status) return null
+  const lastActivity = [status.last_seen, status.last_sign_in_at].filter(Boolean).sort().pop() ?? null
+  const online = !!status.last_seen && now - new Date(status.last_seen).getTime() < ONLINE_WINDOW_MS
+  const full = (iso: string) => new Date(iso).toLocaleString("es-ES", { dateStyle: "long", timeStyle: "short" })
+
+  if (!status.registered) {
+    return (
+      <p className="flex items-center gap-2 pl-[22px] text-xs text-warning" title={status.invited_at ? `Invitado el ${full(status.invited_at)}` : undefined}>
+        <span className="h-2 w-2 rounded-full bg-warning/70" />
+        {status.invited_at ? `Invitado ${timeAgo(status.invited_at, now)} · aún no se ha registrado` : "Aún no se ha registrado"}
+      </p>
+    )
+  }
+  if (online) {
+    return (
+      <p className="flex items-center gap-2 pl-[22px] text-xs font-medium text-success">
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+        </span>
+        En línea ahora
+      </p>
+    )
+  }
+  return (
+    <p className="flex items-center gap-2 pl-[22px] text-xs text-muted-foreground"
+      title={[status.registered_at && `Registrado el ${full(status.registered_at)}`, lastActivity && `Última conexión: ${full(lastActivity)}`].filter(Boolean).join("\n")}>
+      <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+      {lastActivity ? `Registrado · última conexión ${timeAgo(lastActivity, now)}` : "Registrado · aún no ha entrado"}
+    </p>
   )
 }

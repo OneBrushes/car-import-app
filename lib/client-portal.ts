@@ -146,3 +146,38 @@ export async function inviteCustomer(customerId: string): Promise<"invited" | "m
   }
   return (data?.status as "invited" | "magic_link") ?? "invited"
 }
+
+// ---- Estado de la cuenta del cliente (supabase/2026-10_estado_clientes.sql) ----
+
+export interface PortalStatus {
+  customer_id: string
+  invited_at: string | null
+  registered: boolean
+  registered_at: string | null
+  last_sign_in_at: string | null
+  /** última vez que tenía el área de clientes abierta (la web avisa cada minuto) */
+  last_seen: string | null
+}
+
+export const ONLINE_WINDOW_MS = 150_000
+
+/** Estado de todos los clientes con área de clientes; vacío si aún no se ha ejecutado el SQL */
+export async function loadPortalStatus(): Promise<Map<string, PortalStatus>> {
+  const { data, error } = await supabase.rpc("portal_access_status")
+  if (error) return new Map()
+  return new Map(((data as PortalStatus[]) ?? []).map((s) => [s.customer_id, s]))
+}
+
+/** "hace 5 min", "hace 3 h", "ayer a las 18:40", "12 oct" */
+export function timeAgo(iso: string, now: number) {
+  const diff = Math.max(0, now - new Date(iso).getTime())
+  const min = Math.round(diff / 60_000)
+  if (min < 1) return "hace un momento"
+  if (min < 60) return `hace ${min} min`
+  const h = Math.round(min / 60)
+  if (h < 24) return `hace ${h} h`
+  const d = new Date(iso)
+  const yesterday = new Date(now - 86_400_000)
+  if (d.toDateString() === yesterday.toDateString()) return `ayer a las ${d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`
+  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: d.getFullYear() === new Date(now).getFullYear() ? undefined : "numeric" })
+}
