@@ -1,6 +1,7 @@
 # Worker "nordrive-mcp": servidor MCP de "Guardados por Claude". Pasos de despliegue en README.md
 name = "nordrive-mcp"
 main = "src/index.ts"
+account_id = "f757a66fedd75ffc18548d16eb41abba"   # cuenta infonordrive
 compatibility_date = "2025-10-01"
 compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 
@@ -13,7 +14,7 @@ SUPABASE_URL = "https://luzacvchtxkurisuywic.supabase.co"
 
 [[kv_namespaces]]
 binding = "OAUTH_KV"
-id = "CAMBIAR_POR_EL_ID_DEL_KV"
+id = "94265d2988b34768a127eaa47ee3e9b4"
 
 [observability]
 enabled = true
