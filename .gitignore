@@ -42,3 +42,6 @@ next-env.d.ts
 wrangler.toml
 # el del MCP no lleva secretos (van con wrangler secret put)
 !workers/nordrive-mcp/wrangler.toml
+
+# supabase cli
+supabase/.temp/
