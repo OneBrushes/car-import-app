@@ -144,9 +144,8 @@ const versionName = (m: HaciendaMatch) =>
 async function autoHaciendaValue(client: SupabaseClient, car: Partial<ClaudeCar>): Promise<{ fields: Partial<ClaudeCar>; note: string | null } | null> {
     if (car.valor_hacienda && car.valor_hacienda_origen !== "tabla") return null
     if (!car.marca || !car.modelo) return null
-    const modelo = [car.modelo, car.version].filter(Boolean).join(" ")
     const { matches, error } = await buscarValorHacienda(client, {
-        marca: car.marca, modelo, anio: car.anio, cv: car.potencia_cv, combustible: car.combustible,
+        marca: car.marca, modelo: car.modelo, version: car.version, anio: car.anio, cv: car.potencia_cv, combustible: car.combustible,
     }, 5)
     if (error && !matches.length) return { fields: {}, note: `Valor de Hacienda: no se ha podido buscar (${error}). Pásalo en valor_hacienda o usa buscar_valor_hacienda.` }
     const best = matches[0]
@@ -476,7 +475,8 @@ export function buildServer(env: Env): McpServer {
                 "(0–100), con su periodo comercial, cilindrada, potencia, combustible y valor. Pasa el que corresponda en valor_hacienda al guardar el coche.",
             inputSchema: {
                 marca: z.string().trim().min(1).max(60).describe("Marca, p. ej. Volkswagen, Mercedes-Benz, BMW"),
-                modelo: z.string().trim().min(1).max(160).describe("Modelo y versión, p. ej. 'Golf R 2.0 TSI 4Motion DSG' o 'C 63 AMG W204'"),
+                modelo: z.string().trim().min(1).max(160).describe("Modelo, p. ej. 'Golf', 'Clase E' o 'C 63 AMG W204'"),
+                version: z.string().trim().max(160).optional().describe("Versión o acabado del anuncio, p. ej. 'R 2.0 TSI 4Motion DSG' o 'Mercedes-AMG E 43 4MATIC' (se busca también sola)"),
                 anio: z.number().int().min(1950).max(2100).optional().describe("Año de primera matriculación"),
                 cc: z.number().int().positive().max(10000).optional().describe("Cilindrada en cc"),
                 cv: z.number().int().positive().max(2000).optional().describe("Potencia en CV"),
@@ -485,8 +485,8 @@ export function buildServer(env: Env): McpServer {
             },
             annotations: { readOnlyHint: true },
         },
-        async ({ marca, modelo, anio, cc, cv, combustible, limite }) => logged(client, "buscar_valor_hacienda", async () => {
-            const { matches, error } = await buscarValorHacienda(client, { marca, modelo, anio, cc, cv, combustible }, limite ?? 10)
+        async ({ marca, modelo, version, anio, cc, cv, combustible, limite }) => logged(client, "buscar_valor_hacienda", async () => {
+            const { matches, error } = await buscarValorHacienda(client, { marca, modelo, version, anio, cc, cv, combustible }, limite ?? 10)
             if (error && !matches.length) return { result: errorResult(`No se ha podido buscar: ${error}`), resumen: `${marca} ${modelo}` }
             if (!matches.length) return { result: { content: [{ type: "text", text: "No hay ninguna versión con esa marca y modelo en las tablas de Hacienda 2026." }] }, resumen: `${marca} ${modelo}: 0` }
             const verify = needsVersionCheck(matches)

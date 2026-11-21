@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { brandKey, needsVersionCheck, rankHaciendaRows, type HaciendaRow } from "./hacienda"
+import { HACIENDA_MIN_SCORE, brandKey, cleanModelText, modelVariants, needsVersionCheck, rankHaciendaRows, type HaciendaRow } from "./hacienda"
 import { calculateImportCost, DEFAULT_IMPORT_COSTS } from "./import-costs"
 // Filas reales del anexo I de la Orden HAC/1501/2025 (Golf, Lancer y Mercedes Clase C), leídas con scripts/import-hacienda.ts
 import muestra from "./__fixtures__/hacienda-muestra.json"
@@ -32,6 +32,22 @@ describe("valores de Hacienda · búsqueda por parecido", () => {
         const [best] = rankHaciendaRows(brand("MERCEDES"), { marca: "Mercedes-Benz", modelo: "C 63 AMG W204", anio: 2009, cc: 6208, cv: 457 })
         expect(best.valor).toBe(62700)
         expect(iedmtCataluna(best.valor, new Date(2009, 8, 1), 280)).toBe(732.32)
+    })
+
+    it("modelo 'Clase E' + versión 'Mercedes-AMG E 43 4MATIC' 2017, 401 CV → E 43 AMG 4Matic (W213) 77.700 €", () => {
+        const matches = rankHaciendaRows(brand("MERCEDES"), {
+            marca: "Mercedes-Benz", modelo: "Clase E", version: "Mercedes-AMG E 43 4MATIC", anio: 2017, cv: 401,
+        })
+        expect(matches[0].valor).toBe(77700)
+        expect(matches[0].modelo).toBe("E 43 AMG 4Matic(W213)")
+        expect(matches[0].parecido).toBeGreaterThanOrEqual(HACIENDA_MIN_SCORE)
+    })
+
+    it("limpia el nombre antes de buscar", () => {
+        expect(cleanModelText("Clase E Mercedes-AMG E 43 4MATIC", "Mercedes-Benz")).toBe("E 43 4MATIC")
+        expect(cleanModelText("E-Klasse E 220 d")).toBe("E 220 D")
+        expect(cleanModelText("BMW M3 Competition", "BMW")).toBe("M3 COMPETITION")
+        expect(modelVariants({ marca: "Mercedes-Benz", modelo: "Clase E", version: "Mercedes-AMG E 43 4MATIC" })).toEqual(["E 43 4MATIC", "E"])
     })
 
     it("sin potencia hay varias versiones posibles: avisa de verificar", () => {
