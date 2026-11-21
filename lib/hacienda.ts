@@ -149,13 +149,21 @@ export function rankHaciendaRows(rows: HaciendaRow[], q: HaciendaQuery): Haciend
         .sort((a, b) => b.parecido - a.parecido || Math.abs((a.fin ?? 9999) - (q.anio ?? 0)) - Math.abs((b.fin ?? 9999) - (q.anio ?? 0)))
 }
 
+/** Palabras de cada fila, calculadas una vez (se compara la misma fila con varias variantes y varios coches) */
+const tokenCache = new WeakMap<HaciendaRow, Set<string>>()
+function rowTokens(row: HaciendaRow): Set<string> {
+    let t = tokenCache.get(row)
+    if (!t) { t = new Set(modelTokens(row.modelo)); tokenCache.set(row, t) }
+    return t
+}
+
 /** Parecido de cada fila con un nombre de modelo ya limpio */
 function rankOne(rows: HaciendaRow[], q: HaciendaQuery): (HaciendaMatch & { row: HaciendaRow })[] {
     const qTokens = modelTokens(q.modelo).filter(t => !NOISE.has(t))
     const family = qTokens[0]
     return rows
         .map(row => {
-            const rTokens = new Set(modelTokens(row.modelo))
+            const rTokens = rowTokens(row)
             const why: string[] = []
             let score = 100
 
@@ -215,12 +223,17 @@ export async function buscarValorHacienda(
     client: HaciendaDb,
     q: HaciendaQuery,
     limit = 10,
+    /** Para buscar muchos coches seguidos: guarda la lista de marcas y no la vuelve a pedir */
+    cache: { marcas?: string[] } = {},
 ): Promise<{ matches: HaciendaMatch[]; marcas: string[]; error?: string }> {
     const key = brandKey(q.marca)
     if (!key) return { matches: [], marcas: [], error: "Falta la marca" }
-    const { data: brandRows, error: brandError } = await client.rpc("hacienda_marcas")
-    if (brandError) return { matches: [], marcas: [], error: brandError.message }
-    const marcas = ((brandRows ?? []) as { marca: string }[]).map(r => r.marca).filter(m => normalizeBrand(m).startsWith(key) || key.startsWith(normalizeBrand(m)))
+    if (!cache.marcas) {
+        const { data: brandRows, error: brandError } = await client.rpc("hacienda_marcas")
+        if (brandError) return { matches: [], marcas: [], error: brandError.message }
+        cache.marcas = ((brandRows ?? []) as { marca: string }[]).map(r => r.marca)
+    }
+    const marcas = cache.marcas.filter(m => normalizeBrand(m).startsWith(key) || key.startsWith(normalizeBrand(m)))
     if (!marcas.length) return { matches: [], marcas: [], error: `La marca "${q.marca}" no está en las tablas de Hacienda` }
 
     // Se piden las filas de la primera palabra de cada variante ("E" de "E 43 4MATIC", "GOLF"…); si no sale ninguna, todas las del año

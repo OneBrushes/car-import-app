@@ -134,6 +134,10 @@ function defined<T extends object>(obj: T): Partial<T> {
     return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>
 }
 
+/** recalcular_hacienda: parecido mínimo para cambiar el valor, y coches por llamada (cada uno gasta ~4 de las 50 conexiones del plan gratuito) */
+const RECALC_MIN_SCORE = 85
+const RECALC_BATCH = 8
+
 const versionName = (m: HaciendaMatch) =>
     `${m.marca} ${m.modelo} (${m.inicio ?? "?"}–${m.fin ?? "hoy"}${m.cc ? `, ${m.cc} cc` : ""}${m.cv ? `, ${m.cv} CV` : ""}${m.combustible ? `, ${m.combustible}` : ""})`
 
@@ -499,6 +503,76 @@ export function buildServer(env: Env): McpServer {
                     ],
                 },
                 resumen: `${marca} ${modelo}${anio ? ` ${anio}` : ""}: ${matches.length} versión(es), mejor ${eur(matches[0].valor)}`,
+            }
+        }),
+    )
+
+    server.registerTool(
+        "recalcular_hacienda",
+        {
+            title: "Recalcular con las tablas de Hacienda",
+            description:
+                "Vuelve a calcular el impuesto de matriculación de los coches guardados con las tablas oficiales de Hacienda 2026. Para cada coche busca su " +
+                `versión en valores_hacienda (marca, modelo + versión, año, CV, combustible); si encuentra una con parecido ≥ ${RECALC_MIN_SCORE}, guarda ese ` +
+                "valor_hacienda, BORRA el impuesto_matriculacion manual para que se use el calculado por la app y marca verificar_version si hay varias candidatas. " +
+                `Va por tandas de ${RECALC_BATCH} coches (límites del servidor): si quedan más, vuelve a llamarla con 'saltar' = los ya revisados. ` +
+                "Devuelve, por coche, el valor elegido, el impuesto y el beneficio antes y después, y los que no ha encontrado.",
+            inputSchema: {
+                ids: z.array(z.string().uuid()).max(RECALC_BATCH).optional().describe(`ids de los coches (máx. ${RECALC_BATCH}). Sin ids, todos los coches, del más antiguo al más reciente`),
+                saltar: z.number().int().min(0).optional().describe("Sin ids: cuántos coches saltar (para seguir con la siguiente tanda)"),
+                simular: z.boolean().optional().describe("true = solo enseñar lo que cambiaría, sin guardar"),
+            },
+        },
+        async ({ ids, saltar, simular }) => logged(client, "recalcular_hacienda", async () => {
+            let query = client.from(CARS_TABLE).select("*", { count: "exact" }).order("created_at", { ascending: true })
+            query = ids?.length ? query.in("id", ids) : query.range(saltar ?? 0, (saltar ?? 0) + RECALC_BATCH - 1)
+            const [{ data, error, count }, settings] = await Promise.all([query, costSettings(client)])
+            if (error) throw new Error(error.message)
+            const cars = (data ?? []) as ClaudeCar[]
+            const cache: { marcas?: string[] } = {}
+            const taxOf = (c: Pick<ClaudeCar, "desglose">) => c.desglose?.lines?.find(l => l.label === "Impuesto de matriculación")?.amount ?? null
+
+            const done: string[] = []
+            const missing: string[] = []
+            for (const car of cars) {
+                const name = carName(car)
+                if (!car.marca || !car.modelo) { missing.push(`• ${name}: falta marca o modelo`); continue }
+                const { matches, error: searchError } = await buscarValorHacienda(client, {
+                    marca: car.marca, modelo: car.modelo, version: car.version, anio: car.anio, cv: car.potencia_cv, combustible: car.combustible,
+                }, 5, cache)
+                const best = matches[0]
+                if (!best || best.parecido < RECALC_MIN_SCORE) {
+                    missing.push(`• ${name}: ${searchError ?? (best ? `ninguna versión con parecido ≥ ${RECALC_MIN_SCORE} (la mejor: ${versionName(best)}, ${eur(best.valor)}, ${best.parecido}/100)` : "no hay versiones en las tablas")}`)
+                    continue
+                }
+                const verify = needsVersionCheck(matches)
+                const patch: Partial<ClaudeCar> = {
+                    valor_hacienda: best.valor, valor_hacienda_origen: "tabla", valor_hacienda_version: versionName(best),
+                    verificar_version: verify, impuesto_matriculacion: null,
+                }
+                const calc = computeClaudeCar({ ...car, ...patch } as ClaudeCarFields, settings)
+                if (!simular) {
+                    const saved = await saveTolerant({ ...patch, ...calc, updated_at: new Date().toISOString() }, r => client.from(CARS_TABLE).update(r).eq("id", car.id).select("id").single())
+                    if (saved.error) { missing.push(`• ${name}: no se pudo guardar (${saved.error.message})`); continue }
+                }
+                const benefit = (n: number | null | undefined) => (n == null ? "— (sin precio de venta)" : eur(n))
+                done.push(
+                    `• ${name}: ${eur(best.valor)} — ${versionName(best)} (${best.parecido}/100)${verify ? " ⚠️ VERIFICAR VERSIÓN" : ""}\n` +
+                    `  impuesto ${eur(taxOf(car))} → ${eur(taxOf(calc))} · beneficio ${benefit(car.beneficio)} → ${benefit(calc.beneficio)}`,
+                )
+            }
+
+            const from = saltar ?? 0
+            const left = !ids?.length && count != null ? Math.max(0, count - from - cars.length) : 0
+            const text = [
+                `${simular ? "SIMULACIÓN (no se ha guardado nada). " : ""}Revisados ${cars.length} coche(s)${ids?.length ? "" : ` (del ${from + 1} al ${from + cars.length} de ${count ?? "?"})`}: ${done.length} recalculado(s), ${missing.length} sin encontrar.`,
+                done.length ? `\nRecalculados:\n${done.join("\n")}` : "",
+                missing.length ? `\nNo encontrados:\n${missing.join("\n")}` : "",
+                left ? `\nQuedan ${left} coche(s): vuelve a llamar con saltar = ${from + cars.length}.` : "",
+            ].filter(Boolean).join("\n")
+            return {
+                result: { content: [{ type: "text", text }] },
+                resumen: `${simular ? "simulación · " : ""}${done.length} recalculados, ${missing.length} sin encontrar${left ? `, quedan ${left}` : ""}`,
             }
         }),
     )
