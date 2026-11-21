@@ -22,6 +22,19 @@ export const CLAUDE_CAR_STATE_LABELS: Record<ClaudeCarState, string> = {
     comprado: "Comprado",
 }
 
+/** Facilidad de venta en España: 1 = fácil … 5 = difícil (2 y 4 son los términos medios) */
+export const SALE_EASE_LEVELS = [1, 2, 3, 4, 5] as const
+export type SaleEase = (typeof SALE_EASE_LEVELS)[number]
+export const SALE_EASE_LABELS: Record<SaleEase, string> = {
+    1: "Fácil de vender",
+    2: "Bastante fácil",
+    3: "Venta media",
+    4: "Bastante difícil",
+    5: "Difícil de vender",
+}
+export const saleEaseLabel = (n: number | null | undefined) =>
+    n != null && n >= 1 && n <= 5 ? SALE_EASE_LABELS[Math.round(n) as SaleEase] : null
+
 /** Máximo de fotos por coche */
 export const MAX_CLAUDE_PHOTOS = 30
 
@@ -62,6 +75,10 @@ export interface ClaudeCarFields {
     fotos?: string[] | null
     /** Encuadre vertical de la foto principal en la tarjeta (0 = arriba, 100 = abajo) */
     foto_posicion_y?: number | null
+    /** Facilidad de venta en España (1 = fácil … 5 = difícil) */
+    facilidad_venta?: number | null
+    /** Por qué se vende fácil o difícil (demanda, color, cambio manual, precio de mercado…) */
+    facilidad_venta_motivo?: string | null
     notas?: string | null
 }
 
@@ -262,6 +279,7 @@ export function claudeCarToImportedCar(car: ClaudeCar) {
         car.unfallfrei != null ? (car.unfallfrei ? "Sin accidentes (unfallfrei)" : "Con accidente declarado") : null,
         car.duenos != null ? `Dueños: ${car.duenos}` : null,
         car.precio_venta_estimado_espana ? `Venta estimada en España: ${eur(car.precio_venta_estimado_espana)}` : null,
+        saleEaseLabel(car.facilidad_venta) ? `Facilidad de venta: ${saleEaseLabel(car.facilidad_venta)} (${car.facilidad_venta}/5)${car.facilidad_venta_motivo ? ` — ${car.facilidad_venta_motivo}` : ""}` : null,
         car.notas ? `Notas de Claude: ${car.notas}` : null,
     ].filter(Boolean).join("\n")
     const fuel = car.combustible ? FUEL_MAP[car.combustible.trim().toLowerCase()] ?? car.combustible : null

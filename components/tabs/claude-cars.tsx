@@ -27,6 +27,9 @@ import {
   claudeCarToImportedCar,
   daysSince,
   needsFollowUp,
+  saleEaseLabel,
+  SALE_EASE_LABELS,
+  SALE_EASE_LEVELS,
   sortContacts,
   type ClaudeCar,
   type ClaudeCarState,
@@ -43,11 +46,63 @@ const ago = (iso: string) => {
 
 type Filter = "activos" | "sin_respuesta" | ClaudeCarState
 
-type SortKey = "recientes" | "margen" | "beneficio" | "barato" | "precio_de" | "km" | "anio"
+/** Colores del medidor de facilidad de venta: verde (fácil) → rojo (difícil) */
+const SALE_EASE_COLORS = ["bg-emerald-500", "bg-lime-500", "bg-amber-400", "bg-orange-500", "bg-red-500"]
+const SALE_EASE_TEXT = ["text-emerald-600", "text-lime-600", "text-amber-600", "text-orange-600", "text-red-600"]
+
+/** Facilidad de venta: 5 segmentos; se pulsa uno para cambiarla (otra vez el mismo la quita) */
+function SaleEaseMeter({ car, onPatch }: { car: ClaudeCar; onPatch: (changes: Partial<ClaudeCar>) => void }) {
+  const level = car.facilidad_venta ?? null
+  const [hover, setHover] = useState<number | null>(null)
+  const shown = hover ?? level
+  const save = async (n: number) => {
+    const value = n === level ? null : n
+    onPatch({ facilidad_venta: value })
+    const { error } = await supabase.from("coches_claude").update({ facilidad_venta: value, updated_at: new Date().toISOString() }).eq("id", car.id)
+    if (error) {
+      onPatch({ facilidad_venta: level })
+      toast.error(error.message.includes("facilidad_venta")
+        ? "Falta ejecutar supabase/2026-11_coches_claude_facilidad_venta.sql en Supabase"
+        : "No se pudo guardar la facilidad de venta: " + error.message)
+    }
+  }
+  return (
+    <div className="space-y-1 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-muted-foreground">Facilidad de venta</span>
+        <span className={`text-xs font-medium ${shown ? SALE_EASE_TEXT[shown - 1] : "text-muted-foreground"}`}>
+          {saleEaseLabel(shown) ?? "Sin valorar"}
+        </span>
+      </div>
+      <div className="flex gap-1" onMouseLeave={() => setHover(null)} role="radiogroup" aria-label="Facilidad de venta">
+        {SALE_EASE_LEVELS.map(n => (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={level === n}
+            title={SALE_EASE_LABELS[n]}
+            aria-label={SALE_EASE_LABELS[n]}
+            onMouseEnter={() => setHover(n)}
+            onClick={() => save(n)}
+            className={`h-2 flex-1 rounded-full transition-colors ${shown === n ? SALE_EASE_COLORS[n - 1] : shown ? "bg-muted" : "bg-muted hover:bg-muted-foreground/30"} ${level === n && hover == null ? "ring-1 ring-offset-1 ring-offset-background ring-foreground/20" : ""}`}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground/70">
+        <span>Fácil</span><span>Medio</span><span>Difícil</span>
+      </div>
+      {car.facilidad_venta_motivo && <p className="text-xs text-muted-foreground">{car.facilidad_venta_motivo}</p>}
+    </div>
+  )
+}
+
+type SortKey = "recientes" | "margen" | "beneficio" | "facil" | "barato" | "precio_de" | "km" | "anio"
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "recientes", label: "Más recientes" },
   { key: "margen", label: "Mayor % de beneficio" },
   { key: "beneficio", label: "Más dinero ganado" },
+  { key: "facil", label: "Más fácil de vender" },
   { key: "barato", label: "Más barato (coste en España)" },
   { key: "precio_de", label: "Más barato en Alemania" },
   { key: "km", label: "Menos kilómetros" },
@@ -61,6 +116,7 @@ function sortValue(car: ClaudeCar, key: SortKey): number | null {
     case "recientes": return Date.parse(car.created_at ?? "") || null
     case "margen": return car.margen_pct ?? null
     case "beneficio": return car.beneficio ?? null
+    case "facil": return car.facilidad_venta ? -car.facilidad_venta : null
     case "barato": return car.coste_total_espana ? -car.coste_total_espana : null
     case "precio_de": return car.precio_alemania ? -car.precio_alemania : null
     case "km": return car.km != null ? -car.km : null
@@ -512,6 +568,8 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
             <span className="tabular font-semibold">{formatEUR(car.beneficio)}{car.margen_pct != null && ` · ${car.margen_pct}%`}</span>
           </div>
         )}
+
+        <SaleEaseMeter car={car} onPatch={onPatch} />
 
         {car.aviso_impuesto && (
           <p className="flex gap-1.5 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">

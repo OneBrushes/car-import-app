@@ -12,6 +12,7 @@ import {
     CONTACT_SENDERS,
     MAX_CLAUDE_PHOTOS,
     awaitingReplySince,
+    saleEaseLabel,
     computeClaudeCar,
     daysSince,
     normalizeListingUrl,
@@ -60,6 +61,10 @@ const carFields = {
         `URLs de las fotos (máx. ${MAX_CLAUDE_PHOTOS}), en orden; la primera es la principal. Sustituyen a las que hubiera. ` +
         "En AutoScout24 la app las saca sola del anuncio; en mobile.de (que bloquea la lectura automática) pásalas tú: todas las de la galería. También sirve para elegir o reordenar fotos"),
     foto_posicion_y: z.number().int().min(0).max(100).describe("Encuadre vertical de la foto principal en la tarjeta: 0 = arriba, 100 = abajo. Si no lo das, la app lo calcula (en fotos verticales centra el tercio inferior, donde suele estar el coche)"),
+    facilidad_venta: z.number().int().min(1).max(5).describe(
+        "Lo fácil que será venderlo en España: 1 = fácil de vender, 2 = bastante fácil, 3 = venta media, 4 = bastante difícil, 5 = difícil de vender. " +
+        "Valóralo por la demanda del modelo, motor y cambio, color, km, precio frente al mercado español y cuántos hay a la venta"),
+    facilidad_venta_motivo: z.string().trim().max(500).describe("Por qué le das esa facilidad de venta, en una o dos frases"),
     notas: z.string().max(4000).describe("Tus notas: por qué es interesante, riesgos, qué preguntar al vendedor… Los mensajes con el vendedor NO van aquí: usa registrar_contacto"),
 }
 
@@ -92,6 +97,8 @@ function summary(c: ClaudeCar) {
         `Coste total en España: ${eur(c.coste_total_espana)}`,
         `Beneficio: ${c.beneficio == null ? "— (falta precio de venta estimado)" : `${eur(c.beneficio)}${c.margen_pct != null ? ` (${c.margen_pct} %)` : ""}`}`,
     ]
+    const ease = saleEaseLabel(c.facilidad_venta)
+    if (ease) parts.push(`Facilidad de venta: ${ease} (${c.facilidad_venta}/5)${c.facilidad_venta_motivo ? ` — ${c.facilidad_venta_motivo}` : ""}`)
     if (c.fotos?.length) parts.push(`Fotos: ${c.fotos.length}`)
     const last = c.contactos?.at(-1)
     if (last) {
@@ -195,14 +202,15 @@ function photoNotes(stored: { avisos: string[]; pendientes: number; leidas?: num
 export function buildServer(env: Env): McpServer {
     const client = db(env)
     const server = new McpServer(
-        { name: "nordrive-coches", version: "1.2.0" },
+        { name: "nordrive-coches", version: "1.3.0" },
         {
             jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
             instructions:
                 "Guarda coches de Alemania para NorDrive en la pestaña 'Guardados por Claude'. La app calcula el coste puesto en España " +
                 "y el beneficio con su propia fórmula (impuesto de matriculación, IVA si toca, transporte, ITV, homologación, DGT, placas y gestoría) " +
                 "y saca sola todas las fotos del anuncio. Confirma siempre al usuario el coste total y el beneficio que devuelve la herramienta. " +
-                "Cada vez que envíes o recibas un mensaje de un vendedor, regístralo con registrar_contacto (no lo escribas en las notas).",
+                "Cada vez que envíes o recibas un mensaje de un vendedor, regístralo con registrar_contacto (no lo escribas en las notas). " +
+                "Al guardar un coche, valora siempre facilidad_venta (1 fácil … 5 difícil) con su motivo.",
         },
     )
 
