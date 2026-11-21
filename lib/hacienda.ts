@@ -79,6 +79,8 @@ export function brandKey(marca: string): string {
 /** Palabras de un nombre de modelo: "Golf R 2.0 TSI 4Motion DSG" → ["GOLF","R","2.0","TSI","4MOTION","DSG"] */
 export function modelTokens(s: string): string[] {
     return strip(s)
+        .replace(/\bS[\s-]*TRONIC\b/g, "STRONIC")
+        .replace(/\bTC[\s-]*SST\b/g, "SST")
         .replace(/(\d),(\d)/g, "$1.$2")
         .replace(/[^A-Z0-9.]+/g, " ")
         .split(" ")
@@ -130,7 +132,7 @@ function fuelMatches(query: string | null | undefined, code: string | null): boo
 
 /**
  * Ordena las versiones del BOE por parecido con el coche buscado (la primera es la más parecida). Prueba cada variante del
- * nombre (modelVariants) y se queda con el mejor parecido de cada fila; las variantes parciales restan 3 para que, a igualdad,
+ * nombre (modelVariants) y se queda con el mejor parecido de cada fila; las variantes parciales restan 6 para que, a igualdad,
  * gane la del nombre completo.
  */
 export function rankHaciendaRows(rows: HaciendaRow[], q: HaciendaQuery): HaciendaMatch[] {
@@ -139,7 +141,7 @@ export function rankHaciendaRows(rows: HaciendaRow[], q: HaciendaQuery): Haciend
     const best = new Map<HaciendaRow, HaciendaMatch & { row: HaciendaRow }>()
     variants.forEach((modelo, i) => {
         for (const m of rankOne(rows, { ...q, modelo })) {
-            const scored = i === 0 ? m : { ...m, parecido: Math.max(0, m.parecido - 3), motivo: `${m.motivo} · buscado como "${modelo}"` }
+            const scored = i === 0 ? m : { ...m, parecido: Math.max(0, m.parecido - 6), motivo: `${m.motivo} · buscado como "${modelo}"` }
             const prev = best.get(m.row)
             if (!prev || scored.parecido > prev.parecido) best.set(m.row, scored)
         }
@@ -147,9 +149,10 @@ export function rankHaciendaRows(rows: HaciendaRow[], q: HaciendaQuery): Haciend
     // Carrocería y acabado: siempre con el nombre completo del coche (las variantes parciales no los distinguen)
     const full = new Set(modelTokens(variants[0]))
     const cvGap = (m: HaciendaMatch) => (q.cv && m.cv ? Math.abs(m.cv - q.cv) : 0)
+    const autoBases = new Set(rows.filter(isAutoRow).map(baseName))
     return [...best.values()]
         .map(({ row, ...m }) => {
-            const adj = bodyAndTrim(row, full)
+            const adj = bodyAndTrim(row, full, autoBases)
             if (!adj.delta) return m as HaciendaMatch
             return { ...m, parecido: Math.min(100, Math.max(0, m.parecido + adj.delta)), motivo: [m.motivo, ...adj.why].join(" · ") } as HaciendaMatch
         })
@@ -172,10 +175,32 @@ const TRIM_WORDS = new Set([
     "CLUBSPORT", "RALLIART", "NISMO", "TYPE", "TRACK",
 ])
 
-function bodyAndTrim(row: HaciendaRow, full: Set<string>): { delta: number; why: string[] } {
+/** Cambio: palabras de automático y de manual (en el BOE y en los anuncios) */
+const AUTO_WORDS = ["DSG", "DSG6", "DSG7", "AUT", "AUTO", "AUTOMATICO", "AUTOMATIC", "AUTOMATIK", "TRONIC", "STRONIC", "TIPTRONIC", "STEPTRONIC",
+    "PDK", "SECUENCIAL", "CVT", "EDC", "EAT6", "EAT8", "7G", "9G", "SPEEDSHIFT", "POWERSHIFT", "DCT", "SST", "SMG", "DKG"]
+const MANUAL_WORDS = ["MANUAL", "MAN", "MT", "SCHALTGETRIEBE"]
+const GEARBOX_PENALTY = 10
+/** El coche es automático y el BOE no dice el cambio de esa versión (muchas automáticas no lo indican) */
+const GEARBOX_UNKNOWN_PENALTY = 3
+
+const isAutoRow = (row: HaciendaRow) => AUTO_WORDS.some(w => rowTokens(row).has(w))
+/** Nombre de la versión sin las palabras del cambio: "SCIROCCO 2.0 TSI R DSG" y "SCIROCCO 2.0 TSI R" comparten */
+const baseName = (row: HaciendaRow) => [...rowTokens(row)].filter(t => !AUTO_WORDS.includes(t)).join(" ")
+
+function bodyAndTrim(row: HaciendaRow, full: Set<string>, autoBases: Set<string>): { delta: number; why: string[] } {
     const r = rowTokens(row)
     let delta = 0
     const why: string[] = []
+    // Cambio: solo si el coche lo dice (si no lo dice, no se sabe)
+    const carAuto = AUTO_WORDS.some(w => full.has(w))
+    const carManual = !carAuto && MANUAL_WORDS.some(w => full.has(w))
+    const rowAuto = isAutoRow(row)
+    if (carManual && rowAuto) { delta -= GEARBOX_PENALTY; why.push("es automático y el coche es manual") }
+    if (carAuto && !rowAuto) {
+        // Si la misma versión existe con cambio automático, esta es la manual; si no, el BOE simplemente no lo dice
+        if (autoBases.has(baseName(row))) { delta -= GEARBOX_PENALTY; why.push("es manual y el coche es automático") }
+        else { delta -= GEARBOX_UNKNOWN_PENALTY; why.push("cambio sin indicar en el BOE") }
+    }
     for (const rule of BODY_RULES) {
         const inRow = rule.words.some(w => r.has(w)) || (!!rule.code && [...r].some(t => rule.code!.test(t)))
         const inCar = rule.words.some(w => full.has(w))
@@ -197,6 +222,11 @@ function rowTokens(row: HaciendaRow): Set<string> {
     return t
 }
 
+/** Palabras del anuncio que se comparan con otras reglas y no se exigen en el nombre: "2.0", "DSG", "manual", "300" (CV)… */
+function comparedApart(t: string, q: HaciendaQuery): boolean {
+    return /^\d\.\d$/.test(t) || AUTO_WORDS.includes(t) || MANUAL_WORDS.includes(t) || (!!q.cv && t === String(q.cv))
+}
+
 /** Parecido de cada fila con un nombre de modelo ya limpio */
 function rankOne(rows: HaciendaRow[], q: HaciendaQuery): (HaciendaMatch & { row: HaciendaRow })[] {
     const qTokens = modelTokens(q.modelo).filter(t => !NOISE.has(t))
@@ -209,7 +239,7 @@ function rankOne(rows: HaciendaRow[], q: HaciendaQuery): (HaciendaMatch & { row:
 
             // Modelo: la primera palabra (Golf, Serie, C…) debe salir; el resto suma
             if (family && !rTokens.has(family)) { score -= 45; why.push(`no es ${family}`) }
-            const rest = qTokens.slice(1)
+            const rest = qTokens.slice(1).filter(t => !comparedApart(t, q))
             if (rest.length) {
                 const hits = rest.filter(t => rTokens.has(t)).length
                 score -= Math.round(30 * (1 - hits / rest.length))
@@ -229,7 +259,7 @@ function rankOne(rows: HaciendaRow[], q: HaciendaQuery): (HaciendaMatch & { row:
             // Potencia: lo que más distingue versiones del mismo modelo
             if (q.cv && row.cv) {
                 const diff = Math.abs(row.cv - q.cv)
-                score -= Math.min(30, Math.round(diff / 3))
+                score -= diff <= 3 ? 0 : Math.min(30, Math.round(diff / 2))
                 why.push(diff <= 5 ? `${row.cv} CV ✓` : `${row.cv} CV (buscado ${q.cv})`)
             }
             if (q.cc && row.cc) {

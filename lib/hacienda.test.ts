@@ -64,6 +64,16 @@ describe("valores de Hacienda · búsqueda por parecido", () => {
         for (const m of [...nuevo.slice(0, 3), ...viejo.slice(0, 3)]) expect(m.modelo).not.toMatch(/Cabrio/i)
     })
 
+    it("cambio: Scirocco R manual 265 CV → 27.500 € y DSG 280 CV → 32.700 €, sin aviso de verificar", () => {
+        const manual = rankHaciendaRows(brand("VOLKSWAGEN"), { marca: "Volkswagen", modelo: "Scirocco", version: "R 2.0 TSI manual (265 CV)", anio: 2013, cv: 265, combustible: "Gasolina" })
+        expect(manual[0].modelo).toBe("SCIROCCO 2.0 TSI R")
+        expect(manual[0].valor).toBe(27500)
+        expect(needsVersionCheck(manual)).toBe(false)
+        const dsg = rankHaciendaRows(brand("VOLKSWAGEN"), { marca: "Volkswagen", modelo: "Scirocco", version: "R 2.0 TSI DSG (280 CV)", anio: 2015, cv: 280, combustible: "Gasolina" })
+        expect(dsg[0].valor).toBe(32700)
+        expect(needsVersionCheck(dsg)).toBe(false)
+    })
+
     it("si el coche dice familiar o descapotable, se respeta", () => {
         const st = rankHaciendaRows(brand("CUPRA"), { marca: "Cupra", modelo: "León Sportstourer", version: "VZ 2.0 TSI DSG", anio: 2023, cv: 300 })
         expect(st[0].modelo).toMatch(/Sportstourer/)
