@@ -144,9 +144,49 @@ export function rankHaciendaRows(rows: HaciendaRow[], q: HaciendaQuery): Haciend
             if (!prev || scored.parecido > prev.parecido) best.set(m.row, scored)
         }
     })
+    // Carrocería y acabado: siempre con el nombre completo del coche (las variantes parciales no los distinguen)
+    const full = new Set(modelTokens(variants[0]))
+    const cvGap = (m: HaciendaMatch) => (q.cv && m.cv ? Math.abs(m.cv - q.cv) : 0)
     return [...best.values()]
-        .map(({ row: _row, ...m }) => m as HaciendaMatch)
-        .sort((a, b) => b.parecido - a.parecido || Math.abs((a.fin ?? 9999) - (q.anio ?? 0)) - Math.abs((b.fin ?? 9999) - (q.anio ?? 0)))
+        .map(({ row, ...m }) => {
+            const adj = bodyAndTrim(row, full)
+            if (!adj.delta) return m as HaciendaMatch
+            return { ...m, parecido: Math.min(100, Math.max(0, m.parecido + adj.delta)), motivo: [m.motivo, ...adj.why].join(" · ") } as HaciendaMatch
+        })
+        // A igual parecido: la potencia más cercana y, después, el periodo que acaba más cerca del año del coche
+        .sort((a, b) => b.parecido - a.parecido || cvGap(a) - cvGap(b) || Math.abs((a.fin ?? 9999) - (q.anio ?? 0)) - Math.abs((b.fin ?? 9999) - (q.anio ?? 0)))
+}
+
+/** Carrocerías que el BOE indica y que cambian el valor: si el coche no lo dice, se prefiere la versión normal */
+const BODY_RULES: { name: string; words: string[]; penalty: number; code?: RegExp }[] = [
+    { name: "familiar", words: ["SPORTSTOURER", "TOURER", "VARIANT", "ESTATE", "AVANT", "TOURING", "KOMBI", "SW", "BREAK", "SHOOTING", "ALLTRACK"], penalty: 12 },
+    { name: "descapotable", words: ["CABRIO", "CABRIOLET", "ROADSTER", "SPIDER", "SPYDER", "CONVERTIBLE", "CONVERT", "VOLANTE"], penalty: 20 },
+    // Mercedes: V177 = A sedán, W177 = A compacto (también otros "V" de carrocería larga)
+    { name: "sedán", words: ["SEDAN", "LIMOUSINE", "BERLINA"], penalty: 8, code: /^V\d{3}$/ },
+    { name: "coupé", words: ["COUPE"], penalty: 6 },
+]
+
+/** Acabados que distinguen versiones del mismo modelo: si el coche dice uno, la versión que lo tiene va primero */
+const TRIM_WORDS = new Set([
+    "MR", "GSR", "RS", "GTI", "GTD", "GTE", "CUP", "COMPETITION", "COMP", "PERFORMANCE", "CS", "CSL", "GTS", "GT3", "GT2",
+    "CLUBSPORT", "RALLIART", "NISMO", "TYPE", "TRACK",
+])
+
+function bodyAndTrim(row: HaciendaRow, full: Set<string>): { delta: number; why: string[] } {
+    const r = rowTokens(row)
+    let delta = 0
+    const why: string[] = []
+    for (const rule of BODY_RULES) {
+        const inRow = rule.words.some(w => r.has(w)) || (!!rule.code && [...r].some(t => rule.code!.test(t)))
+        const inCar = rule.words.some(w => full.has(w))
+        if (inRow && !inCar) { delta -= rule.penalty; why.push(`es ${rule.name} y el coche no lo dice`) }
+    }
+    for (const t of r) {
+        if (!TRIM_WORDS.has(t)) continue
+        if (full.has(t)) { delta += 6; why.push(`acabado ${t} ✓`) }
+        else { delta -= 6; why.push(`acabado ${t} (el coche no lo dice)`) }
+    }
+    return { delta, why }
 }
 
 /** Palabras de cada fila, calculadas una vez (se compara la misma fila con varias variantes y varios coches) */

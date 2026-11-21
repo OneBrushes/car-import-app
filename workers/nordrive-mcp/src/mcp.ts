@@ -516,14 +516,16 @@ export function buildServer(env: Env): McpServer {
                 `versión en valores_hacienda (marca, modelo + versión, año, CV, combustible); si encuentra una con parecido ≥ ${RECALC_MIN_SCORE}, guarda ese ` +
                 "valor_hacienda, BORRA el impuesto_matriculacion manual para que se use el calculado por la app y marca verificar_version si hay varias candidatas. " +
                 `Va por tandas de ${RECALC_BATCH} coches (límites del servidor): si quedan más, vuelve a llamarla con 'saltar' = los ya revisados. ` +
+                "Los coches cuyo valor_hacienda puso Claude (valor_hacienda_origen = claude) NO se tocan salvo forzar: true; se listan aparte con lo que dan las tablas. " +
                 "Devuelve, por coche, el valor elegido, el impuesto y el beneficio antes y después, y los que no ha encontrado.",
             inputSchema: {
                 ids: z.array(z.string().uuid()).max(RECALC_BATCH).optional().describe(`ids de los coches (máx. ${RECALC_BATCH}). Sin ids, todos los coches, del más antiguo al más reciente`),
                 saltar: z.number().int().min(0).optional().describe("Sin ids: cuántos coches saltar (para seguir con la siguiente tanda)"),
                 simular: z.boolean().optional().describe("true = solo enseñar lo que cambiaría, sin guardar"),
+                forzar: z.boolean().optional().describe("true = cambiar también los coches cuyo valor_hacienda puso Claude"),
             },
         },
-        async ({ ids, saltar, simular }) => logged(client, "recalcular_hacienda", async () => {
+        async ({ ids, saltar, simular, forzar }) => logged(client, "recalcular_hacienda", async () => {
             let query = client.from(CARS_TABLE).select("*", { count: "exact" }).order("created_at", { ascending: true })
             query = ids?.length ? query.in("id", ids) : query.range(saltar ?? 0, (saltar ?? 0) + RECALC_BATCH - 1)
             const [{ data, error, count }, settings] = await Promise.all([query, costSettings(client)])
@@ -534,6 +536,7 @@ export function buildServer(env: Env): McpServer {
 
             const done: string[] = []
             const missing: string[] = []
+            const kept: string[] = []
             for (const car of cars) {
                 const name = carName(car)
                 if (!car.marca || !car.modelo) { missing.push(`• ${name}: falta marca o modelo`); continue }
@@ -546,6 +549,12 @@ export function buildServer(env: Env): McpServer {
                     continue
                 }
                 const verify = needsVersionCheck(matches)
+                // El valor que puso Claude se respeta salvo que se pida forzar
+                if (car.valor_hacienda && car.valor_hacienda_origen === "claude" && !forzar) {
+                    const diff = best.valor - car.valor_hacienda
+                    kept.push(`• ${name}: Claude ${eur(car.valor_hacienda)} · tablas ${eur(best.valor)} — ${versionName(best)}${verify ? " ⚠️ varias versiones" : ""} (${diff ? `difiere ${eur(Math.abs(diff))}` : "coincide"})`)
+                    continue
+                }
                 const patch: Partial<ClaudeCar> = {
                     valor_hacienda: best.valor, valor_hacienda_origen: "tabla", valor_hacienda_version: versionName(best),
                     verificar_version: verify, impuesto_matriculacion: null,
@@ -565,14 +574,15 @@ export function buildServer(env: Env): McpServer {
             const from = saltar ?? 0
             const left = !ids?.length && count != null ? Math.max(0, count - from - cars.length) : 0
             const text = [
-                `${simular ? "SIMULACIÓN (no se ha guardado nada). " : ""}Revisados ${cars.length} coche(s)${ids?.length ? "" : ` (del ${from + 1} al ${from + cars.length} de ${count ?? "?"})`}: ${done.length} recalculado(s), ${missing.length} sin encontrar.`,
+                `${simular ? "SIMULACIÓN (no se ha guardado nada). " : ""}Revisados ${cars.length} coche(s)${ids?.length ? "" : ` (del ${from + 1} al ${from + cars.length} de ${count ?? "?"})`}: ${done.length} recalculado(s), ${kept.length} con valor de Claude sin tocar, ${missing.length} sin encontrar.`,
                 done.length ? `\nRecalculados:\n${done.join("\n")}` : "",
+                kept.length ? `\nCon valor_hacienda de Claude (no se tocan; usa forzar: true para cambiarlos):\n${kept.join("\n")}` : "",
                 missing.length ? `\nNo encontrados:\n${missing.join("\n")}` : "",
                 left ? `\nQuedan ${left} coche(s): vuelve a llamar con saltar = ${from + cars.length}.` : "",
             ].filter(Boolean).join("\n")
             return {
                 result: { content: [{ type: "text", text }] },
-                resumen: `${simular ? "simulación · " : ""}${done.length} recalculados, ${missing.length} sin encontrar${left ? `, quedan ${left}` : ""}`,
+                resumen: `${simular ? "simulación · " : ""}${done.length} recalculados, ${kept.length} de Claude sin tocar, ${missing.length} sin encontrar${forzar ? " (forzado)" : ""}${left ? `, quedan ${left}` : ""}`,
             }
         }),
     )

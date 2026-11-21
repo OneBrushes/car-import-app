@@ -43,6 +43,34 @@ describe("valores de Hacienda · búsqueda por parecido", () => {
         expect(matches[0].parecido).toBeGreaterThanOrEqual(HACIENDA_MIN_SCORE)
     })
 
+    // Carrocería y acabado, con los datos tal como están guardados en coches_claude
+    it.each([
+        { caso: "Cupra León VZ 5p 2023 → Leon VZ (no Sportstourer)", marca: "Cupra", modelo: "León", version: "VZ 2.0 TSI 300 CV DSG", anio: 2023, cv: 300, valor: 42400 },
+        { caso: "A 35 compacto 2019 → W177 (no V177 sedán)", marca: "Mercedes-Benz", modelo: "Clase A", version: "Mercedes-AMG A 35 4MATIC", anio: 2019, cv: 306, valor: 50600 },
+        { caso: "Lancer Evo X MR 2009 → MR (no GSR)", marca: "Mitsubishi", modelo: "Lancer Evolution X", version: "Evolution X MR 2.0 TC-SST", anio: 2009, cv: 295, valor: 49100 },
+    ])("$caso", ({ marca, modelo, version, anio, cv, valor }) => {
+        const matches = rankHaciendaRows(rows.filter(r => brandKey(r.marca) === brandKey(marca)), { marca, modelo, version, anio, cv, combustible: "Gasolina" })
+        expect(matches[0].valor, `${matches[0].modelo} (${matches[0].parecido}) · 2.ª ${matches[1]?.modelo} (${matches[1]?.parecido})`).toBe(valor)
+    })
+
+    it("Audi S3: nunca el Cabrio; 2021 y 310 CV (8Y) → 47.600 €; 2020 y 300 CV (8V) → Sportback 300 CV 44.300 € con aviso", () => {
+        const q = { marca: "Audi", modelo: "S3", version: "S3 2.0 TFSI quattro S tronic", combustible: "Gasolina" }
+        const nuevo = rankHaciendaRows(brand("AUDI"), { ...q, anio: 2021, cv: 310 })
+        expect(nuevo[0].valor).toBe(47600)
+        const viejo = rankHaciendaRows(brand("AUDI"), { ...q, anio: 2020, cv: 300 })
+        expect(viejo[0].modelo).toBe("S3 Sportback TFSI quattro")
+        expect(viejo[0].valor).toBe(44300)
+        expect(needsVersionCheck(viejo)).toBe(true)
+        for (const m of [...nuevo.slice(0, 3), ...viejo.slice(0, 3)]) expect(m.modelo).not.toMatch(/Cabrio/i)
+    })
+
+    it("si el coche dice familiar o descapotable, se respeta", () => {
+        const st = rankHaciendaRows(brand("CUPRA"), { marca: "Cupra", modelo: "León Sportstourer", version: "VZ 2.0 TSI DSG", anio: 2023, cv: 300 })
+        expect(st[0].modelo).toMatch(/Sportstourer/)
+        const cabrio = rankHaciendaRows(brand("AUDI"), { marca: "Audi", modelo: "S3 Cabrio", version: "2.0 TFSI quattro S tronic", anio: 2019, cv: 310 })
+        expect(cabrio[0].modelo).toMatch(/Cabrio/)
+    })
+
     it("limpia el nombre antes de buscar", () => {
         expect(cleanModelText("Clase E Mercedes-AMG E 43 4MATIC", "Mercedes-Benz")).toBe("E 43 4MATIC")
         expect(cleanModelText("E-Klasse E 220 d")).toBe("E 220 D")
