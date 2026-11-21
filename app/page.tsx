@@ -26,6 +26,7 @@ import { FiscalSummary } from "@/components/tabs/fiscal-summary"
 import { DonationsTab } from "@/components/tabs/donations-tab"
 import { RemindersTab } from "@/components/tabs/reminders-tab"
 import { BlogTab } from "@/components/tabs/blog-tab"
+import { ClaudeCarsTab } from "@/components/tabs/claude-cars"
 import { exportToExcel } from "@/lib/excel-export"
 import { toast } from "sonner"
 import { CommandPalette, CommandPaletteTrigger, OPEN_CAR_EVENT } from "@/components/command-palette"
@@ -48,7 +49,7 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-type TabType = "dashboard" | "import" | "spain" | "comparison" | "calculator" | "customers" | "fiscal" | "reminders" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations" | "map" | "roadmap" | "expenses" | "blog"
+type TabType = "dashboard" | "import" | "spain" | "comparison" | "calculator" | "customers" | "fiscal" | "reminders" | "management" | "report" | "profitable" | "admin" | "checklist" | "donations" | "map" | "roadmap" | "expenses" | "blog" | "claude"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
@@ -57,6 +58,8 @@ export default function Home() {
   const [role, setRole] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [donationsEnabled, setDonationsEnabled] = useState(false)
+  // Solo la cuenta dueña ve "Guardados por Claude" (no depende del rol)
+  const [isClaudeOwner, setIsClaudeOwner] = useState(false)
   const [cursorsVisible, setCursorsVisible] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -90,7 +93,7 @@ export default function Home() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tab = params.get("tab")
-    const valid: TabType[] = ["dashboard", "import", "spain", "comparison", "calculator", "customers", "fiscal", "reminders", "management", "report", "profitable", "admin", "checklist", "donations", "map", "roadmap", "expenses", "blog"]
+    const valid: TabType[] = ["dashboard", "import", "spain", "comparison", "calculator", "customers", "fiscal", "reminders", "management", "report", "profitable", "admin", "checklist", "donations", "map", "roadmap", "expenses", "blog", "claude"]
     if (tab && (valid as string[]).includes(tab)) setActiveTab(tab as TabType)
     const car = params.get("car")
     const table = params.get("table")
@@ -163,6 +166,8 @@ export default function Home() {
 
       loadDonationsConfig()
 
+      supabase.rpc('is_claude_owner').then(({ data, error }) => setIsClaudeOwner(!error && data === true))
+
       // Subscribe to realtime changes in app_settings
       const channel = supabase
         .channel('app_settings_changes')
@@ -231,7 +236,7 @@ export default function Home() {
     setIsDark(!isDark)
   }
 
-  const navGroups = getNavGroups(role, donationsEnabled)
+  const navGroups = getNavGroups(role, donationsEnabled, isClaudeOwner)
   const currentGroup = navGroups.find(group => group.items.some(item => item.id === activeTab))
   const currentItem = currentGroup?.items.find(item => item.id === activeTab)
 
@@ -254,6 +259,7 @@ export default function Home() {
           onTabChange={handleTabSelect}
           role={role}
           donationsVisible={donationsEnabled}
+          claudeVisible={isClaudeOwner}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={toggleSidebar}
         />
@@ -268,6 +274,7 @@ export default function Home() {
             onTabChange={handleTabSelect}
             role={role}
             donationsVisible={donationsEnabled}
+            claudeVisible={isClaudeOwner}
           />
         </SheetContent>
       </Sheet>
@@ -366,6 +373,9 @@ export default function Home() {
             </div>
             <div className={activeTab === "import" ? "block animate-in fade-in duration-300" : "hidden"}>
               <CarImport role={role} />
+            </div>
+            <div className={activeTab === "claude" && isClaudeOwner ? "block animate-in fade-in duration-300" : "hidden"}>
+              {isClaudeOwner && <ClaudeCarsTab isActive={activeTab === "claude"} />}
             </div>
             <div className={activeTab === "spain" ? "block animate-in fade-in duration-300" : "hidden"}>
               <CarsSpain role={role} />

@@ -2,7 +2,7 @@
 
 import {
   Car, MapPin, Scale, Archive, Home, FileText, TrendingUp, CheckSquare, Heart,
-  Map as MapIcon, Network, Wallet, EyeOff, Eye, Shield, PanelLeftClose, PanelLeftOpen, Calculator, Users, Newspaper, Landmark, Warehouse,
+  Map as MapIcon, Network, Wallet, EyeOff, Eye, Shield, PanelLeftClose, PanelLeftOpen, Calculator, Users, Newspaper, Landmark, Warehouse, Bot,
   type LucideIcon,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -27,7 +27,8 @@ export interface NavGroup {
   items: NavItem[]
 }
 
-export function getNavGroups(role: string | null | undefined, donationsVisible: boolean): NavGroup[] {
+/** claudeVisible: solo la cuenta dueña de "Guardados por Claude" (is_claude_owner() en Supabase) */
+export function getNavGroups(role: string | null | undefined, donationsVisible: boolean, claudeVisible = false): NavGroup[] {
   const isAdmin = role === 'admin' || role === 'super_admin'
 
   const groups: NavGroup[] = [
@@ -41,6 +42,7 @@ export function getNavGroups(role: string | null | undefined, donationsVisible: 
       label: "Vehículos",
       items: [
         { id: "import", label: "Importación", icon: Car, roles: ALL_ROLES },
+        ...(claudeVisible ? [{ id: "claude", label: "Guardados por Claude", icon: Bot, roles: ALL_ROLES }] : []),
         { id: "spain", label: "España", icon: MapPin, roles: ALL_ROLES },
         { id: "comparison", label: "Comparativa", icon: Scale, roles: ALL_ROLES },
         { id: "calculator", label: "Calculadora", icon: Calculator, roles: ALL_ROLES },
@@ -87,6 +89,7 @@ interface NavigationProps {
   onTabChange: (tab: any) => void
   role?: string | null
   donationsVisible?: boolean
+  claudeVisible?: boolean
   collapsed?: boolean
   onToggleCollapsed?: () => void
 }
@@ -96,13 +99,14 @@ export function Navigation({
   onTabChange,
   role,
   donationsVisible = false,
+  claudeVisible = false,
   collapsed = false,
   onToggleCollapsed,
 }: NavigationProps) {
   const { isGodMode, toggleGodMode, profile } = useAuth()
   const router = useRouter()
   const isSuperAdmin = profile?.role === 'super_admin'
-  const groups = getNavGroups(role, donationsVisible)
+  const groups = getNavGroups(role, donationsVisible, claudeVisible)
 
   const openGarage = () => {
     // Al salir del garaje se vuelve exactamente a esta pestaña

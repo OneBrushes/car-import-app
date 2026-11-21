@@ -9,7 +9,8 @@
     "start": "next start",
     "test": "vitest run",
     "build:workers": "node scripts/build-workers.mjs",
-    "screenshots:garage": "node scripts/garage-screenshots.mjs screenshots"
+    "screenshots:garage": "node scripts/garage-screenshots.mjs screenshots",
+    "deploy:mcp": "npm --prefix workers/nordrive-mcp run deploy"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

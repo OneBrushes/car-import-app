@@ -1,0 +1,19 @@
+# Worker "nordrive-mcp": servidor MCP de "Guardados por Claude". Pasos de despliegue en README.md
+name = "nordrive-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-10-01"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+
+[vars]
+# URL pública del Worker, sin barra final. Cámbiala si usas un dominio propio (p. ej. https://mcp.nordrivecars.com)
+PUBLIC_URL = "https://nordrive-mcp.CAMBIAR.workers.dev"
+SUPABASE_URL = "https://luzacvchtxkurisuywic.supabase.co"
+
+# Secretos (no van aquí): npx wrangler secret put MCP_SECRET / SUPABASE_SERVICE_ROLE_KEY
+
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "CAMBIAR_POR_EL_ID_DEL_KV"
+
+[observability]
+enabled = true

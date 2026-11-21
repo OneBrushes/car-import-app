@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Calculator, Info, RotateCcw } from "lucide-react"
+import { Calculator, Info, RotateCcw, Save } from "lucide-react"
+import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { Input } from "@/components/ui/input"
@@ -9,7 +10,8 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { calculateImportCost, DEFAULT_IMPORT_COSTS, formatEUR } from "@/lib/import-costs"
+import { calculateImportCost, DEFAULT_IMPORT_COST_SETTINGS, formatEUR, TAX_REGIONS, type ImportCostSettings, type TaxRegion } from "@/lib/import-costs"
+import { loadImportCostSettings, saveImportCostSettings } from "@/lib/import-cost-settings"
 
 interface CarOption {
   id: string
@@ -21,23 +23,26 @@ interface CarOption {
   co2: number | null
 }
 
-const EMPTY_FORM = {
+const formFromSettings = (settings: ImportCostSettings) => ({
   purchasePrice: "",
+  netPrice: "",
   fiscalValueNew: "",
   year: String(new Date().getFullYear() - 3),
   month: "1",
   co2: "",
   payVat: false,
-  transport: String(DEFAULT_IMPORT_COSTS.transport),
-  itv: String(DEFAULT_IMPORT_COSTS.itv),
-  homologation: String(DEFAULT_IMPORT_COSTS.homologation),
-  plates: String(DEFAULT_IMPORT_COSTS.plates),
-  agency: String(DEFAULT_IMPORT_COSTS.agency),
+  vatDeductible: false,
+  region: settings.region as TaxRegion,
+  transport: String(settings.transport),
+  itv: String(settings.itv),
+  homologation: String(settings.homologation),
+  plates: String(settings.plates),
+  agency: String(settings.agency),
   other: "0",
   expectedSalePrice: "",
-}
+})
 
-type FormState = typeof EMPTY_FORM
+type FormState = ReturnType<typeof formFromSettings>
 
 const num = (value: string) => {
   const parsed = parseFloat(value.replace(",", "."))
@@ -45,8 +50,11 @@ const num = (value: string) => {
 }
 
 export function ImportCalculator() {
-  const { user } = useAuth()
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const { user, profile } = useAuth()
+  const canSaveDefaults = profile?.role === "admin" || profile?.role === "super_admin"
+  const [settings, setSettings] = useState<ImportCostSettings>(DEFAULT_IMPORT_COST_SETTINGS)
+  const [form, setForm] = useState<FormState>(() => formFromSettings(DEFAULT_IMPORT_COST_SETTINGS))
+  const [savingDefaults, setSavingDefaults] = useState(false)
   const [cars, setCars] = useState<CarOption[]>([])
   const [selectedCarId, setSelectedCarId] = useState<string>("")
 
@@ -57,6 +65,19 @@ export function ImportCalculator() {
       .select("id, brand, model, year, month, price, co2")
       .order("created_at", { ascending: false })
       .then(({ data }) => setCars((data as CarOption[]) || []))
+    // Gastos fijos guardados (los mismos que usa el MCP de "Guardados por Claude")
+    loadImportCostSettings().then(saved => {
+      setSettings(saved)
+      setForm(prev => ({
+        ...prev,
+        region: saved.region,
+        transport: String(saved.transport),
+        itv: String(saved.itv),
+        homologation: String(saved.homologation),
+        plates: String(saved.plates),
+        agency: String(saved.agency),
+      }))
+    })
   }, [user])
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
@@ -76,8 +97,29 @@ export function ImportCalculator() {
   }
 
   const reset = () => {
-    setForm(EMPTY_FORM)
+    setForm(formFromSettings(settings))
     setSelectedCarId("")
+  }
+
+  const saveDefaults = async () => {
+    const next: ImportCostSettings = {
+      region: form.region,
+      transport: num(form.transport),
+      itv: num(form.itv),
+      homologation: num(form.homologation),
+      plates: num(form.plates),
+      agency: num(form.agency),
+    }
+    setSavingDefaults(true)
+    try {
+      await saveImportCostSettings(next)
+      setSettings(next)
+      toast.success("Gastos guardados como valores por defecto (Calculadora y Claude)")
+    } catch (error: any) {
+      toast.error("No se pudieron guardar: " + (error?.message ?? error))
+    } finally {
+      setSavingDefaults(false)
+    }
   }
 
   const result = useMemo(() => {
@@ -85,6 +127,9 @@ export function ImportCalculator() {
     const month = Math.min(12, Math.max(1, Math.round(num(form.month)) || 1))
     return calculateImportCost({
       purchasePrice: num(form.purchasePrice),
+      vatDeductible: form.vatDeductible,
+      netPrice: form.netPrice ? num(form.netPrice) : null,
+      region: form.region,
       fiscalValueNew: form.fiscalValueNew ? num(form.fiscalValueNew) : null,
       firstRegistration: new Date(year, month - 1, 1),
       co2: form.co2 === "" ? null : num(form.co2),
@@ -152,16 +197,40 @@ export function ImportCalculator() {
               >
                 <Input inputMode="decimal" value={form.fiscalValueNew} onChange={e => set("fiscalValueNew", e.target.value)} placeholder="Según la orden anual de precios medios" />
               </Field>
+              <Field label="Comunidad donde se matricula" hint="Cambia el tipo del impuesto de matriculación." className="sm:col-span-2">
+                <Select value={form.region} onValueChange={v => set("region", v as TaxRegion)}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TAX_REGIONS.map(r => <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
             </div>
             <label className="mt-4 flex items-start gap-3 rounded-lg border p-3">
               <Switch checked={form.payVat} onCheckedChange={v => set("payVat", v)} className="mt-0.5" />
               <span className="text-sm">
                 <span className="font-medium">Pagar IVA en España (21%)</span>
                 <span className="block text-muted-foreground">
-                  Solo si el coche cuenta como "nuevo" a efectos fiscales (menos de 6 meses o 6.000 km) o si el vendedor no aplica REBU.
+                  Solo si el coche cuenta como «nuevo» a efectos fiscales (menos de 6 meses o 6.000 km) o si el vendedor no aplica REBU.
                 </span>
               </span>
             </label>
+            <label className="mt-3 flex items-start gap-3 rounded-lg border p-3">
+              <Switch checked={form.vatDeductible} onCheckedChange={v => set("vatDeductible", v)} className="mt-0.5" />
+              <span className="text-sm">
+                <span className="font-medium">Compro como empresa con IVA deducible</span>
+                <span className="block text-muted-foreground">
+                  El coste es el precio neto (sin IVA, «MwSt. ausweisbar»). El IVA se autoliquida y se deduce, así que no suma.
+                </span>
+              </span>
+            </label>
+            {form.vatDeductible && (
+              <div className="mt-3">
+                <Field label="Precio neto sin IVA (€)">
+                  <Input inputMode="decimal" value={form.netPrice} onChange={e => set("netPrice", e.target.value)} placeholder="15.546" />
+                </Field>
+              </div>
+            )}
           </Section>
 
           <Section title="Gastos de importación">
@@ -172,6 +241,17 @@ export function ImportCalculator() {
               <Field label="Placas (€)"><Input inputMode="decimal" value={form.plates} onChange={e => set("plates", e.target.value)} /></Field>
               <Field label="Gestoría (€)"><Input inputMode="decimal" value={form.agency} onChange={e => set("agency", e.target.value)} /></Field>
               <Field label="Otros (€)"><Input inputMode="decimal" value={form.other} onChange={e => set("other", e.target.value)} /></Field>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+              <p className="text-xs text-muted-foreground">
+                Valores por defecto: transporte {formatEUR(settings.transport)}, ITV {formatEUR(settings.itv)}, homologación {formatEUR(settings.homologation)},
+                placas {formatEUR(settings.plates)}, gestoría {formatEUR(settings.agency)}. También los usa Claude cuando no indica los suyos.
+              </p>
+              {canSaveDefaults && (
+                <Button variant="outline" size="sm" onClick={saveDefaults} disabled={savingDefaults}>
+                  <Save className="h-4 w-4" /> Guardar como valores por defecto
+                </Button>
+              )}
             </div>
           </Section>
 
@@ -225,8 +305,8 @@ export function ImportCalculator() {
             </p>
             <p>
               Antigüedad: {result.ageYears} años → conserva el {result.depreciation}% de su valor. Tipo del impuesto: {result.taxRate}% (0% hasta 120 g/km,
-              4,75% hasta 159, 9,75% hasta 199 y 14,75% desde 200). Valores orientativos para península y Baleares; algunas comunidades aplican tipos
-              más altos y Canarias tiene los suyos. Confírmalo con tu gestoría.
+              4,75% hasta 159, 9,75% hasta 199 y 14,75% desde 200; 16% en Cataluña). Con valor de Hacienda, la base se minora en el IVA y el
+              impuesto que ya lleva dentro el coche usado (art. 5.2 Orden HAC/1501/2025). Valores orientativos; Canarias tiene los suyos. Confírmalo con tu gestoría.
             </p>
           </div>
         </div>

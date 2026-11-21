@@ -40,3 +40,5 @@ next-env.d.ts
 # cloudflare
 .wrangler
 wrangler.toml
+# el del MCP no lleva secretos (van con wrangler secret put)
+!workers/nordrive-mcp/wrangler.toml

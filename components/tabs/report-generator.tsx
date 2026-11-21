@@ -14,7 +14,8 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { calculateImportCost, DEFAULT_IMPORT_COSTS } from "@/lib/import-costs"
+import { calculateImportCost, DEFAULT_IMPORT_COST_SETTINGS, type ImportCostSettings } from "@/lib/import-costs"
+import { loadImportCostSettings } from "@/lib/import-cost-settings"
 
 // Radix Select no admite "" como valor de un item: centinela que se traduce a "" en el estado
 const NONE_VALUE = "__none__"
@@ -186,7 +187,7 @@ interface PriceBreakdown {
 }
 
 /** Precio final "llave en mano" en España: gastos apuntados o, si no hay, estimación de la calculadora */
-function priceFor(car: ReportCar, discount: number): PriceBreakdown {
+function priceFor(car: ReportCar, discount: number, settings: ImportCostSettings): PriceBreakdown {
     const recorded = car.expenses.filter(e => e.amount)
     const recordedSum = recorded.reduce((sum, e) => sum + e.amount, 0)
     const lumpExpenses = car.totalCost > car.price ? car.totalCost - car.price : 0
@@ -210,8 +211,13 @@ function priceFor(car: ReportCar, discount: number): PriceBreakdown {
             purchasePrice: car.price,
             firstRegistration: new Date(car.year || new Date().getFullYear(), (car.month || 1) - 1, 1),
             co2: car.co2,
+            region: settings.region,
             payVat: false,
-            ...DEFAULT_IMPORT_COSTS,
+            transport: settings.transport,
+            itv: settings.itv,
+            homologation: settings.homologation,
+            plates: settings.plates,
+            agency: settings.agency,
             other: 0,
         })
         lines = estimate.lines.map(line => line.label === 'Precio de compra' ? { ...line, label: 'Precio del vehículo' } : line)
@@ -256,6 +262,10 @@ export function ReportGenerator() {
     const [footerWeb, setFooterWeb] = useState("www.nordrive.es")
 
     const reportRef = useRef<HTMLDivElement>(null)
+    const [costSettings, setCostSettings] = useState<ImportCostSettings>(DEFAULT_IMPORT_COST_SETTINGS)
+
+    // Gastos fijos guardados (los mismos que la Calculadora y el MCP)
+    useEffect(() => { loadImportCostSettings().then(setCostSettings) }, [])
 
     // Cargar coches
     useEffect(() => {
@@ -359,13 +369,13 @@ export function ReportGenerator() {
             const car = cars.find(c => c.id === config.carId)
             if (!car) return null
             const spain = spainCars.find(s => s.id === config.spainCarId) || null
-            const price = priceFor(car, config.discount || 0)
+            const price = priceFor(car, config.discount || 0, costSettings)
             const images = imageBlobs[car.id]?.length ? imageBlobs[car.id] : car.images
             return { car, config, spain, price, images, checklist: checklists[car.id] || null }
         })
         .filter(Boolean) as {
             car: ReportCar; config: CarConfig; spain: SpainCar | null; price: PriceBreakdown; images: string[]; checklist: any
-        }[], [configs, cars, spainCars, imageBlobs, checklists])
+        }[], [configs, cars, spainCars, imageBlobs, checklists, costSettings])
 
     const cheapestId = reportCars.length > 1
         ? reportCars.reduce((best, item) => (item.price.final < best.price.final ? item : best)).car.id
