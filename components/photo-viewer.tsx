@@ -80,7 +80,7 @@ export function PhotoViewer({ photos, open, index, onClose, mainPhoto, onSetMain
       counter={{ container: { style: { top: "unset", bottom: 0 } } }}
       toolbar={{ buttons: [setMainButton, "zoom", "close"].filter(Boolean) as React.ReactNode[] }}
       labels={{ Close: "Cerrar", Next: "Siguiente", Previous: "Anterior", "Zoom in": "Acercar", "Zoom out": "Alejar", "Show thumbnails": "Mostrar miniaturas", "Hide thumbnails": "Ocultar miniaturas" }}
-      styles={{ container: { backgroundColor: "rgba(0, 0, 0, .94)" } }}
+      styles={{ container: { backgroundColor: "#000" } }}
     />
   )
 }

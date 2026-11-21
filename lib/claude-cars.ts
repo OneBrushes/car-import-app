@@ -314,3 +314,16 @@ function randomId() {
 function eur(value: number) {
     return value.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 2 })
 }
+
+// --- Fotos de la tarjeta y del visor ---------------------------------------------------------------------------------
+
+/**
+ * Fotos que enseñan la tarjeta y el visor: siempre el array `fotos` (todas, en orden); si está vacío, foto_url.
+ * `main` es la que sale en la tarjeta y `startIndex` dónde se abre el visor.
+ */
+export function carPhotoList(car: Pick<ClaudeCarFields, "foto_url" | "fotos">): { photos: string[]; main: string | null; startIndex: number } {
+    const photos = (car.fotos ?? []).filter(u => typeof u === "string" && u.trim().length > 0)
+    if (!photos.length && car.foto_url) photos.push(car.foto_url)
+    const main = car.foto_url && photos.includes(car.foto_url) ? car.foto_url : photos[0] ?? null
+    return { photos, main, startIndex: main ? Math.max(0, photos.indexOf(main)) : 0 }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { autoFramingY, imageSize, normalizePhotoUrl } from "./image-size"
+import { autoFramingY, DEFAULT_PHOTO_POSITION_Y, imageSize, normalizePhotoUrl, storedPhotoSize, withMobileRule } from "./image-size"
 
 function png(width: number, height: number) {
     const b = new Uint8Array(33)
@@ -41,25 +41,30 @@ describe("autoFramingY", () => {
         expect(autoFramingY({ width: 1024, height: 768 })).toBeNull()
         expect(autoFramingY({ width: 1000, height: 1000 })).toBeNull()
     })
-    it("en una vertical alargada centra la ventana en el tercio inferior", () => {
-        // 600×1600 en un hueco 16:10 → se ve el 23,4 % de la altura; su centro queda en 5/6
-        const y = autoFramingY({ width: 600, height: 1600 })!
-        const visible = 600 / 1.6 / 1600
-        const center = (y / 100) * (1 - visible) + visible / 2
-        expect(center).toBeCloseTo(5 / 6, 2)
-    })
-    it("si la ventana no puede bajar tanto, la pega abajo", () => {
-        // 768×1024: se ve el 46,9 % de la altura; centrarla en 5/6 se saldría de la foto
-        expect(autoFramingY({ width: 768, height: 1024 })).toBe(100)
+    it("las verticales van centradas (50), no pegadas abajo", () => {
+        expect(autoFramingY({ width: 432, height: 768 })).toBe(50) // el Mercedes CLA del bug
+        expect(autoFramingY({ width: 600, height: 1600 })).toBe(50)
     })
 })
 
 describe("normalizePhotoUrl", () => {
     it("pide las fotos de mobile.de a 1024 px", () => {
         expect(normalizePhotoUrl("https://img.classistatic.de/api/v1/mo-prod/images/ab/abc?rule=mo-360.jpg"))
-            .toBe("https://img.classistatic.de/api/v1/mo-prod/images/ab/abc?rule=mo-1024.jpg")
+            .toBe("https://img.classistatic.de/api/v1/mo-prod/images/ab/abc?rule=mo-1600.jpg")
         expect(normalizePhotoUrl("https://img.classistatic.de/api/v1/mo-prod/images/ab/abc"))
-            .toBe("https://img.classistatic.de/api/v1/mo-prod/images/ab/abc?rule=mo-1024.jpg")
+            .toBe("https://img.classistatic.de/api/v1/mo-prod/images/ab/abc?rule=mo-1600.jpg")
         expect(normalizePhotoUrl("https://example.com/a.jpg")).toBe("https://example.com/a.jpg")
+    })
+})
+
+describe("tamaños de las fotos", () => {
+    it("encuadre por defecto centrado", () => {
+        expect(DEFAULT_PHOTO_POSITION_Y).toBe(50)
+    })
+    it("cambia el tamaño de una foto de mobile.de y lee las medidas del nombre de una copia", () => {
+        expect(withMobileRule("https://img.classistatic.de/api/v1/mo-prod/images/ab/abc?rule=mo-1600.jpg", "mo-1024.jpg"))
+            .toBe("https://img.classistatic.de/api/v1/mo-prod/images/ab/abc?rule=mo-1024.jpg")
+        expect(storedPhotoSize("https://x.supabase.co/storage/v1/object/public/coches-claude/id/abc-675x1200.jpg")).toEqual({ width: 675, height: 1200 })
+        expect(storedPhotoSize("https://x.supabase.co/storage/v1/object/public/coches-claude/id/abc.jpg")).toBeNull()
     })
 })

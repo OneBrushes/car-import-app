@@ -23,6 +23,7 @@ import {
   CONTACT_CHANNEL_LABELS,
   NO_REPLY_DAYS,
   awaitingReplySince,
+  carPhotoList,
   claudeCarToImportedCar,
   daysSince,
   needsFollowUp,
@@ -237,8 +238,7 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
   const bookmarkRef = useRef<HTMLAnchorElement>(null)
   // React no deja poner href="javascript:…" en JSX: se pone a mano
   useEffect(() => { if (pasteOpen) setTimeout(() => bookmarkRef.current?.setAttribute("href", BOOKMARKLET), 0) }, [pasteOpen])
-  const photos = car.fotos?.length ? car.fotos : car.foto_url ? [car.foto_url] : []
-  const mainPhoto = car.foto_url || photos[0]
+  const { photos, main: mainPhoto, startIndex } = carPhotoList(car)
   const contactos = car.contactos ?? []
   const lastContact = contactos.at(-1)
   const waitingSince = awaitingReplySince(contactos)
@@ -319,7 +319,11 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
       {mainPhoto ? (
         <button
           type="button"
-          onClick={() => setViewerIndex(Math.max(0, photos.indexOf(mainPhoto)))}
+          onClick={() => {
+            // Para depurar si el visor no enseña fotos: qué recibe exactamente
+            console.info(`[visor] ${car.id}: ${photos.length} foto(s), abre en la ${startIndex + 1}`, photos)
+            setViewerIndex(startIndex)
+          }}
           className="relative block aspect-[16/10] w-full overflow-hidden bg-muted"
           title={photos.length > 1 ? `Ver las ${photos.length} fotos` : "Ver foto"}
         >

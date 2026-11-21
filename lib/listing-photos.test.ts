@@ -12,9 +12,9 @@ describe("extractListingPhotos", () => {
 <script>window.__STATE__={"gallery":["${escapedU}","${escapedSlash}"]}</script>
 <img src="${mobile("ef", 3)}?rule=mo-360.jpg">`
         expect(extractListingPhotos(html, "https://suchen.mobile.de/fahrzeuge/details.html?id=1")).toEqual([
-            `${mobile("ab", 1)}?rule=mo-1024.jpg`,
-            `${mobile("cd", 2)}?rule=mo-1024.jpg`,
-            `${mobile("ef", 3)}?rule=mo-1024.jpg`,
+            `${mobile("ab", 1)}?rule=mo-1600.jpg`,
+            `${mobile("cd", 2)}?rule=mo-1600.jpg`,
+            `${mobile("ef", 3)}?rule=mo-1600.jpg`,
         ])
     })
 

@@ -1,9 +1,8 @@
 /**
  * Utilidades de fotos compartidas por la app y el Worker del MCP (sin dependencias).
  *  · imageSize(): ancho y alto leyendo solo la cabecera del archivo (JPEG, PNG, WebP, GIF).
- *  · autoFramingY(): encuadre vertical (object-position Y en %) para que en una foto vertical se vea el coche,
- *    que en mobile.de suele estar en la parte de abajo, y no el cielo.
- *  · normalizePhotoUrl(): fotos de mobile.de a 1024 px (sufijo ?rule=mo-1024.jpg).
+ *  · autoFramingY(): encuadre vertical (object-position Y en %) para la tarjeta.
+ *  · normalizePhotoUrl(): fotos de mobile.de al mayor tamaño (?rule=mo-1600.jpg; al copiar se baja si no existe).
  */
 
 export interface ImageSize {
@@ -14,11 +13,14 @@ export interface ImageSize {
 /** Proporción de la foto en las tarjetas (aspect-[16/10]) */
 export const CARD_PHOTO_ASPECT = 16 / 10
 
-/** Encuadre por defecto cuando no hay uno guardado: algo por debajo del centro */
-export const DEFAULT_PHOTO_POSITION_Y = 65
+/** Encuadre por defecto cuando no hay uno guardado: centrado */
+export const DEFAULT_PHOTO_POSITION_Y = 50
 
-/** Centro de la ventana visible en una foto vertical: el centro del tercio inferior */
-const LOWER_THIRD_CENTER = 5 / 6
+/**
+ * Encuadre de las fotos verticales: centrado. Se probó centrar el tercio inferior (100 en una 432×768) y en las
+ * fotos reales de mobile.de se quedaba en las ruedas y el suelo: el coche suele ocupar el centro de la foto.
+ */
+const VERTICAL_POSITION_Y = 50
 
 export function imageSize(bytes: Uint8Array): ImageSize | null {
     const b = bytes
@@ -65,23 +67,48 @@ export function imageSize(bytes: Uint8Array): ImageSize | null {
 }
 
 /**
- * Encuadre vertical (0–100, object-position Y) para una foto mostrada con object-fit: cover en un hueco de proporción
- * `containerAspect`. Solo para fotos verticales: la ventana visible se centra en el tercio inferior.
- * Devuelve null si la foto no es vertical (se usa DEFAULT_PHOTO_POSITION_Y).
+ * Encuadre vertical (0–100, object-position Y) para una foto en la tarjeta (object-fit: cover).
+ * Verticales: VERTICAL_POSITION_Y. Horizontales o cuadradas: null (se usa DEFAULT_PHOTO_POSITION_Y).
  */
 export function autoFramingY(size: ImageSize | null, containerAspect = CARD_PHOTO_ASPECT): number | null {
     if (!size || size.width <= 0 || size.height <= 0 || size.height <= size.width) return null
-    const visible = size.width / containerAspect / size.height // fracción de la altura que se ve
-    if (visible >= 1) return null
-    const top = Math.min(Math.max(LOWER_THIRD_CENTER - visible / 2, 0), 1 - visible)
-    return Math.round((top / (1 - visible)) * 100)
+    // Si la foto cabe entera a lo alto en el hueco no hay nada que encuadrar
+    if (size.width / containerAspect / size.height >= 1) return null
+    return VERTICAL_POSITION_Y
 }
 
-/** Fotos de mobile.de (img.classistatic.de) en tamaño 1024 px y de AutoScout24 en 1280×960 */
+/**
+ * Tamaños de mobile.de, de mayor a menor. mo-1024 es una caja de 1024×768 (una foto vertical sale a 432×768);
+ * al copiar se prueban en este orden y se usa el primero que exista.
+ */
+export const MOBILE_PHOTO_RULES = ["mo-1600.jpg", "mo-1280.jpg", "mo-1024.jpg"] as const
+
+export function isMobilePhoto(raw: string): boolean {
+    try { return new URL(raw).hostname.endsWith("classistatic.de") } catch { return false }
+}
+
+/** La misma foto de mobile.de con otro tamaño */
+export function withMobileRule(raw: string, rule: string): string {
+    try {
+        const url = new URL(raw)
+        url.searchParams.set("rule", rule)
+        return url.toString()
+    } catch {
+        return raw
+    }
+}
+
+/** Medidas que lleva en el nombre una foto ya copiada (…-1600x1200.jpg) */
+export function storedPhotoSize(url: string): ImageSize | null {
+    const m = url.match(/-(\d{2,5})x(\d{2,5})\.[a-z0-9]+(?:\?.*)?$/i)
+    return m ? { width: Number(m[1]), height: Number(m[2]) } : null
+}
+
+/** Fotos de mobile.de (img.classistatic.de) al mayor tamaño y de AutoScout24 en 1280×960 */
 export function normalizePhotoUrl(raw: string): string {
     try {
         const url = new URL(raw.trim())
-        if (url.hostname.endsWith("classistatic.de")) url.searchParams.set("rule", "mo-1024.jpg")
+        if (url.hostname.endsWith("classistatic.de")) url.searchParams.set("rule", MOBILE_PHOTO_RULES[0])
         if (url.hostname.endsWith("pictures.autoscout24.net")) {
             const base = url.pathname.match(/^(\/listing-images\/[^/]+\.(?:jpe?g|png|webp))/i)?.[1]
             if (base) { url.pathname = `${base}/1280x960.webp`; url.search = "" }

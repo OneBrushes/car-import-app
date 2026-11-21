@@ -10,7 +10,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { fetchListingHtml, listingPlatform } from "../../../functions/api/scrape"
 import { extractListingPhotos } from "../../../lib/listing-parser"
-import { autoFramingY, imageSize, normalizePhotoUrl, photoKey, type ImageSize } from "../../../lib/image-size"
+import {
+    MOBILE_PHOTO_RULES, autoFramingY, imageSize, isMobilePhoto, normalizePhotoUrl, photoKey, storedPhotoSize, withMobileRule, type ImageSize,
+} from "../../../lib/image-size"
 import { MAX_CLAUDE_PHOTOS } from "../../../lib/claude-cars"
 
 export const PHOTOS_BUCKET = "coches-claude"
@@ -18,6 +20,8 @@ export const PHOTOS_BUCKET = "coches-claude"
 export const PHOTO_BATCH = 16
 const MAX_BYTES = 10 * 1024 * 1024
 const TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif" }
+/** Una copia más pequeña que esto (lado mayor) se vuelve a bajar en grande al actualizar: las de mo-1024 tienen 768 */
+const MIN_GOOD_SIDE = 1100
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"
 
 export interface StoredPhotos {
@@ -41,13 +45,31 @@ async function storageStem(carId: string, source: string) {
     return `${carId}/${(await sha256Hex(photoKey(source))).slice(0, 32)}`
 }
 
-async function copyOne(client: SupabaseClient, prefix: string, carId: string, source: string): Promise<{ url: string; size: ImageSize | null; aviso?: string }> {
+/** Tamaño de mobile.de que funciona en esta tanda (se averigua con la primera foto y se usa en las demás) */
+interface RuleState { rules: string[] }
+
+async function download(url: string) {
+    return fetch(url, {
+        headers: { "User-Agent": UA, Accept: "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.8" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(12_000),
+    })
+}
+
+async function copyOne(client: SupabaseClient, prefix: string, carId: string, source: string, ruleState: RuleState): Promise<{ url: string; size: ImageSize | null; aviso?: string }> {
     try {
-        const res = await fetch(source, {
-            headers: { "User-Agent": UA, Accept: "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.8" },
-            redirect: "follow",
-            signal: AbortSignal.timeout(12_000),
-        })
+        // mobile.de: el mayor tamaño disponible (mo-1600 → mo-1280 → mo-1024)
+        let res: Response | null = null
+        if (isMobilePhoto(source)) {
+            for (const rule of ruleState.rules) {
+                res = await download(withMobileRule(source, rule))
+                if (res.ok) { ruleState.rules = ruleState.rules.slice(ruleState.rules.indexOf(rule)); break }
+                if (res.status < 400 || res.status >= 500) break
+            }
+        } else {
+            res = await download(source)
+        }
+        if (!res) throw new Error("sin respuesta")
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase()
         const ext = TYPES[type]
@@ -56,10 +78,12 @@ async function copyOne(client: SupabaseClient, prefix: string, carId: string, so
         const bytes = new Uint8Array(await res.arrayBuffer())
         if (bytes.byteLength > MAX_BYTES) throw new Error("más de 10 MB")
 
-        const path = `${await storageStem(carId, source)}.${ext}`
+        // Las medidas van en el nombre: si luego se baja en más resolución, la URL cambia y no se ve la copia vieja en caché
+        const size = imageSize(bytes)
+        const path = `${await storageStem(carId, source)}${size ? `-${size.width}x${size.height}` : ""}.${ext}`
         const { error } = await client.storage.from(PHOTOS_BUCKET).upload(path, bytes, { contentType: type, upsert: true, cacheControl: "31536000" })
         if (error) throw new Error(`Storage: ${error.message}`)
-        return { url: prefix + path, size: imageSize(bytes) }
+        return { url: prefix + path, size }
     } catch (e) {
         return { url: source, size: null, aviso: `No se pudo copiar ${source}: ${e instanceof Error ? e.message : String(e)}` }
     }
@@ -83,15 +107,23 @@ export async function storePhotos(client: SupabaseClient, supabaseUrl: string, c
         if (ordered.length >= MAX_CLAUDE_PHOTOS) break
     }
 
+    type Result = { url: string; size: ImageSize | null; aviso?: string; known: boolean }
+    const ruleState: RuleState = { rules: [...MOBILE_PHOTO_RULES] }
     let budget = PHOTO_BATCH
     let pendientes = 0
-    const jobs = ordered.map(src => {
-        if (src.startsWith(prefix)) return Promise.resolve({ url: src, size: null as ImageSize | null, aviso: undefined as string | undefined, known: false })
-        if (budget <= 0) { pendientes++; return Promise.resolve({ url: src, size: null, aviso: undefined, known: false }) }
+    const toCopy: number[] = []
+    const results: Result[] = ordered.map((src, i) => {
+        // Ya copiada: no se recalcula su encuadre (respeta el guardado)
+        if (src.startsWith(prefix)) return { url: src, size: storedPhotoSize(src), known: false }
+        if (budget <= 0) { pendientes++; return { url: src, size: null, known: false } }
         budget--
-        return copyOne(client, prefix, carId, src).then(r => ({ ...r, known: !r.aviso }))
+        toCopy.push(i)
+        return { url: src, size: null, known: false }
     })
-    const results = await Promise.all(jobs)
+    // La primera sola (averigua el tamaño de mobile.de que existe); el resto en paralelo con ese tamaño
+    const copy = async (i: number) => { const r = await copyOne(client, prefix, carId, ordered[i], ruleState); results[i] = { ...r, known: !r.aviso } }
+    if (toCopy.length) await copy(toCopy[0])
+    await Promise.all(toCopy.slice(1).map(copy))
     const first = results[0]
     return {
         fotos: results.map(r => r.url),
@@ -130,13 +162,27 @@ export async function refreshFromListing(
     const prefix = publicPrefix(supabaseUrl)
     const stems = await Promise.all(scraped.fotos.map(s => storageStem(car.id, s)))
     // Las ya copiadas se reutilizan sin volver a descargarlas
-    const byStem = new Map(current.filter(u => u.startsWith(prefix)).map(u => [u.slice(prefix.length).replace(/\.[a-z0-9]+$/i, ""), u]))
-    let sources = scraped.fotos.map((s, i) => byStem.get(stems[i]) ?? s)
+    // (menos las de mobile.de que se copiaron pequeñas: esas se vuelven a bajar en grande)
+    const stemOf = (u: string) => u.slice(prefix.length).replace(/(-\d+x\d+)?\.[a-z0-9]+$/i, "")
+    const goodEnough = (u: string) => { const sz = storedPhotoSize(u); return !!sz && Math.max(sz.width, sz.height) >= MIN_GOOD_SIDE }
+    const byStem = new Map(current.filter(u => u.startsWith(prefix)).map(u => [stemOf(u), u]))
+    let sources = scraped.fotos.map((s, i) => {
+        const copied = byStem.get(stems[i])
+        return copied && (!isMobilePhoto(s) || goodEnough(copied)) ? copied : s
+    })
     // La principal elegida sigue delante
-    const idx = car.foto_url ? stems.findIndex(stem => car.foto_url!.startsWith(prefix + stem + ".")) : -1
+    const idx = car.foto_url?.startsWith(prefix) ? stems.findIndex(stem => stemOf(car.foto_url!) === stem) : -1
     if (idx > 0) sources = [sources[idx], ...sources.slice(0, idx), ...sources.slice(idx + 1)]
     const stored = await storePhotos(client, supabaseUrl, car.id, sources)
     return { ...stored, leidas: scraped.fotos.length }
+}
+
+/** ¿Son la misma foto (misma copia, aunque cambie la resolución)? */
+export function samePhoto(supabaseUrl: string, a: string | null | undefined, b: string | null | undefined): boolean {
+    if (!a || !b) return false
+    const prefix = publicPrefix(supabaseUrl)
+    const stem = (u: string) => (u.startsWith(prefix) ? u.slice(prefix.length).replace(/(-\d+x\d+)?\.[a-z0-9]+$/i, "") : u)
+    return stem(a) === stem(b)
 }
 
 /** Borra de la carpeta del coche las fotos que ya no están en su lista */

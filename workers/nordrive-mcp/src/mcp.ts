@@ -21,7 +21,7 @@ import {
     type ClaudeContact,
 } from "../../../lib/claude-cars"
 import { CARS_TABLE, CONTACTS_TABLE, costSettings, db, logCall, ownerId } from "./db"
-import { publicPrefix, pruneCarFolder, refreshFromListing, storePhotos, type StoredPhotos } from "./photos"
+import { publicPrefix, pruneCarFolder, refreshFromListing, samePhoto, storePhotos, type StoredPhotos } from "./photos"
 import type { Env } from "./env"
 
 // --- Esquemas ---------------------------------------------------------------------------------------------------------
@@ -174,7 +174,9 @@ export async function refreshCarPhotos(client: SupabaseClient, env: Env, carId: 
     const car = data as ClaudeCar
     const stored = await refreshFromListing(client, env.SUPABASE_URL, car, given)
     if (!stored.fotos.length) return { car, avisos: stored.avisos, pendientes: 0, leidas: stored.leidas }
-    const saved = await client.from(CARS_TABLE).update({ ...photoRow(stored), updated_at: new Date().toISOString() }).eq("id", carId).select("*").single()
+    // Misma principal (aunque ahora en más resolución): se respeta el encuadre guardado
+    const keepY = car.foto_posicion_y != null && samePhoto(env.SUPABASE_URL, car.foto_url, stored.fotos[0]) ? car.foto_posicion_y : undefined
+    const saved = await client.from(CARS_TABLE).update({ ...photoRow(stored, keepY), updated_at: new Date().toISOString() }).eq("id", carId).select("*").single()
     if (saved.error) throw new Error(saved.error.message)
     // Si se movió a "mis coches", esas URLs se usan allí: no se borra nada
     if (!car.movido_a && stored.pendientes === 0) await pruneCarFolder(client, env.SUPABASE_URL, carId, stored.fotos).catch(() => {})
