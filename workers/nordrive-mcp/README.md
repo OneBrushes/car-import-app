@@ -34,7 +34,7 @@ Worker de Cloudflare que permite a Claude (claude.ai) guardar coches de Alemania
    npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
    ```
 5. **Primer despliegue**: `npx wrangler deploy`. Al final muestra la URL, p. ej.
-   `https://nordrive-mcp.<subdominio>.workers.dev`. Ponla en `wrangler.toml` → `PUBLIC_URL`
+   `https://nordrive-mcp.<subdominio>.workers.dev`. Comprueba que coincide con `wrangler.toml` → `PUBLIC_URL` (ya puesta: `https://nordrive-mcp.infonordrive.workers.dev`)
    (sin barra final) y vuelve a desplegar: `npx wrangler deploy`.
    - Con dominio propio: Cloudflare → Workers → nordrive-mcp → Settings → Domains → `mcp.nordrivecars.com`,
      y entonces `PUBLIC_URL = "https://mcp.nordrivecars.com"`.

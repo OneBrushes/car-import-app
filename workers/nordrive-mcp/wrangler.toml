@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 
 [vars]
 # URL pública del Worker, sin barra final. Cámbiala si usas un dominio propio (p. ej. https://mcp.nordrivecars.com)
-PUBLIC_URL = "https://nordrive-mcp.CAMBIAR.workers.dev"
+PUBLIC_URL = "https://nordrive-mcp.infonordrive.workers.dev"
 SUPABASE_URL = "https://luzacvchtxkurisuywic.supabase.co"
 
 # Secretos (no van aquí): npx wrangler secret put MCP_SECRET / SUPABASE_SERVICE_ROLE_KEY
