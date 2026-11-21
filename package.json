@@ -11,7 +11,8 @@
     "build:workers": "node scripts/build-workers.mjs",
     "screenshots:garage": "node scripts/garage-screenshots.mjs screenshots",
     "deploy:mcp": "npm --prefix workers/nordrive-mcp run deploy",
-    "check:visor": "node scripts/check-photo-viewer.mjs"
+    "check:visor": "node scripts/check-photo-viewer.mjs",
+    "import:hacienda": "tsx scripts/import-hacienda.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -100,8 +101,10 @@
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.0.3",
+    "pdfjs-dist": "^4.10.38",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
+    "tsx": "^4.19.2",
     "tw-animate-css": "1.3.3",
     "typescript": "^5",
     "vitest": "^2.1.9"

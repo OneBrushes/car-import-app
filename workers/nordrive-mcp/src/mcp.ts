@@ -21,6 +21,7 @@ import {
     type ClaudeCarFields,
     type ClaudeContact,
 } from "../../../lib/claude-cars"
+import { HACIENDA_MIN_SCORE, buscarValorHacienda, needsVersionCheck, type HaciendaMatch } from "../../../lib/hacienda"
 import { CARS_TABLE, CONTACTS_TABLE, costSettings, db, logCall, ownerId } from "./db"
 import { publicPrefix, pruneCarFolder, refreshFromListing, samePhoto, storePhotos, type StoredPhotos } from "./photos"
 import type { Env } from "./env"
@@ -48,7 +49,7 @@ const carFields = {
     unfallfrei: z.boolean().describe("true si el anuncio dice 'unfallfrei' (sin accidentes)"),
     duenos: z.number().int().min(0).max(20).describe("Número de dueños anteriores"),
     co2: z.number().nonnegative().max(1000).describe("Emisiones de CO2 WLTP en g/km"),
-    valor_hacienda: euros("Valor de tablas de Hacienda del modelo nuevo (Orden HAC/1501/2025), si lo conoces. Sin él, la base del impuesto es el precio de compra"),
+    valor_hacienda: euros("Valor de tablas de Hacienda del modelo nuevo (Orden HAC/1501/2025). Si no lo das, la app lo busca sola en las tablas con marca, modelo, versión, año, CV y combustible (y avisa si hay que verificar la versión); también puedes consultarlo con buscar_valor_hacienda"),
     impuesto_matriculacion: euros("Impuesto de matriculación (IEDMT) que has calculado. Si lo das, es el que se aplica al coste; la app guarda también el suyo y avisa si difieren más de 100 €"),
     precio_venta_estimado_espana: euros("Precio de venta estimado en España"),
     transporte: euros("Transporte (si no lo das, se usa el de los ajustes de la app)"),
@@ -81,6 +82,8 @@ const CALC_KEYS: (keyof ClaudeCarFields)[] = [
     "impuesto_matriculacion", "precio_venta_estimado_espana", "transporte", "itv", "homologacion", "placas", "gestoria",
 ]
 const PHOTO_KEYS = ["foto_url", "fotos", "foto_posicion_y"] as const
+/** Columnas que identifican la versión: si cambian, se vuelve a buscar el valor de Hacienda */
+const IDENTITY_KEYS: (keyof ClaudeCarFields)[] = ["marca", "modelo", "version", "anio", "potencia_cv", "combustible"]
 
 // --- Utilidades ---------------------------------------------------------------------------------------------------------
 
@@ -97,6 +100,9 @@ function summary(c: ClaudeCar) {
         `Coste total en España: ${eur(c.coste_total_espana)}`,
         `Beneficio: ${c.beneficio == null ? "— (falta precio de venta estimado)" : `${eur(c.beneficio)}${c.margen_pct != null ? ` (${c.margen_pct} %)` : ""}`}`,
     ]
+    if (c.valor_hacienda) {
+        parts.push(`Valor Hacienda: ${eur(c.valor_hacienda)}${c.valor_hacienda_origen === "tabla" ? ` (de las tablas: ${c.valor_hacienda_version ?? "?"})` : ""}${c.verificar_version ? " · ⚠️ VERIFICAR VERSIÓN" : ""}`)
+    }
     const ease = saleEaseLabel(c.facilidad_venta)
     if (ease) parts.push(`Facilidad de venta: ${ease} (${c.facilidad_venta}/5)${c.facilidad_venta_motivo ? ` — ${c.facilidad_venta_motivo}` : ""}`)
     if (c.fotos?.length) parts.push(`Fotos: ${c.fotos.length}`)
@@ -126,6 +132,47 @@ function errorResult(message: string) {
 /** Quita undefined para no pisar columnas que Claude no ha mandado */
 function defined<T extends object>(obj: T): Partial<T> {
     return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>
+}
+
+const versionName = (m: HaciendaMatch) =>
+    `${m.marca} ${m.modelo} (${m.inicio ?? "?"}–${m.fin ?? "hoy"}${m.cc ? `, ${m.cc} cc` : ""}${m.cv ? `, ${m.cv} CV` : ""}${m.combustible ? `, ${m.combustible}` : ""})`
+
+/**
+ * Si el coche no trae valor_hacienda (o el que tiene lo puso la app), lo busca en las tablas de Hacienda (valores_hacienda).
+ * Devuelve las columnas a guardar y un aviso para Claude; null si no hay que tocar nada.
+ */
+async function autoHaciendaValue(client: SupabaseClient, car: Partial<ClaudeCar>): Promise<{ fields: Partial<ClaudeCar>; note: string | null } | null> {
+    if (car.valor_hacienda && car.valor_hacienda_origen !== "tabla") return null
+    if (!car.marca || !car.modelo) return null
+    const modelo = [car.modelo, car.version].filter(Boolean).join(" ")
+    const { matches, error } = await buscarValorHacienda(client, {
+        marca: car.marca, modelo, anio: car.anio, cv: car.potencia_cv, combustible: car.combustible,
+    }, 5)
+    if (error && !matches.length) return { fields: {}, note: `Valor de Hacienda: no se ha podido buscar (${error}). Pásalo en valor_hacienda o usa buscar_valor_hacienda.` }
+    const best = matches[0]
+    if (!best || best.parecido < HACIENDA_MIN_SCORE) {
+        return {
+            fields: car.valor_hacienda_origen === "tabla" ? { valor_hacienda: null, valor_hacienda_origen: null, valor_hacienda_version: null, verificar_version: false } : {},
+            note: "Valor de Hacienda: no hay ninguna versión parecida en las tablas; el impuesto se ha calculado sobre el precio de compra. Usa buscar_valor_hacienda y pasa valor_hacienda.",
+        }
+    }
+    const verify = needsVersionCheck(matches)
+    const others = matches.slice(1, 4).map(m => `${versionName(m)}: ${eur(m.valor)}`).join("; ")
+    return {
+        fields: { valor_hacienda: best.valor, valor_hacienda_origen: "tabla", valor_hacienda_version: versionName(best), verificar_version: verify },
+        note: `Valor de Hacienda de las tablas: ${eur(best.valor)} — ${versionName(best)} (parecido ${best.parecido}/100).` +
+            (verify ? ` VERIFICAR VERSIÓN: hay otras posibles (${others}). Si no es la buena, pasa el valor correcto en valor_hacienda.` : ""),
+    }
+}
+
+/** Columnas añadidas después (2026-11_coches_claude_facilidad_venta.sql, 2026-11_valores_hacienda.sql) */
+const NEWER_COLUMNS = ["facilidad_venta", "facilidad_venta_motivo", "valor_hacienda_origen", "valor_hacienda_version", "verificar_version"]
+
+/** Guarda la fila; si falla porque aún no se ha ejecutado el SQL de alguna columna nueva, la guarda sin ellas */
+async function saveTolerant<T extends { error: { message: string } | null }>(row: Record<string, unknown>, run: (r: Record<string, unknown>) => PromiseLike<T>): Promise<T> {
+    const first = await run(row)
+    if (!first.error || !NEWER_COLUMNS.some(c => first.error!.message.includes(c))) return first
+    return run(Object.fromEntries(Object.entries(row).filter(([k]) => !NEWER_COLUMNS.includes(k))))
 }
 
 const withWarnings = (prefix: string, avisos: string[]) => (avisos.length ? `${prefix}\n⚠️ ${avisos.join("\n⚠️ ")}` : prefix)
@@ -202,7 +249,7 @@ function photoNotes(stored: { avisos: string[]; pendientes: number; leidas?: num
 export function buildServer(env: Env): McpServer {
     const client = db(env)
     const server = new McpServer(
-        { name: "nordrive-coches", version: "1.3.0" },
+        { name: "nordrive-coches", version: "1.4.0" },
         {
             jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
             instructions:
@@ -237,11 +284,17 @@ export function buildServer(env: Env): McpServer {
             ])
             if (existing.error) throw new Error(existing.error.message)
 
+            // Valor de Hacienda: el de Claude si lo da; si no, la app lo busca en las tablas del BOE
+            if (incoming.valor_hacienda !== undefined) Object.assign(incoming, { valor_hacienda_origen: "claude", valor_hacienda_version: null, verificar_version: false })
+            const haciendaNotes: string[] = []
+            const auto = await autoHaciendaValue(client, { ...(existing.data ?? {}), ...incoming }).catch(() => null)
+            if (auto) { Object.assign(incoming, auto.fields); if (auto.note) haciendaNotes.push(auto.note) }
+
             const merged = { ...(existing.data ?? {}), ...incoming } as ClaudeCarFields
             const row = { ...incoming, ...computeClaudeCar(merged, settings), updated_at: new Date().toISOString() }
-            const saved = existing.data
-                ? await client.from(CARS_TABLE).update(row).eq("id", existing.data.id).select("*").single()
-                : await client.from(CARS_TABLE).insert({ ...row, user_id: owner, estado: "nuevo" }).select("*").single()
+            const saved = await saveTolerant(row, r => existing.data
+                ? client.from(CARS_TABLE).update(r).eq("id", existing.data.id).select("*").single()
+                : client.from(CARS_TABLE).insert({ ...r, user_id: owner, estado: "nuevo" }).select("*").single())
             if (saved.error) throw new Error(saved.error.message)
             let car = saved.data as ClaudeCar
 
@@ -269,6 +322,7 @@ export function buildServer(env: Env): McpServer {
 
             ;[car] = await attachContacts(client, [car])
             const action = existing.data ? "Actualizado (la URL ya estaba guardada)" : "Guardado"
+            notes = [...haciendaNotes, ...notes]
             return {
                 result: carResult(car, withWarnings(`${action} en 'Guardados por Claude'.`, notes)),
                 carId: car.id,
@@ -333,12 +387,18 @@ export function buildServer(env: Env): McpServer {
             if (current.error) throw new Error(current.error.message)
             if (!current.data) return { result: errorResult(`No existe ningún coche de Claude con id ${id}.`), carId: id }
 
+            let notes: string[] = []
+            // Valor de Hacienda: el que pase Claude; si cambia el coche y el valor era de las tablas, se vuelve a buscar
+            if (patch.valor_hacienda !== undefined) Object.assign(patch, { valor_hacienda_origen: "claude", valor_hacienda_version: null, verificar_version: false })
+            else if (IDENTITY_KEYS.some(key => key in patch)) {
+                const auto = await autoHaciendaValue(client, { ...current.data, ...patch }).catch(() => null)
+                if (auto) { Object.assign(patch, auto.fields); if (auto.note) notes.push(auto.note) }
+            }
             let row: Record<string, unknown> = { ...patch, updated_at: new Date().toISOString() }
             if (CALC_KEYS.some(key => key in patch)) {
                 const settings = await costSettings(client)
                 row = { ...row, ...computeClaudeCar({ ...current.data, ...patch } as ClaudeCarFields, settings) }
             }
-            let notes: string[] = []
             if (foto_url !== undefined || fotos !== undefined) {
                 const list = fotos ?? (current.data.fotos as string[] | null) ?? []
                 const stored = await storePhotos(client, env.SUPABASE_URL, id, foto_url ? [foto_url, ...list] : list)
@@ -347,7 +407,7 @@ export function buildServer(env: Env): McpServer {
             } else if (foto_posicion_y !== undefined) {
                 row.foto_posicion_y = foto_posicion_y
             }
-            const saved = await client.from(CARS_TABLE).update(row).eq("id", id).select("*").single()
+            const saved = await saveTolerant(row, r => client.from(CARS_TABLE).update(r).eq("id", id).select("*").single())
             if (saved.error) throw new Error(saved.error.message)
             const [car] = await attachContacts(client, [saved.data as ClaudeCar])
             const changed = [...Object.keys(patch), ...PHOTO_KEYS.filter(k => ({ foto_url, fotos, foto_posicion_y })[k] !== undefined)]
@@ -402,6 +462,43 @@ export function buildServer(env: Env): McpServer {
                 result: carResult(car, `Contacto registrado (${direccion}, ${canal}).${stateNote}`),
                 carId: car.id,
                 resumen: `${carName(car)}: ${direccion} por ${canal}`,
+            }
+        }),
+    )
+
+    server.registerTool(
+        "buscar_valor_hacienda",
+        {
+            title: "Buscar valor de Hacienda",
+            description:
+                "Busca en las tablas oficiales de precios medios de venta de Hacienda 2026 (Orden HAC/1501/2025, anexo I, turismos y todoterrenos) " +
+                "el valor del coche nuevo con el que se calcula el impuesto de matriculación. Devuelve las versiones que encajan, ordenadas por parecido " +
+                "(0–100), con su periodo comercial, cilindrada, potencia, combustible y valor. Pasa el que corresponda en valor_hacienda al guardar el coche.",
+            inputSchema: {
+                marca: z.string().trim().min(1).max(60).describe("Marca, p. ej. Volkswagen, Mercedes-Benz, BMW"),
+                modelo: z.string().trim().min(1).max(160).describe("Modelo y versión, p. ej. 'Golf R 2.0 TSI 4Motion DSG' o 'C 63 AMG W204'"),
+                anio: z.number().int().min(1950).max(2100).optional().describe("Año de primera matriculación"),
+                cc: z.number().int().positive().max(10000).optional().describe("Cilindrada en cc"),
+                cv: z.number().int().positive().max(2000).optional().describe("Potencia en CV"),
+                combustible: z.string().trim().max(40).optional().describe("Gasolina, Diésel, Híbrido, Eléctrico…"),
+                limite: z.number().int().min(1).max(30).optional().describe("Máximo de versiones a devolver (por defecto 10)"),
+            },
+            annotations: { readOnlyHint: true },
+        },
+        async ({ marca, modelo, anio, cc, cv, combustible, limite }) => logged(client, "buscar_valor_hacienda", async () => {
+            const { matches, error } = await buscarValorHacienda(client, { marca, modelo, anio, cc, cv, combustible }, limite ?? 10)
+            if (error && !matches.length) return { result: errorResult(`No se ha podido buscar: ${error}`), resumen: `${marca} ${modelo}` }
+            if (!matches.length) return { result: { content: [{ type: "text", text: "No hay ninguna versión con esa marca y modelo en las tablas de Hacienda 2026." }] }, resumen: `${marca} ${modelo}: 0` }
+            const verify = needsVersionCheck(matches)
+            const text = matches.map((m, i) => `${i + 1}. ${eur(m.valor)} — ${versionName(m)} · parecido ${m.parecido}/100 (${m.motivo})`).join("\n")
+            return {
+                result: {
+                    content: [
+                        { type: "text", text: `${verify ? "Hay varias versiones posibles: verifica cuál es." : "La más parecida es la primera."}\n${text}` },
+                        { type: "text", text: JSON.stringify(matches, null, 2) },
+                    ],
+                },
+                resumen: `${marca} ${modelo}${anio ? ` ${anio}` : ""}: ${matches.length} versión(es), mejor ${eur(matches[0].valor)}`,
             }
         }),
     )

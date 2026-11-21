@@ -32,6 +32,26 @@ describe("calculateImportCost · IEDMT", () => {
         expect(r.registrationTax).toBe(1366.85)
     })
 
+    const control = (fiscalValueNew: number, firstRegistration: Date, co2: number) => calculateImportCost({
+        purchasePrice: 30000, fiscalValueNew, firstRegistration, co2, region: "cataluna", payVat: false,
+        ...DEFAULT_IMPORT_COSTS, other: 0, today: TODAY,
+    })
+
+    it("caso de control: Mitsubishi Lancer Evo X MR 06/2009, 49.100 €, 256 g/km, Cataluña → 573,44 €", () => {
+        const r = control(49100, new Date(2009, 5, 1), 256)
+        expect(r.depreciation).toBe(10) // Más de 12 años
+        expect(r.taxRate).toBe(16)
+        expect(r.taxBase).toBe(3584) // 4.910 / 1,37
+        expect(r.registrationTax).toBe(573.44)
+    })
+
+    it("caso de control: Mercedes C 63 AMG W204 09/2009, 62.700 €, 280 g/km, Cataluña → 732,32 €", () => {
+        const r = control(62700, new Date(2009, 8, 1), 280)
+        expect(r.depreciation).toBe(10)
+        expect(r.taxBase).toBe(4577) // 6.270 / 1,37
+        expect(r.registrationTax).toBe(732.32)
+    })
+
     it("tipos por CO2: estatales y Cataluña (16 % desde 200 g/km)", () => {
         expect(registrationTaxRate(120)).toBe(0)
         expect(registrationTaxRate(121)).toBe(4.75)

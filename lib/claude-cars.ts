@@ -75,6 +75,12 @@ export interface ClaudeCarFields {
     fotos?: string[] | null
     /** Encuadre vertical de la foto principal en la tarjeta (0 = arriba, 100 = abajo) */
     foto_posicion_y?: number | null
+    /** De dónde sale valor_hacienda: lo dio Claude o la app lo buscó en valores_hacienda (lib/hacienda.ts) */
+    valor_hacienda_origen?: "claude" | "tabla" | null
+    /** Versión del BOE de la que sale valor_hacienda cuando lo busca la app */
+    valor_hacienda_version?: string | null
+    /** Había varias versiones posibles en las tablas de Hacienda: comprobar que es la buena */
+    verificar_version?: boolean | null
     /** Facilidad de venta en España (1 = fácil … 5 = difícil) */
     facilidad_venta?: number | null
     /** Por qué se vende fácil o difícil (demanda, color, cambio manual, precio de mercado…) */

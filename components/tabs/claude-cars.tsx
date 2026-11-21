@@ -556,6 +556,15 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
             {taxLine ? formatEUR(taxLine.amount) : "—"}
             {car.desglose?.impuesto_aplicado === "claude" && <span className="block text-xs font-normal text-muted-foreground">de Claude · app {formatEUR(car.impuesto_calculado ?? 0)}</span>}
           </dd>
+          {car.valor_hacienda ? (
+            <>
+              <dt className="text-muted-foreground">Valor Hacienda</dt>
+              <dd className="tabular text-right font-medium" title={car.valor_hacienda_version ?? undefined}>
+                {formatEUR(car.valor_hacienda)}
+                <span className="block text-xs font-normal text-muted-foreground">{car.valor_hacienda_origen === "tabla" ? "tablas BOE 2026" : "de Claude"}</span>
+              </dd>
+            </>
+          ) : null}
           <dt className="text-muted-foreground">Coste en España</dt>
           <dd className="tabular text-right text-lg font-semibold tracking-tight">{formatEUR(car.coste_total_espana ?? 0)}</dd>
           <dt className="text-muted-foreground">Venta estimada</dt>
@@ -567,6 +576,13 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
             <span className="font-medium">Beneficio</span>
             <span className="tabular font-semibold">{formatEUR(car.beneficio)}{car.margen_pct != null && ` · ${car.margen_pct}%`}</span>
           </div>
+        )}
+
+        {car.verificar_version && (
+          <p className="flex gap-1.5 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span><b>Verificar versión:</b> el valor de Hacienda es de «{car.valor_hacienda_version}», pero hay otras versiones posibles en las tablas.</span>
+          </p>
         )}
 
         <SaleEaseMeter car={car} onPatch={onPatch} />
