@@ -4,7 +4,7 @@
 // Solo la ve la cuenta dueña (is_claude_owner() en Supabase); la base de datos tampoco deja leerlos a nadie más.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  AlertTriangle, ArrowRightLeft, Bookmark, Bot, ClipboardPaste, ChevronDown, ChevronUp, Clock, ExternalLink, History, ImageDown, Images, Loader2, MessageSquare, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
+  AlertTriangle, ArrowRightLeft, ArrowUpDown, Bookmark, Bot, ClipboardPaste, ChevronDown, ChevronUp, Clock, ExternalLink, History, ImageDown, Images, Loader2, MessageSquare, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
 } from "lucide-react"
 import { PhotoViewer } from "@/components/photo-viewer"
 import { BOOKMARKLET, photosFromPasted } from "@/components/import-from-url"
@@ -42,6 +42,41 @@ const ago = (iso: string) => {
 }
 
 type Filter = "activos" | "sin_respuesta" | ClaudeCarState
+
+type SortKey = "recientes" | "margen" | "beneficio" | "barato" | "precio_de" | "km" | "anio"
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "recientes", label: "Más recientes" },
+  { key: "margen", label: "Mayor % de beneficio" },
+  { key: "beneficio", label: "Más dinero ganado" },
+  { key: "barato", label: "Más barato (coste en España)" },
+  { key: "precio_de", label: "Más barato en Alemania" },
+  { key: "km", label: "Menos kilómetros" },
+  { key: "anio", label: "Más nuevo" },
+]
+const SORT_STORAGE_KEY = "nordrive.claude.sort"
+
+/** Valor por el que se ordena (mayor primero) y si se ordena de menor a mayor; los que no tienen el dato van al final */
+function sortValue(car: ClaudeCar, key: SortKey): number | null {
+  switch (key) {
+    case "recientes": return Date.parse(car.created_at ?? "") || null
+    case "margen": return car.margen_pct ?? null
+    case "beneficio": return car.beneficio ?? null
+    case "barato": return car.coste_total_espana ? -car.coste_total_espana : null
+    case "precio_de": return car.precio_alemania ? -car.precio_alemania : null
+    case "km": return car.km != null ? -car.km : null
+    case "anio": return car.anio ? car.anio * 12 + (car.mes_matriculacion ?? 0) : null
+  }
+}
+
+export function sortClaudeCars(cars: ClaudeCar[], key: SortKey): ClaudeCar[] {
+  return [...cars].sort((a, b) => {
+    const va = sortValue(a, key), vb = sortValue(b, key)
+    if (va == null && vb == null) return 0
+    if (va == null) return 1
+    if (vb == null) return -1
+    return vb - va
+  })
+}
 
 interface McpLog {
   id: number
@@ -113,12 +148,24 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
     return c
   }, [cars])
 
+  const [sort, setSort] = useState<SortKey>("recientes")
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SORT_STORAGE_KEY) as SortKey | null
+      if (saved && SORT_OPTIONS.some(o => o.key === saved)) setSort(saved)
+    } catch {}
+  }, [])
+  const changeSort = (key: SortKey) => {
+    setSort(key)
+    try { localStorage.setItem(SORT_STORAGE_KEY, key) } catch {}
+  }
+
   const visible = useMemo(
-    () => cars.filter(car =>
+    () => sortClaudeCars(cars.filter(car =>
       filter === "activos" ? car.estado !== "descartado"
         : filter === "sin_respuesta" ? car.estado !== "descartado" && needsFollowUp(car.contactos)
-          : car.estado === filter),
-    [cars, filter],
+          : car.estado === filter), sort),
+    [cars, filter, sort],
   )
 
   const patch = (id: string, changes: Partial<ClaudeCar>) =>
@@ -186,7 +233,17 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
 
       {showLogs && <LogsPanel logs={logs} />}
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Select value={sort} onValueChange={v => changeSort(v as SortKey)}>
+          <SelectTrigger size="sm" className="h-8 w-auto gap-1.5 rounded-full text-sm" aria-label="Ordenar por">
+            <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
         {(["activos", "sin_respuesta", ...CLAUDE_CAR_STATES] as Filter[]).map(f => (
           <button
             key={f}
