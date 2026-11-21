@@ -130,28 +130,31 @@ export function Navigation({
       </div>
 
       {/* Secciones */}
-      <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 py-3">
+      {/* Las opciones y los huecos se encogen (36 px → 18 px) para que el menú quepa entero sin scroll;
+          solo si la ventana es demasiado baja incluso así, aparece el scroll */}
+      <nav className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-3">
         {groups.map((group, index) => (
-          <div key={group.label} className={cn(index > 0 && "mt-5")}>
+          <div key={group.label} className="contents">
+            {index > 0 && <div aria-hidden className="min-h-1.5 max-h-5 flex-[1_1_0]" />}
             {collapsed ? (
-              index > 0 && <div className="mx-2 mb-3 border-t border-sidebar-border" />
+              index > 0 && <div className="mx-2 mb-1.5 shrink-0 border-t border-sidebar-border" />
             ) : (
-              <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+              <p className="mb-0.5 shrink-0 px-3 text-[10px] font-medium uppercase leading-3 tracking-wider text-muted-foreground/80">
                 {group.label}
               </p>
             )}
-            <ul className="space-y-0.5">
+            <ul className="contents">
               {group.items.map((item) => {
                 const Icon = item.icon
                 const isActive = activeTab === item.id
                 return (
-                  <li key={item.id}>
+                  <li key={item.id} className="flex max-h-9 min-h-[18px] flex-[1_1_0] py-px">
                     <button
                       onClick={() => onTabChange(item.id)}
                       title={collapsed ? item.label : undefined}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(
-                        "group relative flex h-9 w-full items-center gap-3 rounded-md text-sm transition-colors",
+                        "group relative flex h-full w-full items-center gap-3 rounded-md leading-tight text-sm transition-colors",
                         collapsed ? "justify-center px-0" : "px-3",
                         isActive
                           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
@@ -159,7 +162,7 @@ export function Navigation({
                       )}
                     >
                       {isActive && (
-                        <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-sidebar-primary" />
+                        <span className="absolute inset-y-[22%] left-0 w-0.5 rounded-full bg-sidebar-primary" />
                       )}
                       <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-sidebar-primary" : "text-muted-foreground group-hover:text-sidebar-accent-foreground")} />
                       {!collapsed && <span className="truncate">{item.label}</span>}
