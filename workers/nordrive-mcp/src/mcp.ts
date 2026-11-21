@@ -1,4 +1,5 @@
-// Herramientas MCP de "Guardados por Claude". Solo leen y escriben la tabla coches_claude.
+// Herramientas MCP de "Guardados por Claude". Solo leen y escriben coches_claude, contactos_claude y el bucket
+// de fotos "coches-claude". Nunca tus coches (imported_cars).
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker"
@@ -6,14 +7,21 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { z } from "zod"
 import {
     CLAUDE_CAR_STATES,
+    CONTACT_CHANNELS,
+    CONTACT_DIRECTIONS,
+    CONTACT_SENDERS,
     MAX_CLAUDE_PHOTOS,
+    awaitingReplySince,
     computeClaudeCar,
+    daysSince,
     normalizeListingUrl,
+    withContacts,
     type ClaudeCar,
     type ClaudeCarFields,
+    type ClaudeContact,
 } from "../../../lib/claude-cars"
-import { CARS_TABLE, costSettings, db, logCall, ownerId } from "./db"
-import { deleteUnusedPhotos, rehostPhotos } from "./photos"
+import { CARS_TABLE, CONTACTS_TABLE, costSettings, db, logCall, ownerId } from "./db"
+import { publicPrefix, pruneCarFolder, refreshFromListing, storePhotos, type StoredPhotos } from "./photos"
 import type { Env } from "./env"
 
 // --- Esquemas ---------------------------------------------------------------------------------------------------------
@@ -48,9 +56,11 @@ const carFields = {
     placas: euros("Placas (si no lo das, se usa el de los ajustes)"),
     gestoria: euros("Gestoría (si no lo das, se usa el de los ajustes)"),
     foto_url: z.string().url().max(2000).describe("URL de la foto principal (la que mejor muestre el coche entero). Si no la das, la principal es la primera de 'fotos'"),
-    fotos: z.array(z.string().url().max(2000)).max(MAX_CLAUDE_PHOTOS).describe(`URLs de las fotos del anuncio (máx. ${MAX_CLAUDE_PHOTOS}), en orden. Sustituyen a las que hubiera. La app las copia a su almacenamiento para que no se pierdan si se borra el anuncio`),
+    fotos: z.array(z.string().url().max(2000)).max(MAX_CLAUDE_PHOTOS).describe(
+        `URLs de las fotos (máx. ${MAX_CLAUDE_PHOTOS}), en orden; la primera es la principal. Sustituyen a las que hubiera. ` +
+        "En AutoScout24 la app las saca sola del anuncio; en mobile.de (que bloquea la lectura automática) pásalas tú: todas las de la galería. También sirve para elegir o reordenar fotos"),
     foto_posicion_y: z.number().int().min(0).max(100).describe("Encuadre vertical de la foto principal en la tarjeta: 0 = arriba, 100 = abajo. Si no lo das, la app lo calcula (en fotos verticales centra el tercio inferior, donde suele estar el coche)"),
-    notas: z.string().max(4000).describe("Tus notas: por qué es interesante, riesgos, qué preguntar al vendedor…"),
+    notas: z.string().max(4000).describe("Tus notas: por qué es interesante, riesgos, qué preguntar al vendedor… Los mensajes con el vendedor NO van aquí: usa registrar_contacto"),
 }
 
 const optionalCarFields = Object.fromEntries(
@@ -65,11 +75,14 @@ const CALC_KEYS: (keyof ClaudeCarFields)[] = [
     "anio", "mes_matriculacion", "km", "precio_alemania", "precio_neto", "iva_deducible", "co2", "valor_hacienda",
     "impuesto_matriculacion", "precio_venta_estimado_espana", "transporte", "itv", "homologacion", "placas", "gestoria",
 ]
+const PHOTO_KEYS = ["foto_url", "fotos", "foto_posicion_y"] as const
 
 // --- Utilidades ---------------------------------------------------------------------------------------------------------
 
 const eur = (n: number | null | undefined) =>
     n == null ? "—" : n.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 })
+
+const fecha = (iso: string) => new Date(iso).toLocaleString("es-ES", { timeZone: "Europe/Madrid", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
 
 const carName = (c: Partial<ClaudeCar>) => [c.marca, c.modelo, c.version, c.anio ? `(${c.anio})` : null].filter(Boolean).join(" ") || c.url || "coche"
 
@@ -79,11 +92,17 @@ function summary(c: ClaudeCar) {
         `Coste total en España: ${eur(c.coste_total_espana)}`,
         `Beneficio: ${c.beneficio == null ? "— (falta precio de venta estimado)" : `${eur(c.beneficio)}${c.margen_pct != null ? ` (${c.margen_pct} %)` : ""}`}`,
     ]
+    if (c.fotos?.length) parts.push(`Fotos: ${c.fotos.length}`)
+    const last = c.contactos?.at(-1)
+    if (last) {
+        const waiting = awaitingReplySince(c.contactos)
+        parts.push(`Último contacto: ${fecha(last.fecha)} (${last.direccion}, ${last.canal})${waiting ? ` · sin respuesta desde hace ${daysSince(waiting)} día(s)` : ""}`)
+    }
     if (c.aviso_impuesto) parts.push(`⚠️ ${c.aviso_impuesto}`)
     return parts.join("\n")
 }
 
-/** Lo que se devuelve a Claude: resumen legible + el coche completo con sus cálculos */
+/** Lo que se devuelve a Claude: resumen legible + el coche completo con sus cálculos y contactos */
 function carResult(c: ClaudeCar, prefix: string) {
     return {
         content: [
@@ -102,6 +121,8 @@ function defined<T extends object>(obj: T): Partial<T> {
     return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>
 }
 
+const withWarnings = (prefix: string, avisos: string[]) => (avisos.length ? `${prefix}\n⚠️ ${avisos.join("\n⚠️ ")}` : prefix)
+
 type ToolOutput = { content: { type: "text"; text: string }[]; isError?: boolean }
 
 /** Ejecuta la herramienta y deja constancia en mcp_logs, salga bien o mal */
@@ -117,38 +138,71 @@ async function logged(client: SupabaseClient, tool: string, fn: () => Promise<{ 
     }
 }
 
+// --- Acceso a datos compartido (también lo usa el botón "Actualizar fotos" de la app) -----------------------------------
+
+export async function loadContacts(client: SupabaseClient, carIds: string[]): Promise<ClaudeContact[]> {
+    if (!carIds.length) return []
+    const { data, error } = await client.from(CONTACTS_TABLE).select("*").in("coche_id", carIds).order("fecha", { ascending: true })
+    // Tabla aún sin crear (falta ejecutar supabase/2026-11_contactos_claude.sql): sin historial, pero sin romper nada
+    if (error && (error.code === "42P01" || error.code === "PGRST205")) return []
+    if (error) throw new Error(`No se pudieron leer los contactos: ${error.message}`)
+    return (data ?? []) as ClaudeContact[]
+}
+
+export async function attachContacts(client: SupabaseClient, cars: ClaudeCar[]): Promise<ClaudeCar[]> {
+    const contacts = await loadContacts(client, cars.map(c => c.id))
+    return cars.map(c => withContacts(c, contacts))
+}
+
+/** Columnas de fotos a partir de lo guardado */
+function photoRow(stored: StoredPhotos, posicionPedida?: number) {
+    return {
+        foto_url: stored.fotos[0] ?? null,
+        fotos: stored.fotos,
+        ...(posicionPedida !== undefined ? { foto_posicion_y: posicionPedida } : stored.posicionY !== undefined ? { foto_posicion_y: stored.posicionY } : {}),
+    }
+}
+
+/**
+ * Saca todas las fotos del anuncio y las guarda en el coche (botón "Actualizar fotos" y guardar_coche sin fotos).
+ * Devuelve el coche actualizado y los avisos.
+ */
+export async function refreshCarPhotos(client: SupabaseClient, env: Env, carId: string, given?: string[]) {
+    const { data, error } = await client.from(CARS_TABLE).select("*").eq("id", carId).maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!data) return null
+    const car = data as ClaudeCar
+    const stored = await refreshFromListing(client, env.SUPABASE_URL, car, given)
+    if (!stored.fotos.length) return { car, avisos: stored.avisos, pendientes: 0, leidas: stored.leidas }
+    const saved = await client.from(CARS_TABLE).update({ ...photoRow(stored), updated_at: new Date().toISOString() }).eq("id", carId).select("*").single()
+    if (saved.error) throw new Error(saved.error.message)
+    // Si se movió a "mis coches", esas URLs se usan allí: no se borra nada
+    if (!car.movido_a && stored.pendientes === 0) await pruneCarFolder(client, env.SUPABASE_URL, carId, stored.fotos).catch(() => {})
+    return { car: saved.data as ClaudeCar, avisos: stored.avisos, pendientes: stored.pendientes, leidas: stored.leidas }
+}
+
+function photoNotes(stored: { avisos: string[]; pendientes: number; leidas?: number | null } | null): string[] {
+    if (!stored) return []
+    const notes = [...stored.avisos]
+    if (stored.pendientes) notes.push(`Quedan ${stored.pendientes} foto(s) por copiar al almacenamiento de la app; se copiarán en la siguiente actualización (botón "Actualizar fotos" de la app).`)
+    return notes
+}
+
 // --- Servidor -----------------------------------------------------------------------------------------------------------
 
 export function buildServer(env: Env): McpServer {
     const client = db(env)
     const server = new McpServer(
-        { name: "nordrive-coches", version: "1.0.0" },
+        { name: "nordrive-coches", version: "1.2.0" },
         {
             jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
             instructions:
                 "Guarda coches de Alemania para NorDrive en la pestaña 'Guardados por Claude'. La app calcula el coste puesto en España " +
-                "y el beneficio con su propia fórmula (impuesto de matriculación, IVA si toca, transporte, ITV, homologación, DGT, placas y gestoría). " +
-                "Confirma siempre al usuario el coste total y el beneficio que devuelve la herramienta.",
+                "y el beneficio con su propia fórmula (impuesto de matriculación, IVA si toca, transporte, ITV, homologación, DGT, placas y gestoría) " +
+                "y saca sola todas las fotos del anuncio. Confirma siempre al usuario el coste total y el beneficio que devuelve la herramienta. " +
+                "Cada vez que envíes o recibas un mensaje de un vendedor, regístralo con registrar_contacto (no lo escribas en las notas).",
         },
     )
-
-    /**
-     * Columnas de fotos a guardar: copia las fotos a Storage y calcula el encuadre de la principal.
-     * Si solo llega foto_url, se pone delante de las fotos que ya tuviera el coche.
-     */
-    async function photoColumns(input: Partial<ClaudeCarFields>, existingFotos: string[] = []) {
-        if (input.foto_url === undefined && input.fotos === undefined) {
-            return { columns: input.foto_posicion_y !== undefined ? { foto_posicion_y: input.foto_posicion_y } : {}, avisos: [] as string[] }
-        }
-        const list = input.fotos !== undefined ? (input.fotos ?? []) : existingFotos
-        const r = await rehostPhotos(client, env.SUPABASE_URL, input.foto_url ?? undefined, list)
-        return {
-            columns: { foto_url: r.fotos[0] ?? null, fotos: r.fotos, foto_posicion_y: input.foto_posicion_y ?? r.posicionY },
-            avisos: r.avisos,
-        }
-    }
-
-    const withWarnings = (prefix: string, avisos: string[]) => (avisos.length ? `${prefix}\n⚠️ ${avisos.join("\n⚠️ ")}` : prefix)
 
     server.registerTool(
         "guardar_coche",
@@ -156,13 +210,16 @@ export function buildServer(env: Env): McpServer {
             title: "Guardar coche",
             description:
                 "Guarda un coche de un anuncio alemán en 'Guardados por Claude'. Solo la URL es obligatoria. La app calcula el coste total " +
-                "en España y el beneficio con su fórmula. Si la URL ya está guardada, actualiza ese coche (solo los campos que mandes) en vez de duplicarlo. " +
-                "Devuelve el coche guardado con sus cálculos.",
+                "en España y el beneficio con su fórmula e intenta sacar todas las fotos del anuncio. mobile.de bloquea esa lectura automática: " +
+                "en anuncios de mobile.de pasa tú en 'fotos' todas las URLs de las fotos de la galería (img.classistatic.de/…), en orden. " +
+                "Si la URL ya está guardada, actualiza ese coche " +
+                "(solo los campos que mandes) en vez de duplicarlo. Devuelve el coche guardado con sus cálculos y su historial de contactos.",
             inputSchema: { url: urlSchema, ...optionalCarFields },
         },
         async (args) => logged(client, "guardar_coche", async () => {
             const url = normalizeListingUrl(args.url)
-            const incoming = defined({ ...args, url }) as ClaudeCarFields
+            const { foto_url, fotos, foto_posicion_y, ...rest } = args
+            const incoming = defined({ ...rest, url }) as ClaudeCarFields
             const [owner, settings, existing] = await Promise.all([
                 ownerId(client),
                 costSettings(client),
@@ -171,20 +228,41 @@ export function buildServer(env: Env): McpServer {
             if (existing.error) throw new Error(existing.error.message)
 
             const merged = { ...(existing.data ?? {}), ...incoming } as ClaudeCarFields
-            const photos = await photoColumns(incoming, (existing.data?.fotos as string[] | undefined) ?? [])
-            const row = { ...incoming, ...photos.columns, ...computeClaudeCar(merged, settings), updated_at: new Date().toISOString() }
-
+            const row = { ...incoming, ...computeClaudeCar(merged, settings), updated_at: new Date().toISOString() }
             const saved = existing.data
                 ? await client.from(CARS_TABLE).update(row).eq("id", existing.data.id).select("*").single()
                 : await client.from(CARS_TABLE).insert({ ...row, user_id: owner, estado: "nuevo" }).select("*").single()
             if (saved.error) throw new Error(saved.error.message)
-            const car = saved.data as ClaudeCar
+            let car = saved.data as ClaudeCar
+
+            // Fotos: las que indique Claude o, si no, todas las del anuncio (coche nuevo, sin fotos o con fotos por copiar)
+            let notes: string[] = []
+            const prefix = publicPrefix(env.SUPABASE_URL)
+            if (foto_url !== undefined || fotos !== undefined) {
+                const list = fotos ?? car.fotos ?? []
+                const stored = await storePhotos(client, env.SUPABASE_URL, car.id, foto_url ? [foto_url, ...list] : list)
+                const upd = await client.from(CARS_TABLE).update(photoRow(stored, foto_posicion_y)).eq("id", car.id).select("*").single()
+                if (upd.error) throw new Error(upd.error.message)
+                car = upd.data as ClaudeCar
+                notes = photoNotes(stored)
+            } else if (!car.fotos?.length || car.fotos.some(u => !u.startsWith(prefix))) {
+                const refreshed = await refreshCarPhotos(client, env, car.id)
+                if (refreshed) { car = refreshed.car; notes = photoNotes(refreshed) }
+                if (foto_posicion_y !== undefined) {
+                    const upd = await client.from(CARS_TABLE).update({ foto_posicion_y }).eq("id", car.id).select("*").single()
+                    if (!upd.error) car = upd.data as ClaudeCar
+                }
+            } else if (foto_posicion_y !== undefined) {
+                const upd = await client.from(CARS_TABLE).update({ foto_posicion_y }).eq("id", car.id).select("*").single()
+                if (!upd.error) car = upd.data as ClaudeCar
+            }
+
+            ;[car] = await attachContacts(client, [car])
             const action = existing.data ? "Actualizado (la URL ya estaba guardada)" : "Guardado"
-            const fotosInfo = car.fotos?.length ? ` · ${car.fotos.length} foto(s)` : ""
             return {
-                result: carResult(car, withWarnings(`${action} en 'Guardados por Claude'.`, photos.avisos)),
+                result: carResult(car, withWarnings(`${action} en 'Guardados por Claude'.`, notes)),
                 carId: car.id,
-                resumen: `${action}: ${carName(car)}${fotosInfo}${photos.avisos.length ? ` · ${photos.avisos.length} foto(s) sin copiar` : ""}`,
+                resumen: `${action}: ${carName(car)}${car.fotos?.length ? ` · ${car.fotos.length} foto(s)` : ""}${notes.length ? ` · ${notes.length} aviso(s)` : ""}`,
             }
         }),
     )
@@ -194,8 +272,8 @@ export function buildServer(env: Env): McpServer {
         {
             title: "Listar coches",
             description:
-                "Lista los coches de 'Guardados por Claude', del más reciente al más antiguo, con su coste total en España y su beneficio calculados. " +
-                "Filtros opcionales: estado, marca y beneficio mínimo en euros.",
+                "Lista los coches de 'Guardados por Claude', del más reciente al más antiguo, con su coste total en España, su beneficio y su " +
+                "historial de contactos (ultimo_contacto y contactos). Filtros opcionales: estado, marca y beneficio mínimo en euros.",
             inputSchema: {
                 estado: stateSchema.optional().describe("Solo coches en este estado"),
                 marca: z.string().trim().min(1).max(60).optional().describe("Solo esta marca (no distingue mayúsculas)"),
@@ -211,7 +289,7 @@ export function buildServer(env: Env): McpServer {
             if (margen_minimo != null) query = query.gte("beneficio", margen_minimo)
             const { data, error } = await query
             if (error) throw new Error(error.message)
-            const cars = (data ?? []) as ClaudeCar[]
+            const cars = await attachContacts(client, (data ?? []) as ClaudeCar[])
             const text = cars.length
                 ? cars.map(c => `• [${c.id}] ${summary(c).replace(/\n/g, " · ")}\n  ${c.url}`).join("\n")
                 : "No hay coches con esos filtros."
@@ -228,7 +306,7 @@ export function buildServer(env: Env): McpServer {
             title: "Actualizar coche",
             description:
                 "Cambia cualquier campo o el estado (nuevo, interesante, contactado, descartado, comprado) de un coche de 'Guardados por Claude', por su id. " +
-                "Si cambian datos que afectan al precio, la app recalcula el coste y el beneficio. Devuelve el coche actualizado.",
+                "Si cambian datos que afectan al precio, la app recalcula el coste y el beneficio. Devuelve el coche actualizado con su historial de contactos.",
             inputSchema: {
                 id: z.string().uuid().describe("id del coche (lo devuelven guardar_coche y listar_coches)"),
                 url: urlSchema.optional(),
@@ -236,24 +314,85 @@ export function buildServer(env: Env): McpServer {
                 ...optionalCarFields,
             },
         },
-        async ({ id, ...changes }) => logged(client, "actualizar_coche", async () => {
+        async ({ id, foto_url, fotos, foto_posicion_y, ...changes }) => logged(client, "actualizar_coche", async () => {
             const patch = defined({ ...changes, url: changes.url ? normalizeListingUrl(changes.url) : undefined }) as Partial<ClaudeCar>
-            if (Object.keys(patch).length === 0) return { result: errorResult("No has indicado ningún cambio."), carId: id }
+            const photoChange = foto_url !== undefined || fotos !== undefined || foto_posicion_y !== undefined
+            if (Object.keys(patch).length === 0 && !photoChange) return { result: errorResult("No has indicado ningún cambio."), carId: id }
 
             const current = await client.from(CARS_TABLE).select("*").eq("id", id).maybeSingle()
             if (current.error) throw new Error(current.error.message)
             if (!current.data) return { result: errorResult(`No existe ningún coche de Claude con id ${id}.`), carId: id }
 
-            const photos = await photoColumns(patch, (current.data.fotos as string[] | undefined) ?? [])
-            let row: Record<string, unknown> = { ...patch, ...photos.columns, updated_at: new Date().toISOString() }
+            let row: Record<string, unknown> = { ...patch, updated_at: new Date().toISOString() }
             if (CALC_KEYS.some(key => key in patch)) {
                 const settings = await costSettings(client)
                 row = { ...row, ...computeClaudeCar({ ...current.data, ...patch } as ClaudeCarFields, settings) }
             }
+            let notes: string[] = []
+            if (foto_url !== undefined || fotos !== undefined) {
+                const list = fotos ?? (current.data.fotos as string[] | null) ?? []
+                const stored = await storePhotos(client, env.SUPABASE_URL, id, foto_url ? [foto_url, ...list] : list)
+                row = { ...row, ...photoRow(stored, foto_posicion_y) }
+                notes = photoNotes(stored)
+            } else if (foto_posicion_y !== undefined) {
+                row.foto_posicion_y = foto_posicion_y
+            }
             const saved = await client.from(CARS_TABLE).update(row).eq("id", id).select("*").single()
             if (saved.error) throw new Error(saved.error.message)
-            const car = saved.data as ClaudeCar
-            return { result: carResult(car, withWarnings("Actualizado.", photos.avisos)), carId: id, resumen: `${carName(car)}: ${Object.keys(patch).join(", ")}` }
+            const [car] = await attachContacts(client, [saved.data as ClaudeCar])
+            const changed = [...Object.keys(patch), ...PHOTO_KEYS.filter(k => ({ foto_url, fotos, foto_posicion_y })[k] !== undefined)]
+            return { result: carResult(car, withWarnings("Actualizado.", notes)), carId: id, resumen: `${carName(car)}: ${changed.join(", ")}` }
+        }),
+    )
+
+    server.registerTool(
+        "registrar_contacto",
+        {
+            title: "Registrar contacto",
+            description:
+                "Registra un mensaje enviado o recibido con el vendedor. Úsala SIEMPRE justo después de contactar a un vendedor. " +
+                "Indica el coche por coche_id o por url. Al registrar un mensaje enviado, si el coche está en 'nuevo' o 'interesante' pasa a 'contactado'. " +
+                "Devuelve el coche con todo su historial de contactos.",
+            inputSchema: {
+                coche_id: z.string().uuid().optional().describe("id del coche (o usa url)"),
+                url: z.string().trim().min(8).max(2000).optional().describe("URL del anuncio del coche (o usa coche_id)"),
+                canal: z.enum(CONTACT_CHANNELS).describe("Por dónde: mobile.de, email, whatsapp, telefono u otro"),
+                direccion: z.enum(CONTACT_DIRECTIONS).describe("'enviado' si lo mandamos nosotros, 'recibido' si es la respuesta del vendedor"),
+                mensaje: z.string().trim().min(1).max(20000).describe("Texto completo del mensaje (o resumen de la llamada)"),
+                asunto: z.string().trim().max(300).optional().describe("Asunto, si lo tiene"),
+                fecha: z.string().datetime({ offset: true }).optional().describe("Fecha y hora ISO 8601 (p. ej. 2026-11-21T20:45:00+01:00). Si no la das, ahora"),
+                enviado_por: z.enum(CONTACT_SENDERS).optional().describe("Quién lo escribió o envió: 'claude' (por defecto) o 'usuario'"),
+                notas: z.string().trim().max(2000).optional().describe("Notas sobre este mensaje (p. ej. 'pidió el VIN')"),
+            },
+        },
+        async ({ coche_id, url, canal, direccion, mensaje, asunto, fecha: when, enviado_por, notas }) => logged(client, "registrar_contacto", async () => {
+            if (!coche_id && !url) return { result: errorResult("Indica coche_id o url.") }
+            const found = coche_id
+                ? await client.from(CARS_TABLE).select("*").eq("id", coche_id).maybeSingle()
+                : await client.from(CARS_TABLE).select("*").eq("url", normalizeListingUrl(url!)).maybeSingle()
+            if (found.error) throw new Error(found.error.message)
+            if (!found.data) return { result: errorResult(`No existe ese coche en 'Guardados por Claude'${url ? ` (${url})` : ""}. Guárdalo primero con guardar_coche.`), carId: coche_id ?? null }
+            let car = found.data as ClaudeCar
+
+            const { error } = await client.from(CONTACTS_TABLE).insert({
+                coche_id: car.id, canal, direccion, mensaje, asunto: asunto ?? null, notas: notas ?? null,
+                fecha: when ?? new Date().toISOString(), enviado_por: enviado_por ?? "claude",
+            })
+            if (error) throw new Error(error.message)
+
+            let stateNote = ""
+            if (direccion === "enviado" && (car.estado === "nuevo" || car.estado === "interesante")) {
+                const upd = await client.from(CARS_TABLE).update({ estado: "contactado", updated_at: new Date().toISOString() }).eq("id", car.id).select("*").single()
+                if (upd.error) throw new Error(upd.error.message)
+                car = upd.data as ClaudeCar
+                stateNote = " El coche pasa a 'contactado'."
+            }
+            ;[car] = await attachContacts(client, [car])
+            return {
+                result: carResult(car, `Contacto registrado (${direccion}, ${canal}).${stateNote}`),
+                carId: car.id,
+                resumen: `${carName(car)}: ${direccion} por ${canal}`,
+            }
         }),
     )
 
@@ -261,7 +400,7 @@ export function buildServer(env: Env): McpServer {
         "borrar_coche",
         {
             title: "Borrar coche",
-            description: "Borra definitivamente un coche de 'Guardados por Claude', por su id. Para apartarlo sin borrarlo, usa actualizar_coche con estado 'descartado'.",
+            description: "Borra definitivamente un coche de 'Guardados por Claude' (con sus fotos y su historial de contactos), por su id. Para apartarlo sin borrarlo, usa actualizar_coche con estado 'descartado'.",
             inputSchema: { id: z.string().uuid().describe("id del coche") },
             annotations: { destructiveHint: true },
         },
@@ -271,7 +410,7 @@ export function buildServer(env: Env): McpServer {
             if (!data) return { result: errorResult(`No existe ningún coche de Claude con id ${id}.`), carId: id }
             const car = data as ClaudeCar
             // Si se movió a "mis coches", sus fotos siguen en uso allí
-            if (!car.movido_a && car.fotos?.length) await deleteUnusedPhotos(client, env.SUPABASE_URL, car.fotos).catch(e => console.error("No se pudieron borrar las fotos:", e))
+            if (!car.movido_a) await pruneCarFolder(client, env.SUPABASE_URL, id, []).catch(e => console.error("No se pudieron borrar las fotos:", e))
             return { result: { content: [{ type: "text", text: `Borrado: ${carName(car)}\n${car.url}` }] }, carId: id, resumen: `Borrado: ${carName(car)}` }
         }),
     )

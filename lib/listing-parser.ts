@@ -1,3 +1,5 @@
+import { normalizePhotoUrl, photoKey } from './image-size'
+
 // Lectura de un anuncio de coche a partir de su HTML (JSON-LD de schema.org → OpenGraph → texto).
 // Lo usan el Worker car-scrape (en el servidor) y la app (en el navegador, con lo que copia el botón
 // "Copiar para NorDrive" en portales que bloquean las lecturas automáticas, como mobile.de).
@@ -125,6 +127,39 @@ export function parseListing(html: string, url: string): ScrapedCar {
     car.images = Array.from(new Set(car.images.map(i => absolute(i, url)).filter(Boolean) as string[])).slice(0, 20)
     if (car.title) car.title = decodeEntities(car.title)
     return car
+}
+
+/**
+ * Todas las fotos de un anuncio, en orden y sin repetir, a tamaño grande (mobile.de 1024 px, AutoScout24 1280×960).
+ * Busca las URLs de las galerías de mobile.de y AutoScout24 en todo el HTML (incluido el JSON de la página),
+ * más la foto de portada (og:image) y las del JSON-LD. Pensado para ser barato: unas pocas expresiones sobre el HTML.
+ */
+export function extractListingPhotos(html: string, url: string, max = 30): string[] {
+    const text = html.replace(/\\u002F/gi, '/').replace(/\\\//g, '/')
+    const found: string[] = []
+    const og = meta(text, 'og:image')
+    if (og) found.push(og)
+    for (const node of extractJsonLd(text)) {
+        for (const img of ([] as any[]).concat(node.image || [])) {
+            const src = typeof img === 'string' ? img : img?.url || img?.contentUrl
+            if (src) found.push(src)
+        }
+    }
+    found.push(...(text.match(/https?:\/\/img\.classistatic\.de\/api\/v1\/mo-prod\/images\/[a-z0-9]{2}\/[a-z0-9-]{36}/gi) ?? []))
+    found.push(...(text.match(/https?:\/\/prod\.pictures\.autoscout24\.net\/listing-images\/[a-z0-9-]+_[a-z0-9-]+\.(?:jpe?g|png|webp)/gi) ?? []))
+
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const raw of found) {
+        const abs = absolute(decodeEntities(raw), url)
+        if (!abs || !/^https?:/i.test(abs)) continue
+        const key = photoKey(abs)
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(normalizePhotoUrl(abs))
+        if (out.length >= max) break
+    }
+    return out
 }
 
 function extractJsonLd(html: string): any[] {

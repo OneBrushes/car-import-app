@@ -2,29 +2,45 @@
 
 // Pestaña "Guardados por Claude": coches que guarda Claude (claude.ai) con el servidor MCP (workers/nordrive-mcp).
 // Solo la ve la cuenta dueña (is_claude_owner() en Supabase); la base de datos tampoco deja leerlos a nadie más.
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  AlertTriangle, ArrowRightLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Images, Loader2, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
+  AlertTriangle, ArrowRightLeft, Bookmark, Bot, ClipboardPaste, ChevronDown, ChevronUp, Clock, ExternalLink, History, ImageDown, Images, Loader2, MessageSquare, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
 } from "lucide-react"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import { DEFAULT_PHOTO_POSITION_Y } from "@/lib/image-size"
+import { PhotoViewer } from "@/components/photo-viewer"
+import { BOOKMARKLET, photosFromPasted } from "@/components/import-from-url"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import { autoFramingY, DEFAULT_PHOTO_POSITION_Y } from "@/lib/image-size"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ImageCarousel } from "@/components/ui/image-carousel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatEUR } from "@/lib/import-costs"
 import {
   CLAUDE_CAR_STATE_LABELS,
   CLAUDE_CAR_STATES,
+  CONTACT_CHANNEL_LABELS,
+  NO_REPLY_DAYS,
+  awaitingReplySince,
   claudeCarToImportedCar,
+  daysSince,
+  needsFollowUp,
+  sortContacts,
   type ClaudeCar,
   type ClaudeCarState,
+  type ClaudeContact,
 } from "@/lib/claude-cars"
 
-type Filter = "activos" | ClaudeCarState
+/** Worker del MCP: el botón "Actualizar fotos" le pide que vuelva a sacar las fotos del anuncio */
+const MCP_WORKER_URL = process.env.NEXT_PUBLIC_MCP_WORKER || "https://nordrive-mcp.infonordrive.workers.dev"
+
+const ago = (iso: string) => {
+  const d = daysSince(iso)
+  return d === 0 ? "hoy" : d === 1 ? "ayer" : `hace ${d} días`
+}
+
+type Filter = "activos" | "sin_respuesta" | ClaudeCarState
 
 interface McpLog {
   id: number
@@ -53,9 +69,13 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
   const [showLogs, setShowLogs] = useState(false)
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase.from("coches_claude").select("*").order("created_at", { ascending: false })
-    if (error) toast.error("No se pudieron cargar los coches de Claude: " + error.message)
-    else setCars((data as ClaudeCar[]) ?? [])
+    let res = await supabase.from("coches_claude").select("*, contactos:contactos_claude(*)").order("created_at", { ascending: false })
+    if (res.error) res = await supabase.from("coches_claude").select("*").order("created_at", { ascending: false })
+    if (res.error) toast.error("No se pudieron cargar los coches de Claude: " + res.error.message)
+    else setCars(((res.data as ClaudeCar[]) ?? []).map(car => {
+      const contactos = sortContacts(car.contactos as ClaudeContact[] | undefined)
+      return { ...car, contactos, ultimo_contacto: contactos.at(-1)?.fecha ?? null }
+    }))
     setLoading(false)
   }, [])
 
@@ -74,6 +94,7 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
         load()
         if (showLogs) loadLogs()
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "contactos_claude" }, () => load())
       .subscribe()
     return () => { channel.unsubscribe() }
   }, [isActive, user, load, loadLogs, showLogs])
@@ -81,17 +102,21 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
   useEffect(() => { if (showLogs) loadLogs() }, [showLogs, loadLogs])
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { activos: 0 }
+    const c: Record<string, number> = { activos: 0, sin_respuesta: 0 }
     for (const s of CLAUDE_CAR_STATES) c[s] = 0
     for (const car of cars) {
       c[car.estado]++
       if (car.estado !== "descartado") c.activos++
+      if (car.estado !== "descartado" && needsFollowUp(car.contactos)) c.sin_respuesta++
     }
     return c
   }, [cars])
 
   const visible = useMemo(
-    () => cars.filter(car => (filter === "activos" ? car.estado !== "descartado" : car.estado === filter)),
+    () => cars.filter(car =>
+      filter === "activos" ? car.estado !== "descartado"
+        : filter === "sin_respuesta" ? car.estado !== "descartado" && needsFollowUp(car.contactos)
+          : car.estado === filter),
     [cars, filter],
   )
 
@@ -161,14 +186,14 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
       {showLogs && <LogsPanel logs={logs} />}
 
       <div className="flex flex-wrap gap-1.5">
-        {(["activos", ...CLAUDE_CAR_STATES] as Filter[]).map(f => (
+        {(["activos", "sin_respuesta", ...CLAUDE_CAR_STATES] as Filter[]).map(f => (
           <button
             key={f}
             type="button"
             onClick={() => setFilter(f)}
             className={`rounded-full border px-3 py-1 text-sm transition-colors ${filter === f ? "border-foreground bg-foreground text-background" : "hover:bg-accent"}`}
           >
-            {f === "activos" ? "Activos" : CLAUDE_CAR_STATE_LABELS[f]} <span className="tabular opacity-60">{counts[f]}</span>
+            {f === "activos" ? "Activos" : f === "sin_respuesta" ? `Sin respuesta +${NO_REPLY_DAYS} días` : CLAUDE_CAR_STATE_LABELS[f]} <span className="tabular opacity-60">{counts[f]}</span>
           </button>
         ))}
       </div>
@@ -177,7 +202,7 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
         <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">
           {cars.length === 0
             ? "Todavía no hay coches. Pídele a Claude en claude.ai que busque coches en mobile.de y los guarde con la herramienta guardar_coche."
-            : "No hay coches en este estado."}
+            : filter === "sin_respuesta" ? "Nadie te debe una respuesta: todos los vendedores han contestado o se les escribió hace menos de 3 días." : "No hay coches en este estado."}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -188,6 +213,7 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
               busy={busyId === car.id}
               onState={estado => setState(car, estado)}
               onMove={() => moveToMyCars(car)}
+              onPatch={changes => patch(car.id, changes)}
             />
           ))}
         </div>
@@ -196,16 +222,75 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
   )
 }
 
-function ClaudeCarCard({ car, busy, onState, onMove }: {
+function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
   car: ClaudeCar
   busy: boolean
   onState: (estado: ClaudeCarState) => void
   onMove: () => void
+  onPatch: (changes: Partial<ClaudeCar>) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [galleryOpen, setGalleryOpen] = useState(false)
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasted, setPasted] = useState("")
+  const bookmarkRef = useRef<HTMLAnchorElement>(null)
+  // React no deja poner href="javascript:…" en JSX: se pone a mano
+  useEffect(() => { if (pasteOpen) setTimeout(() => bookmarkRef.current?.setAttribute("href", BOOKMARKLET), 0) }, [pasteOpen])
   const photos = car.fotos?.length ? car.fotos : car.foto_url ? [car.foto_url] : []
   const mainPhoto = car.foto_url || photos[0]
+  const contactos = car.contactos ?? []
+  const lastContact = contactos.at(-1)
+  const waitingSince = awaitingReplySince(contactos)
+  const followUp = needsFollowUp(contactos)
+
+  /** Vuelve a sacar todas las fotos del anuncio (el Worker las copia por tandas: se repite hasta terminar) */
+  const refreshPhotos = async (given?: string[]) => {
+    setRefreshing(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error("Tu sesión ha caducado")
+      let result: any = null
+      for (let round = 0; round < 3; round++) {
+        const res = await fetch(`${MCP_WORKER_URL}/api/fotos`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(given ? { id: car.id, fotos: given } : { id: car.id }),
+        })
+        result = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(result.error || `Error ${res.status}`)
+        onPatch({ fotos: result.car.fotos, foto_url: result.car.foto_url, foto_posicion_y: result.car.foto_posicion_y })
+        if (!result.pendientes) break
+      }
+      const n = result.car.fotos?.length ?? 0
+      // El portal bloquea al servidor (mobile.de): se copian desde el navegador con el marcador
+      if (!given && result.leidas == null) { setPasteOpen(true); return }
+      if (given) { setPasteOpen(false); setPasted("") }
+      if (result.avisos?.length) toast.warning(`${n} foto(s). ${result.avisos[0]}`)
+      else toast.success(`${n} foto(s) guardadas${result.leidas != null ? ` de ${result.leidas} del anuncio` : ""}`)
+    } catch (error: any) {
+      toast.error("No se pudieron actualizar las fotos: " + (error?.message ?? error))
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  /** "Fijar como principal": la foto pasa delante y se recalcula el encuadre con sus medidas reales */
+  const setMain = async (src: string) => {
+    const size = await new Promise<{ width: number; height: number } | null>(resolve => {
+      const img = new Image()
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
+      img.onerror = () => resolve(null)
+      img.src = src
+    })
+    const fotos = [src, ...photos.filter(p => p !== src)]
+    const changes = { fotos, foto_url: src, foto_posicion_y: autoFramingY(size) }
+    const { error } = await supabase.from("coches_claude").update({ ...changes, updated_at: new Date().toISOString() }).eq("id", car.id)
+    if (error) { toast.error("No se pudo fijar la foto: " + error.message); return }
+    onPatch(changes)
+    setViewerIndex(0)
+    toast.success("Foto principal cambiada")
+  }
   const title = [car.marca, car.modelo].filter(Boolean).join(" ") || "Coche sin nombre"
   const lines = car.desglose?.lines ?? []
   const taxLine = lines.find(l => l.label === "Impuesto de matriculación")
@@ -217,13 +302,24 @@ function ClaudeCarCard({ car, busy, onState, onMove }: {
       <div className="absolute left-2.5 top-2.5 z-10 flex flex-wrap gap-1">
         <Badge className={`border-transparent shadow-sm ${STATE_STYLES[car.estado]}`}>{CLAUDE_CAR_STATE_LABELS[car.estado]}</Badge>
         {car.movido_a && <Badge variant="secondary" className="bg-background/90 shadow-sm backdrop-blur">En mis coches</Badge>}
+        {lastContact && (
+          waitingSince ? (
+            <Badge className={`border-transparent shadow-sm ${followUp ? "bg-warning text-warning-foreground" : "bg-background/90 text-foreground backdrop-blur"}`} title={followUp ? "Sin respuesta: toca insistir" : undefined}>
+              <Clock className="h-3 w-3" /> Contactado {ago(waitingSince)}
+            </Badge>
+          ) : (
+            <Badge className="border-transparent bg-success text-success-foreground shadow-sm">
+              <MessageSquare className="h-3 w-3" /> Respondió {ago(lastContact.fecha)}
+            </Badge>
+          )
+        )}
       </div>
 
       {/* Foto principal encuadrada para que se vea el coche (no el cielo); al pulsar, galería con todas */}
       {mainPhoto ? (
         <button
           type="button"
-          onClick={() => setGalleryOpen(true)}
+          onClick={() => setViewerIndex(Math.max(0, photos.indexOf(mainPhoto)))}
           className="relative block aspect-[16/10] w-full overflow-hidden bg-muted"
           title={photos.length > 1 ? `Ver las ${photos.length} fotos` : "Ver foto"}
         >
@@ -234,24 +330,75 @@ function ClaudeCarCard({ car, busy, onState, onMove }: {
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
             style={{ objectPosition: `center ${car.foto_posicion_y ?? DEFAULT_PHOTO_POSITION_Y}%` }}
           />
-          {photos.length > 1 && (
-            <span className="tabular absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white backdrop-blur">
-              <Images className="h-3.5 w-3.5" /> {photos.length}
-            </span>
-          )}
+          <span className="tabular absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white backdrop-blur">
+            <Images className="h-3.5 w-3.5" /> 1/{photos.length}
+          </span>
         </button>
       ) : (
         <div className="flex aspect-[16/10] w-full items-center justify-center bg-muted text-sm text-muted-foreground">Sin foto</div>
       )}
+      <button
+        type="button"
+        onClick={() => refreshPhotos()}
+        disabled={refreshing}
+        title="Actualizar fotos desde el anuncio"
+        className="absolute right-2.5 top-2.5 z-10 inline-flex h-8 items-center gap-1.5 rounded-full bg-black/55 px-2.5 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-black/75 disabled:opacity-70"
+      >
+        {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageDown className="h-3.5 w-3.5" />}
+        <span className="hidden sm:inline">{refreshing ? "Actualizando…" : "Actualizar fotos"}</span>
+      </button>
 
-      <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
-        <DialogContent className="max-w-4xl gap-3 p-3 sm:p-4">
-          <DialogTitle className="pr-8 text-base">{title}{car.version ? ` · ${car.version}` : ""}</DialogTitle>
-          <div className="aspect-[4/3] w-full overflow-hidden rounded-lg bg-black">
-            <ImageCarousel images={photos} alt={title} fit="contain" />
+      <Dialog open={pasteOpen} onOpenChange={setPasteOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle>Copiar las fotos desde tu navegador</DialogTitle>
+          <DialogDescription>
+            {(() => { try { return new URL(href).hostname.replace(/^(www|suchen)\./, "") } catch { return "Este portal" } })()} no deja que el servidor lea el anuncio.
+            Cópialo desde tu navegador y guardaré todas las fotos de la galería.
+          </DialogDescription>
+          <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+            <li>
+              Arrastra este botón a tu barra de marcadores (solo la primera vez; si ya lo tenías, vuelve a arrastrarlo, porque ahora copia todas las fotos):{" "}
+              <a ref={bookmarkRef} onClick={e => { e.preventDefault(); toast.info("Arrástralo a la barra de marcadores; no se usa desde aquí.") }}
+                className="ml-1 inline-flex cursor-grab items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground no-underline">
+                <Bookmark className="h-3 w-3" /> Copiar para NorDrive
+              </a>
+            </li>
+            <li><a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-foreground underline underline-offset-2">Abre el anuncio</a> y pulsa ese marcador.</li>
+            <li>Vuelve aquí y pega (Ctrl+V) en el recuadro.</li>
+          </ol>
+          <textarea
+            rows={3}
+            value={pasted}
+            onChange={e => setPasted(e.target.value)}
+            placeholder="Pega aquí (Ctrl+V)…"
+            className="w-full resize-none rounded-md border bg-muted/30 p-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={async () => {
+              try { setPasted(await navigator.clipboard.readText()) } catch { toast.error("No se pudo leer el portapapeles: pega con Ctrl+V") }
+            }}>
+              <ClipboardPaste className="h-4 w-4" /> Pegar
+            </Button>
+            <Button size="sm" disabled={refreshing || !pasted.trim()} onClick={() => {
+              const list = photosFromPasted(pasted)
+              if (!list.length) { toast.error("No he encontrado fotos en lo pegado. Usa el marcador «Copiar para NorDrive» en la página del anuncio."); return }
+              refreshPhotos(list)
+            }}>
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageDown className="h-4 w-4" />} Guardar fotos
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <PhotoViewer
+        photos={photos}
+        open={viewerIndex != null}
+        index={viewerIndex ?? 0}
+        onClose={() => setViewerIndex(null)}
+        mainPhoto={mainPhoto}
+        onSetMain={setMain}
+        title={title}
+      />
 
       <div className="space-y-3 p-4">
         <div className="min-w-0">
@@ -318,7 +465,7 @@ function ClaudeCarCard({ car, busy, onState, onMove }: {
         )}
 
         <button type="button" onClick={() => setOpen(v => !v)} className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
-          {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {open ? "Ocultar" : "Ver"} desglose{car.notas ? " y notas" : ""}
+          {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {open ? "Ocultar" : "Ver"} desglose{car.notas ? ", notas" : ""}{contactos.length ? ` y ${contactos.length} mensaje(s)` : ""}
         </button>
         {open && (
           <dl className="space-y-1 rounded-lg bg-muted/50 p-3 text-xs">
@@ -333,6 +480,7 @@ function ClaudeCarCard({ car, busy, onState, onMove }: {
             </div>
           </dl>
         )}
+        {open && contactos.length > 0 && <ContactTimeline contactos={contactos} />}
 
         <Select value={car.estado} onValueChange={v => onState(v as ClaudeCarState)}>
           <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
@@ -360,6 +508,32 @@ function ClaudeCarCard({ car, busy, onState, onMove }: {
           </a>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Mensajes con el vendedor: enviados a la derecha, recibidos a la izquierda */
+function ContactTimeline({ contactos }: { contactos: ClaudeContact[] }) {
+  return (
+    <div className="space-y-2 rounded-lg bg-muted/40 p-3">
+      <p className="flex items-center gap-1.5 text-xs font-semibold"><MessageSquare className="h-3.5 w-3.5" /> Contactos con el vendedor</p>
+      {contactos.map(c => {
+        const sent = c.direccion === "enviado"
+        return (
+          <div key={c.id} className={`flex ${sent ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm shadow-xs ${sent ? "rounded-br-sm bg-primary/10" : "rounded-bl-sm border bg-background"}`}>
+              <p className="mb-1 text-[11px] text-muted-foreground">
+                {new Date(c.fecha).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                {" · "}{CONTACT_CHANNEL_LABELS[c.canal] ?? c.canal}
+                {" · "}{sent ? (c.enviado_por === "usuario" ? "Tú" : "Claude") : "Vendedor"}
+              </p>
+              {c.asunto && <p className="mb-0.5 font-medium">{c.asunto}</p>}
+              <p className="whitespace-pre-line break-words">{c.mensaje}</p>
+              {c.notas && <p className="mt-1 border-t pt-1 text-xs text-muted-foreground">{c.notas}</p>}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

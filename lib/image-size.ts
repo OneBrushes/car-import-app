@@ -77,12 +77,29 @@ export function autoFramingY(size: ImageSize | null, containerAspect = CARD_PHOT
     return Math.round((top / (1 - visible)) * 100)
 }
 
-/** Fotos de mobile.de (img.classistatic.de) en tamaño 1024 px */
+/** Fotos de mobile.de (img.classistatic.de) en tamaño 1024 px y de AutoScout24 en 1280×960 */
 export function normalizePhotoUrl(raw: string): string {
     try {
         const url = new URL(raw.trim())
         if (url.hostname.endsWith("classistatic.de")) url.searchParams.set("rule", "mo-1024.jpg")
+        if (url.hostname.endsWith("pictures.autoscout24.net")) {
+            const base = url.pathname.match(/^(\/listing-images\/[^/]+\.(?:jpe?g|png|webp))/i)?.[1]
+            if (base) { url.pathname = `${base}/1280x960.webp`; url.search = "" }
+        }
         return url.toString()
+    } catch {
+        return raw.trim()
+    }
+}
+
+/** Identidad de una foto sin el tamaño (para no repetir la misma foto en dos tamaños) */
+export function photoKey(raw: string): string {
+    try {
+        const url = new URL(raw.trim())
+        if (url.hostname.endsWith("classistatic.de")) return `mobile:${url.pathname}`
+        const as24 = url.pathname.match(/^\/listing-images\/([^/]+)/i)
+        if (url.hostname.endsWith("pictures.autoscout24.net") && as24) return `as24:${as24[1]}`
+        return url.origin + url.pathname
     } catch {
         return raw.trim()
     }

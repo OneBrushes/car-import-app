@@ -23,7 +23,7 @@ export const CLAUDE_CAR_STATE_LABELS: Record<ClaudeCarState, string> = {
 }
 
 /** Máximo de fotos por coche */
-export const MAX_CLAUDE_PHOTOS = 8
+export const MAX_CLAUDE_PHOTOS = 30
 
 /** Diferencia a partir de la cual se avisa de que el impuesto de Claude no cuadra con el de la app */
 export const TAX_WARNING_THRESHOLD = 100
@@ -91,6 +91,70 @@ export interface ClaudeCar extends ClaudeCarFields, ClaudeCarCalc {
     movido_a: string | null
     created_at: string
     updated_at: string
+    /** Mensajes con el vendedor (contactos_claude), del más antiguo al más reciente */
+    contactos?: ClaudeContact[]
+    /** Fecha del último mensaje, enviado o recibido */
+    ultimo_contacto?: string | null
+}
+
+// --- Historial de contactos con el vendedor (tabla contactos_claude) -----------------------------------------------------
+
+export const CONTACT_CHANNELS = ["mobile.de", "email", "whatsapp", "telefono", "otro"] as const
+export type ContactChannel = (typeof CONTACT_CHANNELS)[number]
+export const CONTACT_CHANNEL_LABELS: Record<ContactChannel, string> = {
+    "mobile.de": "mobile.de", email: "Email", whatsapp: "WhatsApp", telefono: "Teléfono", otro: "Otro",
+}
+export const CONTACT_DIRECTIONS = ["enviado", "recibido"] as const
+export type ContactDirection = (typeof CONTACT_DIRECTIONS)[number]
+export const CONTACT_SENDERS = ["claude", "usuario"] as const
+export type ContactSender = (typeof CONTACT_SENDERS)[number]
+
+export interface ClaudeContact {
+    id: string
+    coche_id: string
+    fecha: string
+    canal: ContactChannel
+    direccion: ContactDirection
+    asunto: string | null
+    mensaje: string
+    enviado_por: ContactSender
+    notas: string | null
+    created_at?: string
+}
+
+/** Días sin respuesta a partir de los que conviene insistir */
+export const NO_REPLY_DAYS = 3
+
+const DAY_MS = 86_400_000
+
+export function sortContacts(contacts: ClaudeContact[] | null | undefined): ClaudeContact[] {
+    return [...(contacts ?? [])].sort((a, b) => Date.parse(a.fecha) - Date.parse(b.fecha))
+}
+
+/** Añade al coche sus contactos ordenados y la fecha del último */
+export function withContacts<T extends { id: string }>(car: T, contacts: ClaudeContact[]): T & { contactos: ClaudeContact[]; ultimo_contacto: string | null } {
+    const contactos = sortContacts(contacts.filter(c => c.coche_id === car.id))
+    return { ...car, contactos, ultimo_contacto: contactos.at(-1)?.fecha ?? null }
+}
+
+/** Días completos desde una fecha */
+export function daysSince(date: string, now = new Date()): number {
+    return Math.max(0, Math.floor((now.getTime() - Date.parse(date)) / DAY_MS))
+}
+
+/**
+ * Si el último mensaje es nuestro y el vendedor no ha contestado después, desde cuándo se espera respuesta.
+ * null si no hay mensajes o el último es del vendedor.
+ */
+export function awaitingReplySince(contacts: ClaudeContact[] | null | undefined): string | null {
+    const last = sortContacts(contacts).at(-1)
+    return last && last.direccion === "enviado" ? last.fecha : null
+}
+
+/** Sin respuesta desde hace más de NO_REPLY_DAYS días: a quién insistir */
+export function needsFollowUp(contacts: ClaudeContact[] | null | undefined, now = new Date()): boolean {
+    const since = awaitingReplySince(contacts)
+    return since != null && now.getTime() - Date.parse(since) > NO_REPLY_DAYS * DAY_MS
 }
 
 /**

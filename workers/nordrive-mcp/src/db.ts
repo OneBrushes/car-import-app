@@ -1,11 +1,12 @@
 // Acceso a Supabase desde el Worker. Usa la clave de servicio, así que AQUÍ está la frontera de seguridad:
-// el Worker solo toca coches_claude, mcp_logs, mcp_config (lectura), company_settings (lectura) y el bucket de
+// el Worker solo toca coches_claude, contactos_claude, mcp_logs, mcp_config (lectura), company_settings (lectura) y el bucket de
 // Storage "coches-claude" (photos.ts). Nunca imported_cars ni ninguna otra tabla con tus coches.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { IMPORT_COSTS_SETTING_KEY, normalizeImportCostSettings, type ImportCostSettings } from "../../../lib/import-costs"
 import type { Env } from "./env"
 
 export const CARS_TABLE = "coches_claude"
+export const CONTACTS_TABLE = "contactos_claude"
 const LOGS_TABLE = "mcp_logs"
 
 export function db(env: Env): SupabaseClient {

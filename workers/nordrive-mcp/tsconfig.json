@@ -10,5 +10,5 @@
     "noEmit": true,
     "isolatedModules": true
   },
-  "include": ["src/**/*.ts", "../../lib/import-costs.ts", "../../lib/claude-cars.ts"]
+  "include": ["src/**/*.ts"]
 }

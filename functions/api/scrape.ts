@@ -32,6 +32,31 @@ const json = (body: unknown, status = 200) =>
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     })
 
+/** Portal de coches conocido al que pertenece la URL (o undefined si no se admite) */
+export function listingPlatform(listing: URL): string | undefined {
+    if (listing.protocol !== 'https:' && listing.protocol !== 'http:') return undefined
+    const host = listing.hostname.toLowerCase()
+    return ALLOWED_HOSTS.find(h => host === h || host.endsWith('.' + h) || host.includes(h))
+}
+
+/** Descarga el HTML de un anuncio (también lo usa el MCP de "Guardados por Claude" para sacar las fotos) */
+export async function fetchListingHtml(listing: URL): Promise<{ html: string } | { error: string; status: number }> {
+    try {
+        const res = await fetch(listing.toString(), {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+                'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8,de;q=0.7,fr;q=0.6',
+                Accept: 'text/html,application/xhtml+xml',
+            },
+            redirect: 'follow',
+        })
+        if (!res.ok) return { error: `El portal respondió ${res.status}. Puede estar bloqueando lecturas automáticas.`, status: 502 }
+        return { html: (await res.text()).slice(0, 3_000_000) }
+    } catch {
+        return { error: 'No se pudo descargar el anuncio', status: 502 }
+    }
+}
+
 export async function onRequestGet(context: { request: Request; env: Env }) {
     return handleScrape(context.request, context.env)
 }
@@ -50,8 +75,7 @@ export async function handleScrape(request: Request, env: Env): Promise<Response
     if (listing.protocol !== 'https:' && listing.protocol !== 'http:') {
         return json({ error: 'Solo se admiten enlaces http(s)' }, 400)
     }
-    const host = listing.hostname.toLowerCase()
-    const platform = ALLOWED_HOSTS.find(h => host === h || host.endsWith('.' + h) || host.includes(h))
+    const platform = listingPlatform(listing)
     if (!platform) {
         return json({ error: 'Portal no soportado todavía', supported: ALLOWED_HOSTS }, 400)
     }
@@ -66,23 +90,10 @@ export async function handleScrape(request: Request, env: Env): Promise<Response
     })
     if (!userRes.ok) return json({ error: 'Sesión no válida' }, 401)
 
-    let html: string
-    try {
-        const res = await fetch(listing.toString(), {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-                'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8,de;q=0.7,fr;q=0.6',
-                Accept: 'text/html,application/xhtml+xml',
-            },
-            redirect: 'follow',
-        })
-        if (!res.ok) return json({ error: `El portal respondió ${res.status}. Puede estar bloqueando lecturas automáticas.` }, 502)
-        html = (await res.text()).slice(0, 3_000_000)
-    } catch {
-        return json({ error: 'No se pudo descargar el anuncio' }, 502)
-    }
+    const page = await fetchListingHtml(listing)
+    if ('error' in page) return json({ error: page.error }, page.status)
 
-    const car = parseListing(html, listing.toString())
+    const car = parseListing(page.html, listing.toString())
     car.platform = platform.replace(/\.$/, '')
     return json(car)
 }

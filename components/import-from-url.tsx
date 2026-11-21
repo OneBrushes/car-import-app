@@ -8,18 +8,18 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-import { parseListing, type ScrapedCar } from "@/lib/listing-parser"
+import { extractListingPhotos, parseListing, type ScrapedCar } from "@/lib/listing-parser"
 export type { ScrapedCar } from "@/lib/listing-parser"
 
 /** Portales que bloquean cualquier lectura desde un servidor: se leen desde el navegador del usuario */
 const BLOCKING_HOSTS = ["mobile.de"]
-const PAYLOAD_PREFIX = "NORDRIVE1:"
+export const PAYLOAD_PREFIX = "NORDRIVE1:"
 
 /**
  * Marcador ("bookmarklet") para la barra del navegador: en la página del anuncio copia lo que hace falta
  * para leerlo (JSON-LD, metadatos, título, texto visible y fotos grandes) y la app lo lee al pegarlo.
  */
-const BOOKMARKLET = `javascript:(()=>{const q=s=>[...document.querySelectorAll(s)];const h=[...q('script[type="application/ld+json"]').map(e=>e.outerHTML),...q('meta[property],meta[name]').map(e=>e.outerHTML),'<title>'+document.title.replace(/</g,' ')+'</title>','<main>'+document.body.innerText.slice(0,200000).replace(/</g,' ')+'</main>'].join('\\n');const i=[...document.images].filter(e=>e.naturalWidth>=500).map(e=>e.currentSrc||e.src).slice(0,20);const t='${PAYLOAD_PREFIX}'+JSON.stringify({u:location.href,h,i});const ok=()=>alert('Copiado para NorDrive. Vuelve a la app y pégalo (Ctrl+V) en el recuadro.');navigator.clipboard.writeText(t).then(ok,()=>prompt('Copia esto (Ctrl+C) y pégalo en NorDrive:',t))})()`
+export const BOOKMARKLET = `javascript:(()=>{const q=s=>[...document.querySelectorAll(s)];const h=[...q('script[type="application/ld+json"]').map(e=>e.outerHTML),...q('meta[property],meta[name]').map(e=>e.outerHTML),'<title>'+document.title.replace(/</g,' ')+'</title>','<main>'+document.body.innerText.slice(0,200000).replace(/</g,' ')+'</main>'].join('\\n');const i=[...document.images].filter(e=>e.naturalWidth>=500).map(e=>e.currentSrc||e.src).slice(0,20);const H=document.documentElement.innerHTML.replace(/\\\\u002F/gi,'/').replace(/\\\\\\//g,'/');const g=[...new Set([...(H.match(/img\\.classistatic\\.de\\/api\\/v1\\/mo-prod\\/images\\/[a-z0-9]{2}\\/[a-z0-9-]{36}/g)||[]),...(H.match(/prod\\.pictures\\.autoscout24\\.net\\/listing-images\\/[a-z0-9_-]+\\.(?:jpe?g|png|webp)/gi)||[])])].slice(0,60).map(x=>'https://'+x);const t='${PAYLOAD_PREFIX}'+JSON.stringify({u:location.href,h,i,g});const ok=()=>alert('Copiado para NorDrive. Vuelve a la app y pégalo (Ctrl+V) en el recuadro.');navigator.clipboard.writeText(t).then(ok,()=>prompt('Copia esto (Ctrl+C) y pégalo en NorDrive:',t))})()`
 
 /** Lee lo pegado: el contenido del marcador o, si no, el texto del anuncio copiado a mano */
 function parsePasted(text: string, fallbackUrl: string): ScrapedCar | null {
@@ -27,9 +27,9 @@ function parsePasted(text: string, fallbackUrl: string): ScrapedCar | null {
   if (!trimmed) return null
   if (trimmed.startsWith(PAYLOAD_PREFIX)) {
     try {
-      const data = JSON.parse(trimmed.slice(PAYLOAD_PREFIX.length)) as { u: string; h: string; i?: string[] }
+      const data = JSON.parse(trimmed.slice(PAYLOAD_PREFIX.length)) as { u: string; h: string; i?: string[]; g?: string[] }
       const car = parseListing(data.h, data.u)
-      car.images = Array.from(new Set([...car.images, ...(data.i ?? [])])).slice(0, 20)
+      car.images = Array.from(new Set([...car.images, ...(data.g ?? []), ...(data.i ?? [])])).slice(0, 20)
       car.platform = hostLabel(data.u)
       return car
     } catch {
@@ -39,6 +39,25 @@ function parsePasted(text: string, fallbackUrl: string): ScrapedCar | null {
   const car = parseListing(`<main>${trimmed.replace(/</g, " ")}</main>`, fallbackUrl)
   car.platform = fallbackUrl ? hostLabel(fallbackUrl) : undefined
   return car
+}
+
+/**
+ * Fotos de lo pegado con el marcador «Copiar para NorDrive» (o del HTML del anuncio pegado a mano): todas las de la
+ * galería, en orden, sin repetir y a tamaño grande. Lo usa "Guardados por Claude" cuando el portal bloquea al servidor.
+ */
+export function photosFromPasted(text: string): string[] {
+  const trimmed = text.trim()
+  if (!trimmed) return []
+  if (trimmed.startsWith(PAYLOAD_PREFIX)) {
+    try {
+      const data = JSON.parse(trimmed.slice(PAYLOAD_PREFIX.length)) as { u: string; h: string; i?: string[]; g?: string[] }
+      const html = [data.h, ...(data.g ?? []), ...(data.i ?? [])].map(x => (x.startsWith("http") ? ` ${x} ` : x)).join("\n")
+      return extractListingPhotos(html, data.u)
+    } catch {
+      return []
+    }
+  }
+  return extractListingPhotos(trimmed, "https://localhost/")
 }
 
 function hostLabel(url: string) {

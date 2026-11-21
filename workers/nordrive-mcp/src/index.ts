@@ -8,7 +8,8 @@
 //
 // Despliegue: ver workers/nordrive-mcp/README.md
 import { AuthorizationError, CimdFetchError, OAuthProvider, type ConsentDescription } from "@cloudflare/workers-oauth-provider"
-import { handleMcp } from "./mcp"
+import { handleMcp, refreshCarPhotos } from "./mcp"
+import { db, logCall, ownerId } from "./db"
 import type { Env } from "./env"
 
 const SCOPE = "coches"
@@ -55,6 +56,7 @@ export default {
 async function defaultHandler(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === "/" && request.method === "GET") return text("NorDrive MCP · el servidor está en /mcp")
+    if (url.pathname === "/api/fotos") return photosApi(request, env)
     if (url.pathname !== "/authorize") return text("No encontrado", 404)
 
     const oauth = env.OAUTH_PROVIDER
@@ -97,6 +99,50 @@ async function defaultHandler(request: Request, env: Env): Promise<Response> {
             return text(message, 400)
         }
         throw error
+    }
+}
+
+// --- Botón "Actualizar fotos" de la app ------------------------------------------------------------------------------
+// POST /api/fotos  { id }  con "Authorization: Bearer <sesión de Supabase>". Solo la cuenta dueña (mcp_config).
+
+const APP_ORIGINS = ["https://app.nordrivecars.com", "http://localhost:3000"]
+
+async function photosApi(request: Request, env: Env): Promise<Response> {
+    const origin = request.headers.get("Origin") ?? ""
+    const cors: Record<string, string> = {
+        "Access-Control-Allow-Origin": APP_ORIGINS.includes(origin) ? origin : APP_ORIGINS[0],
+        "Access-Control-Allow-Headers": "authorization, content-type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        Vary: "Origin",
+    }
+    const json = (body: unknown, status = 200) => Response.json(body, { status, headers: cors })
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors })
+    if (request.method !== "POST") return json({ error: "Método no permitido" }, 405)
+
+    const auth = request.headers.get("Authorization") ?? ""
+    if (!auth.startsWith("Bearer ")) return json({ error: "Falta la sesión" }, 401)
+    const userRes = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: auth } })
+    if (!userRes.ok) return json({ error: "Sesión no válida" }, 401)
+    const user = (await userRes.json()) as { id?: string }
+    const client = db(env)
+    if (!user.id || user.id !== (await ownerId(client))) return json({ error: "Solo la cuenta dueña puede hacer esto" }, 403)
+
+    const body = (await request.json().catch(() => ({}))) as { id?: string; fotos?: unknown }
+    const given = Array.isArray(body.fotos) ? body.fotos.filter((u): u is string => typeof u === "string" && /^https?:\/\//.test(u)).slice(0, 60) : undefined
+    if (!body.id || !/^[0-9a-f-]{36}$/i.test(body.id)) return json({ error: "Falta el id del coche" }, 400)
+    try {
+        const result = await refreshCarPhotos(client, env, body.id, given)
+        if (!result) return json({ error: "No existe ese coche" }, 404)
+        await logCall(client, {
+            herramienta: given ? "actualizar_fotos (app, pegadas)" : "actualizar_fotos (app)", ok: true, coche_id: body.id,
+            resumen: `${result.car.fotos?.length ?? 0} foto(s)${result.leidas != null ? ` de ${result.leidas} del anuncio` : ""}${result.pendientes ? ` · ${result.pendientes} pendientes` : ""}`,
+            error: result.avisos.length ? result.avisos.join(" · ") : undefined,
+        })
+        return json(result)
+    } catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        await logCall(client, { herramienta: "actualizar_fotos (app)", ok: false, coche_id: body.id, error: message })
+        return json({ error: message }, 500)
     }
 }
 

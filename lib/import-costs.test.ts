@@ -7,7 +7,7 @@ import {
     normalizeImportCostSettings,
     registrationTaxRate,
 } from "./import-costs"
-import { claudeCarToImportedCar, computeClaudeCar, isNewForVat, normalizeListingUrl, type ClaudeCar } from "./claude-cars"
+import { awaitingReplySince, claudeCarToImportedCar, computeClaudeCar, daysSince, isNewForVat, needsFollowUp, normalizeListingUrl, withContacts, type ClaudeCar } from "./claude-cars"
 
 const TODAY = new Date(2026, 10, 21) // 21/11/2026
 
@@ -150,5 +150,27 @@ describe("coches de Claude", () => {
         expect(Math.round(sum * 100) / 100).toBe(car.coste_total_espana)
         expect(row.model).toBe("Golf R")
         expect(row.platform).toBe("mobile.de")
+    })
+})
+
+describe("historial de contactos", () => {
+    const base = { coche_id: "c1", canal: "mobile.de" as const, asunto: null, enviado_por: "claude" as const, notas: null }
+    const sent = (id: string, fecha: string) => ({ ...base, id, fecha, direccion: "enviado" as const, mensaje: "Hallo" })
+    const got = (id: string, fecha: string) => ({ ...base, id, fecha, direccion: "recibido" as const, mensaje: "Danke" })
+    const NOW = new Date("2026-11-25T12:00:00Z")
+
+    it("ordena los mensajes y calcula el último", () => {
+        const car = withContacts({ id: "c1" }, [got("2", "2026-11-22T10:00:00Z"), sent("1", "2026-11-21T19:45:00Z"), { ...sent("x", "2026-11-23T00:00:00Z"), coche_id: "otro" }])
+        expect(car.contactos.map(c => c.id)).toEqual(["1", "2"])
+        expect(car.ultimo_contacto).toBe("2026-11-22T10:00:00Z")
+    })
+
+    it("sin respuesta: solo si el último mensaje es nuestro y tiene más de 3 días", () => {
+        expect(needsFollowUp([sent("1", "2026-11-21T19:45:00Z")], NOW)).toBe(true)
+        expect(needsFollowUp([sent("1", "2026-11-23T19:45:00Z")], NOW)).toBe(false)
+        expect(needsFollowUp([sent("1", "2026-11-20T10:00:00Z"), got("2", "2026-11-21T10:00:00Z")], NOW)).toBe(false)
+        expect(needsFollowUp([], NOW)).toBe(false)
+        expect(awaitingReplySince([got("2", "2026-11-21T10:00:00Z"), sent("1", "2026-11-22T10:00:00Z")])).toBe("2026-11-22T10:00:00Z")
+        expect(daysSince("2026-11-21T19:45:00Z", NOW)).toBe(3)
     })
 })
