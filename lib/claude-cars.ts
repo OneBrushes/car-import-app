@@ -22,6 +22,9 @@ export const CLAUDE_CAR_STATE_LABELS: Record<ClaudeCarState, string> = {
     comprado: "Comprado",
 }
 
+/** Máximo de fotos por coche */
+export const MAX_CLAUDE_PHOTOS = 8
+
 /** Diferencia a partir de la cual se avisa de que el impuesto de Claude no cuadra con el de la app */
 export const TAX_WARNING_THRESHOLD = 100
 
@@ -53,7 +56,12 @@ export interface ClaudeCarFields {
     homologacion?: number | null
     placas?: number | null
     gestoria?: number | null
+    /** Foto principal (la primera de fotos) */
     foto_url?: string | null
+    /** Todas las fotos (máx. MAX_CLAUDE_PHOTOS), ya copiadas a Supabase Storage */
+    fotos?: string[] | null
+    /** Encuadre vertical de la foto principal en la tarjeta (0 = arriba, 100 = abajo) */
+    foto_posicion_y?: number | null
     notas?: string | null
 }
 
@@ -211,8 +219,8 @@ export function claudeCarToImportedCar(car: ClaudeCar) {
         expenses,
         registration_tax: car.desglose?.lines?.find(l => l.label === "Impuesto de matriculación")?.amount ?? 0,
         shipping_cost: car.desglose?.lines?.find(l => l.label === "Transporte")?.amount ?? 0,
-        image_url: car.foto_url || null,
-        images: car.foto_url ? [car.foto_url] : [],
+        image_url: car.foto_url || car.fotos?.[0] || null,
+        images: car.fotos?.length ? car.fotos : car.foto_url ? [car.foto_url] : [],
         notes: notes || null,
         tags: ["Claude"],
         contacted: car.estado === "contactado",

@@ -86,7 +86,8 @@ export interface ImportCostSettings extends FixedImportCosts {
 
 export const IMPORT_COSTS_SETTING_KEY = "import_costs"
 
-export const DEFAULT_IMPORT_COST_SETTINGS: ImportCostSettings = { ...DEFAULT_IMPORT_COSTS, region: "general" }
+/** Por defecto se matricula en Cataluña */
+export const DEFAULT_IMPORT_COST_SETTINGS: ImportCostSettings = { ...DEFAULT_IMPORT_COSTS, region: "cataluna" }
 
 /** Mezcla lo guardado en Supabase con los valores por defecto (tolera claves que falten o valores raros) */
 export function normalizeImportCostSettings(value: unknown): ImportCostSettings {
@@ -95,7 +96,7 @@ export function normalizeImportCostSettings(value: unknown): ImportCostSettings 
         const n = Number(raw[key])
         return Number.isFinite(n) && n >= 0 ? n : DEFAULT_IMPORT_COSTS[key]
     }
-    const region = TAX_REGIONS.some(r => r.id === raw.region) ? (raw.region as TaxRegion) : "general"
+    const region = TAX_REGIONS.some(r => r.id === raw.region) ? (raw.region as TaxRegion) : DEFAULT_IMPORT_COST_SETTINGS.region
     return {
         transport: pick("transport"),
         itv: pick("itv"),

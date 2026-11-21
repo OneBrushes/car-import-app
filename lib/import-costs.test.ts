@@ -84,7 +84,8 @@ describe("ajustes de gastos fijos", () => {
         expect(normalizeImportCostSettings(null)).toEqual(DEFAULT_IMPORT_COST_SETTINGS)
         expect(normalizeImportCostSettings({ transport: 1100, itv: "x", region: "cataluna" }))
             .toEqual({ ...DEFAULT_IMPORT_COST_SETTINGS, transport: 1100, region: "cataluna" })
-        expect(normalizeImportCostSettings({ region: "marte" }).region).toBe("general")
+        expect(normalizeImportCostSettings({ region: "marte" }).region).toBe("cataluna")
+        expect(DEFAULT_IMPORT_COST_SETTINGS.region).toBe("cataluna")
     })
 })
 

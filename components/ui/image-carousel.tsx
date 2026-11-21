@@ -10,9 +10,12 @@ import { Button } from '@/components/ui/button'
 interface ImageCarouselProps {
     images: string[]
     alt?: string
+    /** cover (por defecto) recorta para llenar el hueco; contain enseña la foto entera (galerías) */
+    fit?: "cover" | "contain"
 }
 
-export function ImageCarousel({ images, alt = "Car image" }: ImageCarouselProps) {
+export function ImageCarousel({ images, alt = "Car image", fit = "cover" }: ImageCarouselProps) {
+    const fitClass = fit === "contain" ? "object-contain" : "object-cover"
     const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true })
     const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -60,7 +63,7 @@ export function ImageCarousel({ images, alt = "Car image" }: ImageCarouselProps)
                     <img
                         src={images[0]}
                         alt={alt}
-                        className="w-full h-full object-cover"
+                        className={`w-full h-full ${fitClass}`}
                     />
                 </Zoom>
             </div>
@@ -78,7 +81,7 @@ export function ImageCarousel({ images, alt = "Car image" }: ImageCarouselProps)
                                     <img
                                         src={image}
                                         alt={`${alt} ${index + 1}`}
-                                        className="w-full h-full object-cover block rounded-lg"
+                                        className={`w-full h-full ${fitClass} block rounded-lg`}
                                         style={{ width: '100%', height: '100%' }}
                                     />
                                 </Zoom>

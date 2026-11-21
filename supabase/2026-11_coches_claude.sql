@@ -119,7 +119,7 @@ create policy "mcp_logs_owner_select" on public.mcp_logs for select to authentic
 
 -- 4. Gastos fijos de importación (editables en la Calculadora) --------------------------------------------------------
 insert into public.company_settings (key, value)
-values ('import_costs', '{"transport": 900, "itv": 180, "homologation": 250, "plates": 25, "agency": 200, "region": "general"}'::jsonb)
+values ('import_costs', '{"transport": 900, "itv": 180, "homologation": 250, "plates": 25, "agency": 200, "region": "cataluna"}'::jsonb)
 on conflict (key) do nothing;
 
 -- 5. Tiempo real: los coches aparecen en la pestaña mientras Claude los guarda ---------------------------------------

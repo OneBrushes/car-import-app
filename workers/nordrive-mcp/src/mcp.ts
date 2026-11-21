@@ -6,12 +6,14 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { z } from "zod"
 import {
     CLAUDE_CAR_STATES,
+    MAX_CLAUDE_PHOTOS,
     computeClaudeCar,
     normalizeListingUrl,
     type ClaudeCar,
     type ClaudeCarFields,
 } from "../../../lib/claude-cars"
 import { CARS_TABLE, costSettings, db, logCall, ownerId } from "./db"
+import { deleteUnusedPhotos, rehostPhotos } from "./photos"
 import type { Env } from "./env"
 
 // --- Esquemas ---------------------------------------------------------------------------------------------------------
@@ -45,7 +47,9 @@ const carFields = {
     homologacion: euros("Homologación / ficha técnica (si no lo das, se usa el de los ajustes)"),
     placas: euros("Placas (si no lo das, se usa el de los ajustes)"),
     gestoria: euros("Gestoría (si no lo das, se usa el de los ajustes)"),
-    foto_url: z.string().url().max(2000).describe("URL de la foto principal del anuncio"),
+    foto_url: z.string().url().max(2000).describe("URL de la foto principal (la que mejor muestre el coche entero). Si no la das, la principal es la primera de 'fotos'"),
+    fotos: z.array(z.string().url().max(2000)).max(MAX_CLAUDE_PHOTOS).describe(`URLs de las fotos del anuncio (máx. ${MAX_CLAUDE_PHOTOS}), en orden. Sustituyen a las que hubiera. La app las copia a su almacenamiento para que no se pierdan si se borra el anuncio`),
+    foto_posicion_y: z.number().int().min(0).max(100).describe("Encuadre vertical de la foto principal en la tarjeta: 0 = arriba, 100 = abajo. Si no lo das, la app lo calcula (en fotos verticales centra el tercio inferior, donde suele estar el coche)"),
     notas: z.string().max(4000).describe("Tus notas: por qué es interesante, riesgos, qué preguntar al vendedor…"),
 }
 
@@ -128,6 +132,24 @@ export function buildServer(env: Env): McpServer {
         },
     )
 
+    /**
+     * Columnas de fotos a guardar: copia las fotos a Storage y calcula el encuadre de la principal.
+     * Si solo llega foto_url, se pone delante de las fotos que ya tuviera el coche.
+     */
+    async function photoColumns(input: Partial<ClaudeCarFields>, existingFotos: string[] = []) {
+        if (input.foto_url === undefined && input.fotos === undefined) {
+            return { columns: input.foto_posicion_y !== undefined ? { foto_posicion_y: input.foto_posicion_y } : {}, avisos: [] as string[] }
+        }
+        const list = input.fotos !== undefined ? (input.fotos ?? []) : existingFotos
+        const r = await rehostPhotos(client, env.SUPABASE_URL, input.foto_url ?? undefined, list)
+        return {
+            columns: { foto_url: r.fotos[0] ?? null, fotos: r.fotos, foto_posicion_y: input.foto_posicion_y ?? r.posicionY },
+            avisos: r.avisos,
+        }
+    }
+
+    const withWarnings = (prefix: string, avisos: string[]) => (avisos.length ? `${prefix}\n⚠️ ${avisos.join("\n⚠️ ")}` : prefix)
+
     server.registerTool(
         "guardar_coche",
         {
@@ -149,7 +171,8 @@ export function buildServer(env: Env): McpServer {
             if (existing.error) throw new Error(existing.error.message)
 
             const merged = { ...(existing.data ?? {}), ...incoming } as ClaudeCarFields
-            const row = { ...incoming, ...computeClaudeCar(merged, settings), updated_at: new Date().toISOString() }
+            const photos = await photoColumns(incoming, (existing.data?.fotos as string[] | undefined) ?? [])
+            const row = { ...incoming, ...photos.columns, ...computeClaudeCar(merged, settings), updated_at: new Date().toISOString() }
 
             const saved = existing.data
                 ? await client.from(CARS_TABLE).update(row).eq("id", existing.data.id).select("*").single()
@@ -157,7 +180,12 @@ export function buildServer(env: Env): McpServer {
             if (saved.error) throw new Error(saved.error.message)
             const car = saved.data as ClaudeCar
             const action = existing.data ? "Actualizado (la URL ya estaba guardada)" : "Guardado"
-            return { result: carResult(car, `${action} en 'Guardados por Claude'.`), carId: car.id, resumen: `${action}: ${carName(car)}` }
+            const fotosInfo = car.fotos?.length ? ` · ${car.fotos.length} foto(s)` : ""
+            return {
+                result: carResult(car, withWarnings(`${action} en 'Guardados por Claude'.`, photos.avisos)),
+                carId: car.id,
+                resumen: `${action}: ${carName(car)}${fotosInfo}${photos.avisos.length ? ` · ${photos.avisos.length} foto(s) sin copiar` : ""}`,
+            }
         }),
     )
 
@@ -216,7 +244,8 @@ export function buildServer(env: Env): McpServer {
             if (current.error) throw new Error(current.error.message)
             if (!current.data) return { result: errorResult(`No existe ningún coche de Claude con id ${id}.`), carId: id }
 
-            let row: Record<string, unknown> = { ...patch, updated_at: new Date().toISOString() }
+            const photos = await photoColumns(patch, (current.data.fotos as string[] | undefined) ?? [])
+            let row: Record<string, unknown> = { ...patch, ...photos.columns, updated_at: new Date().toISOString() }
             if (CALC_KEYS.some(key => key in patch)) {
                 const settings = await costSettings(client)
                 row = { ...row, ...computeClaudeCar({ ...current.data, ...patch } as ClaudeCarFields, settings) }
@@ -224,7 +253,7 @@ export function buildServer(env: Env): McpServer {
             const saved = await client.from(CARS_TABLE).update(row).eq("id", id).select("*").single()
             if (saved.error) throw new Error(saved.error.message)
             const car = saved.data as ClaudeCar
-            return { result: carResult(car, "Actualizado."), carId: id, resumen: `${carName(car)}: ${Object.keys(patch).join(", ")}` }
+            return { result: carResult(car, withWarnings("Actualizado.", photos.avisos)), carId: id, resumen: `${carName(car)}: ${Object.keys(patch).join(", ")}` }
         }),
     )
 
@@ -241,6 +270,8 @@ export function buildServer(env: Env): McpServer {
             if (error) throw new Error(error.message)
             if (!data) return { result: errorResult(`No existe ningún coche de Claude con id ${id}.`), carId: id }
             const car = data as ClaudeCar
+            // Si se movió a "mis coches", sus fotos siguen en uso allí
+            if (!car.movido_a && car.fotos?.length) await deleteUnusedPhotos(client, env.SUPABASE_URL, car.fotos).catch(e => console.error("No se pudieron borrar las fotos:", e))
             return { result: { content: [{ type: "text", text: `Borrado: ${carName(car)}\n${car.url}` }] }, carId: id, resumen: `Borrado: ${carName(car)}` }
         }),
     )

@@ -4,8 +4,10 @@
 // Solo la ve la cuenta dueña (is_claude_owner() en Supabase); la base de datos tampoco deja leerlos a nadie más.
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  AlertTriangle, ArrowRightLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Loader2, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
+  AlertTriangle, ArrowRightLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Images, Loader2, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
 } from "lucide-react"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { DEFAULT_PHOTO_POSITION_Y } from "@/lib/image-size"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
@@ -201,6 +203,10 @@ function ClaudeCarCard({ car, busy, onState, onMove }: {
   onMove: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [galleryOpen, setGalleryOpen] = useState(false)
+  const photos = car.fotos?.length ? car.fotos : car.foto_url ? [car.foto_url] : []
+  const mainPhoto = car.foto_url || photos[0]
+  const title = [car.marca, car.modelo].filter(Boolean).join(" ") || "Coche sin nombre"
   const lines = car.desglose?.lines ?? []
   const taxLine = lines.find(l => l.label === "Impuesto de matriculación")
   const href = car.url.startsWith("http") ? car.url : `https://${car.url}`
@@ -213,9 +219,39 @@ function ClaudeCarCard({ car, busy, onState, onMove }: {
         {car.movido_a && <Badge variant="secondary" className="bg-background/90 shadow-sm backdrop-blur">En mis coches</Badge>}
       </div>
 
-      <div className="aspect-[16/10] w-full bg-muted">
-        <ImageCarousel images={car.foto_url ? [car.foto_url] : []} alt={`${car.marca ?? ""} ${car.modelo ?? ""}`} />
-      </div>
+      {/* Foto principal encuadrada para que se vea el coche (no el cielo); al pulsar, galería con todas */}
+      {mainPhoto ? (
+        <button
+          type="button"
+          onClick={() => setGalleryOpen(true)}
+          className="relative block aspect-[16/10] w-full overflow-hidden bg-muted"
+          title={photos.length > 1 ? `Ver las ${photos.length} fotos` : "Ver foto"}
+        >
+          <img
+            src={mainPhoto}
+            alt={title}
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            style={{ objectPosition: `center ${car.foto_posicion_y ?? DEFAULT_PHOTO_POSITION_Y}%` }}
+          />
+          {photos.length > 1 && (
+            <span className="tabular absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white backdrop-blur">
+              <Images className="h-3.5 w-3.5" /> {photos.length}
+            </span>
+          )}
+        </button>
+      ) : (
+        <div className="flex aspect-[16/10] w-full items-center justify-center bg-muted text-sm text-muted-foreground">Sin foto</div>
+      )}
+
+      <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
+        <DialogContent className="max-w-4xl gap-3 p-3 sm:p-4">
+          <DialogTitle className="pr-8 text-base">{title}{car.version ? ` · ${car.version}` : ""}</DialogTitle>
+          <div className="aspect-[4/3] w-full overflow-hidden rounded-lg bg-black">
+            <ImageCarousel images={photos} alt={title} fit="contain" />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="space-y-3 p-4">
         <div className="min-w-0">
