@@ -2,7 +2,7 @@
 
 // Visor de fotos a pantalla completa (yet-another-react-lightbox): deslizar con el dedo, flechas ← → y teclado,
 // miniaturas, zoom con doble clic o pellizco, cerrar con Esc, la X o deslizando hacia abajo, y precarga de las vecinas.
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Lightbox from "yet-another-react-lightbox"
 import Zoom from "yet-another-react-lightbox/plugins/zoom"
 import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails"
@@ -41,6 +41,15 @@ export function PhotoViewer({ photos, open, index, onClose, mainPhoto, onSetMain
   const [saving, setSaving] = useState(false)
   useEffect(() => { if (open) setCurrent(index) }, [open, index])
 
+  // IMPORTANTE: la librería vuelve a la foto `index` cada vez que recibe un array `slides` nuevo. Cambiar de foto
+  // vuelve a pintar este componente; si `slides` se creara en cada render, el visor saltaría siempre a la primera
+  // (el bug de "no avanza de la 1/15"). Por eso solo cambia cuando cambian de verdad las fotos.
+  const photosKey = photos.join("\n")
+  const slides = useMemo(
+    () => photosKey.split("\n").filter(Boolean).map(src => ({ src, alt: title, thumbnail: thumbnailUrl(src) })),
+    [photosKey, title],
+  )
+
   const currentSrc = photos[current]
   const isMain = !!currentSrc && currentSrc === (mainPhoto ?? photos[0])
 
@@ -70,7 +79,7 @@ export function PhotoViewer({ photos, open, index, onClose, mainPhoto, onSetMain
       open={open}
       close={onClose}
       index={index}
-      slides={photos.map(src => ({ src, alt: title, thumbnail: thumbnailUrl(src) }))}
+      slides={slides}
       plugins={[Zoom, Thumbnails, Counter]}
       on={{ view: ({ index: i }) => setCurrent(i) }}
       carousel={{ preload: 1, finite: photos.length <= 1 }}
