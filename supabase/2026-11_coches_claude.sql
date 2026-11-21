@@ -9,7 +9,7 @@
 --  · company_settings 'import_costs': gastos fijos de importación y comunidad por defecto (los editas en la Calculadora;
 --    los usan la Calculadora y el MCP).
 --
--- ⚠️ ANTES DE EJECUTAR: cambia TU_EMAIL@EJEMPLO.COM (abajo, sección 1) por el email con el que entras en la app.
+-- Dueño: gfabregaat@gmail.com (sección 1). Para cambiarlo, edita ese email y vuelve a ejecutar.
 -- =====================================================================================================================
 
 begin;
@@ -22,13 +22,13 @@ create table if not exists public.mcp_config (
 );
 
 insert into public.mcp_config (id, owner_id)
-select true, u.id from auth.users u where lower(u.email) = lower('TU_EMAIL@EJEMPLO.COM')
+select true, u.id from auth.users u where lower(u.email) = lower('gfabregaat@gmail.com')
 on conflict (id) do update set owner_id = excluded.owner_id, updated_at = now();
 
 do $$
 begin
   if not exists (select 1 from public.mcp_config) then
-    raise exception 'No se ha encontrado el usuario: cambia TU_EMAIL@EJEMPLO.COM por tu email y vuelve a ejecutar';
+    raise exception 'No se ha encontrado el usuario gfabregaat@gmail.com en auth.users';
   end if;
 end $$;
 
