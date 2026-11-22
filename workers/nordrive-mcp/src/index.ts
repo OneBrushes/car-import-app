@@ -9,7 +9,9 @@
 // Despliegue: ver workers/nordrive-mcp/README.md
 import { AuthorizationError, CimdFetchError, OAuthProvider, type ConsentDescription } from "@cloudflare/workers-oauth-provider"
 import { handleMcp, refreshCarPhotos } from "./mcp"
-import { db, logCall, ownerId } from "./db"
+import { CARS_TABLE, costSettings, db, logCall, ownerId } from "./db"
+import { reviewCars, runDailyBatch } from "./revision"
+import { madridHour } from "../../../lib/listing-check"
 import type { Env } from "./env"
 
 const SCOPE = "coches"
@@ -49,6 +51,28 @@ export default {
         if (env.MCP_SECRET.length < 32) return text("MCP_SECRET debe tener al menos 32 caracteres", 500)
         return getProvider(env).fetch(request, env, ctx)
     },
+
+    // Revisión diaria de anuncios: el cron salta cada 10 min de 04:00 a 05:59 UTC y solo trabaja a las 6 de Madrid
+    // (06:00–06:50, en invierno y en verano). Cada ejecución revisa la siguiente tanda de coches pendientes de hoy.
+    async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+        if (madridHour(new Date(controller.scheduledTime)) !== 6) return
+        ctx.waitUntil((async () => {
+            const client = db(env)
+            try {
+                const { revisados, results } = await runDailyBatch(client, await costSettings(client))
+                if (!revisados) return
+                const count = (r: string) => results.filter(x => x.resultado === r).length
+                const descartados = results.filter(x => x.patch.estado === "descartado").length
+                const bajadas = results.filter(x => x.patch.precio_bajado === true).length
+                await logCall(client, {
+                    herramienta: "revision_diaria", ok: true,
+                    resumen: `${revisados} revisados · ${count("activo")} activos · ${count("retirado")} retirados${descartados ? ` (${descartados} descartados)` : ""} · ${count("no_comprobado")} sin comprobar${bajadas ? ` · ${bajadas} bajadas de precio` : ""}`,
+                })
+            } catch (e) {
+                await logCall(client, { herramienta: "revision_diaria", ok: false, error: e instanceof Error ? e.message : String(e) })
+            }
+        })())
+    },
 } satisfies ExportedHandler<Env>
 
 // --- Pantalla de autorización ---------------------------------------------------------------------------------------
@@ -57,6 +81,7 @@ async function defaultHandler(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === "/" && request.method === "GET") return text("NorDrive MCP · el servidor está en /mcp")
     if (url.pathname === "/api/fotos") return photosApi(request, env)
+    if (url.pathname === "/api/revision") return revisionApi(request, env)
     if (url.pathname !== "/authorize") return text("No encontrado", 404)
 
     const oauth = env.OAUTH_PROVIDER
@@ -190,4 +215,22 @@ function safeEqual(a: string, b: string): boolean {
     let diff = x.length ^ y.length
     for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0)
     return diff === 0
+}
+
+// POST /api/revision  { ids: [...], simular?: true }  con "Authorization: Bearer MCP_SECRET".
+// Revisa esos anuncios ahora mismo (de uno en uno, con pausa). Por defecto en simulación: no guarda nada.
+async function revisionApi(request: Request, env: Env): Promise<Response> {
+    if (request.method !== "POST") return text("Usa POST", 405)
+    const token = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "")
+    if (!token || !safeEqual(token, env.MCP_SECRET)) return text("No autorizado", 401)
+    const body = (await request.json().catch(() => ({}))) as { ids?: string[]; simular?: boolean }
+    if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 10) return text("Pasa entre 1 y 10 ids", 400)
+    const client = db(env)
+    const [{ data, error }, settings] = await Promise.all([client.from(CARS_TABLE).select("*").in("id", body.ids), costSettings(client)])
+    if (error) return text(error.message, 500)
+    const order = new Map(body.ids.map((id, i) => [id, i]))
+    const cars = (data ?? []).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    const simular = body.simular !== false
+    const results = await reviewCars(client, cars as never, settings, { simular, origen: "api" })
+    return new Response(JSON.stringify({ simular, results }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } })
 }

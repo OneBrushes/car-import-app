@@ -22,6 +22,8 @@ import {
     type ClaudeContact,
 } from "../../../lib/claude-cars"
 import { HACIENDA_MIN_SCORE, buscarValorHacienda, needsVersionCheck, type HaciendaMatch } from "../../../lib/hacienda"
+import { REVIEWED_CAR_STATES, planReview, type CarRow } from "../../../lib/listing-check"
+import { saveReviews } from "./revision"
 import { CARS_TABLE, CONTACTS_TABLE, costSettings, db, logCall, ownerId } from "./db"
 import { publicPrefix, pruneCarFolder, refreshFromListing, samePhoto, storePhotos, type StoredPhotos } from "./photos"
 import type { Env } from "./env"
@@ -111,6 +113,10 @@ function summary(c: ClaudeCar) {
         const waiting = awaitingReplySince(c.contactos)
         parts.push(`Último contacto: ${fecha(last.fecha)} (${last.direccion}, ${last.canal})${waiting ? ` · sin respuesta desde hace ${daysSince(waiting)} día(s)` : ""}`)
     }
+    const ad = c as ClaudeCar & { anuncio_estado?: string | null; anuncio_fallos_seguidos?: number | null; precio_bajado?: boolean | null }
+    if (ad.anuncio_estado === "retirado") parts.push(`⚠️ Anuncio retirado en la última revisión (${ad.anuncio_fallos_seguidos ?? 1}/2)`)
+    else if (ad.anuncio_estado === "no_comprobado") parts.push("Anuncio sin comprobar hoy (revisar con revisar_anuncios_pendientes)")
+    if (ad.precio_bajado) parts.push("📉 Ha bajado de precio")
     if (c.aviso_impuesto) parts.push(`⚠️ ${c.aviso_impuesto}`)
     return parts.join("\n")
 }
@@ -252,7 +258,7 @@ function photoNotes(stored: { avisos: string[]; pendientes: number; leidas?: num
 export function buildServer(env: Env): McpServer {
     const client = db(env)
     const server = new McpServer(
-        { name: "nordrive-coches", version: "1.4.0" },
+        { name: "nordrive-coches", version: "1.5.0" },
         {
             jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
             instructions:
@@ -583,6 +589,64 @@ export function buildServer(env: Env): McpServer {
             return {
                 result: { content: [{ type: "text", text }] },
                 resumen: `${simular ? "simulación · " : ""}${done.length} recalculados, ${kept.length} de Claude sin tocar, ${missing.length} sin encontrar${forzar ? " (forzado)" : ""}${left ? `, quedan ${left}` : ""}`,
+            }
+        }),
+    )
+
+    server.registerTool(
+        "revisar_anuncios_pendientes",
+        {
+            title: "Anuncios pendientes de comprobar",
+            description:
+                "Lista los coches activos (nuevo, interesante, contactado) cuyo anuncio no se ha podido comprobar en la revisión automática de cada mañana " +
+                "(anuncio_estado = no_comprobado; casi siempre mobile.de, que bloquea al servidor). Ábrelos con el navegador (Claude en Chrome), mira si el " +
+                "anuncio sigue publicado y su precio, y guarda el resultado de cada uno con marcar_anuncio.",
+            inputSchema: { limite: z.number().int().min(1).max(100).optional().describe("Máximo de coches (por defecto 50)") },
+            annotations: { readOnlyHint: true },
+        },
+        async ({ limite }) => logged(client, "revisar_anuncios_pendientes", async () => {
+            const { data, error } = await client.from(CARS_TABLE)
+                .select("id, marca, modelo, anio, url, precio_alemania, anuncio_ultima_comprobacion, anuncio_fallos_seguidos")
+                .in("estado", [...REVIEWED_CAR_STATES]).eq("anuncio_estado", "no_comprobado")
+                .order("anuncio_ultima_comprobacion", { ascending: true }).limit(limite ?? 50)
+            if (error) throw new Error(error.message)
+            const cars = data ?? []
+            const text = cars.length
+                ? `${cars.length} anuncio(s) por comprobar. Abre cada URL, comprueba si sigue publicado y su precio, y llama a marcar_anuncio(id, estado, precio).\n` +
+                  cars.map(c => `• [${c.id}] ${carName(c as Partial<ClaudeCar>)} · guardado ${eur(c.precio_alemania)}${c.anuncio_fallos_seguidos ? ` · ya salió retirado ${c.anuncio_fallos_seguidos} vez` : ""}\n  ${c.url}`).join("\n")
+                : "No hay anuncios pendientes de comprobar."
+            return { result: { content: [{ type: "text", text }, { type: "text", text: JSON.stringify(cars, null, 2) }] }, resumen: `${cars.length} pendiente(s)` }
+        }),
+    )
+
+    server.registerTool(
+        "marcar_anuncio",
+        {
+            title: "Marcar anuncio comprobado",
+            description:
+                "Guarda lo que has visto al abrir un anuncio con el navegador: 'activo' (sigue publicado; pasa el precio que ves) o 'retirado' " +
+                "(la página dice que ya no está, redirige al buscador o da 404). Igual que la revisión automática: retirado dos veces seguidas → el coche " +
+                "pasa a descartado con una nota; si el precio ha bajado, se recalculan el coste y el beneficio. Si no has podido verlo (captcha), no lo marques.",
+            inputSchema: {
+                id: z.string().uuid().describe("id del coche (de revisar_anuncios_pendientes)"),
+                estado: z.enum(["activo", "retirado"]).describe("Lo que has visto"),
+                precio: z.number().positive().optional().describe("Precio que muestra el anuncio ahora, en euros (si está activo)"),
+                nota: z.string().trim().max(300).optional().describe("Detalle opcional, p. ej. 'redirige al buscador' o 'reservado'"),
+            },
+        },
+        async ({ id, estado, precio, nota }) => logged(client, "marcar_anuncio", async () => {
+            const [{ data: car, error }, settings] = await Promise.all([client.from(CARS_TABLE).select("*").eq("id", id).maybeSingle(), costSettings(client)])
+            if (error) throw new Error(error.message)
+            if (!car) return { result: errorResult(`No existe ningún coche de Claude con id ${id}.`), carId: id }
+            const review = planReview(car as CarRow, {
+                resultado: estado, precio: estado === "activo" ? precio ?? null : null, http_status: null,
+                motivo: `comprobado por Claude con el navegador${nota ? `: ${nota}` : ""}`,
+            }, settings, new Date(), "claude")
+            await saveReviews(client, [review])
+            return {
+                result: { content: [{ type: "text", text: `${review.nombre}: ${estado}. ${review.cambios.join("; ")}.` }] },
+                carId: id,
+                resumen: `${review.nombre}: ${estado}${precio ? ` · ${eur(precio)}` : ""}${review.patch.estado === "descartado" ? " → descartado" : ""}`,
             }
         }),
     )

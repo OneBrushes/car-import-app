@@ -4,9 +4,10 @@
 // Solo la ve la cuenta dueña (is_claude_owner() en Supabase); la base de datos tampoco deja leerlos a nadie más.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  AlertTriangle, ArrowRightLeft, ArrowUpDown, Bookmark, Bot, ClipboardPaste, ChevronDown, ChevronUp, Clock, ExternalLink, History, ImageDown, Images, Loader2, MessageSquare, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
+  AlertTriangle, ArrowRightLeft, ArrowUpDown, TrendingDown, Bookmark, Bot, ClipboardPaste, ChevronDown, ChevronUp, Clock, ExternalLink, History, ImageDown, Images, Loader2, MessageSquare, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
 } from "lucide-react"
 import { PhotoViewer } from "@/components/photo-viewer"
+import { ClaudeReviewPanel } from "@/components/claude-review-panel"
 import { BOOKMARKLET, photosFromPasted } from "@/components/import-from-url"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { autoFramingY, DEFAULT_PHOTO_POSITION_Y } from "@/lib/image-size"
@@ -289,6 +290,8 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
 
       {showLogs && <LogsPanel logs={logs} />}
 
+      <ClaudeReviewPanel cars={cars} />
+
       <div className="flex flex-wrap items-center gap-1.5">
         <Select value={sort} onValueChange={v => changeSort(v as SortKey)}>
           <SelectTrigger size="sm" className="h-8 w-auto gap-1.5 rounded-full text-sm" aria-label="Ordenar por">
@@ -425,6 +428,16 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
               <MessageSquare className="h-3 w-3" /> Respondió {ago(lastContact.fecha)}
             </Badge>
           )
+        )}
+        {car.anuncio_estado === "retirado" && !discarded && (
+          <Badge className="border-transparent bg-destructive text-white shadow-sm" title="La revisión diaria no encuentra el anuncio; a la 2.ª vez seguida se descarta">
+            Anuncio retirado {car.anuncio_fallos_seguidos ?? 1}/2
+          </Badge>
+        )}
+        {car.precio_bajado && !discarded && (
+          <Badge className="border-transparent bg-primary text-primary-foreground shadow-sm" title="Bajó de precio: coste y beneficio recalculados">
+            <TrendingDown className="h-3 w-3" /> Bajó de precio
+          </Badge>
         )}
       </div>
 

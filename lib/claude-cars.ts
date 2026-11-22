@@ -81,6 +81,12 @@ export interface ClaudeCarFields {
     valor_hacienda_version?: string | null
     /** Había varias versiones posibles en las tablas de Hacienda: comprobar que es la buena */
     verificar_version?: boolean | null
+    /** Revisión diaria del anuncio (lib/listing-check.ts) */
+    anuncio_estado?: "activo" | "retirado" | "no_comprobado" | null
+    anuncio_ultima_comprobacion?: string | null
+    anuncio_fallos_seguidos?: number | null
+    precio_actual?: number | null
+    precio_bajado?: boolean | null
     /** Facilidad de venta en España (1 = fácil … 5 = difícil) */
     facilidad_venta?: number | null
     /** Por qué se vende fácil o difícil (demanda, color, cambio manual, precio de mercado…) */

@@ -16,5 +16,9 @@ SUPABASE_URL = "https://luzacvchtxkurisuywic.supabase.co"
 binding = "OAUTH_KV"
 id = "94265d2988b34768a127eaa47ee3e9b4"
 
+# Revisión diaria de anuncios (src/revision.ts): cada 10 min de 04:00 a 05:59 UTC; el código solo actúa a las 6 de Madrid
+[triggers]
+crons = ["*/10 4,5 * * *"]
+
 [observability]
 enabled = true
