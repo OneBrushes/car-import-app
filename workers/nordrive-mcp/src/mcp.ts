@@ -466,7 +466,7 @@ export function buildServer(env: Env): McpServer {
             inputSchema: {
                 coche_id: z.string().uuid().optional().describe("id del coche (o usa url)"),
                 url: z.string().trim().min(8).max(2000).optional().describe("URL del anuncio del coche (o usa coche_id)"),
-                canal: z.enum(CONTACT_CHANNELS).describe("Por dónde: mobile.de, email, whatsapp, telefono u otro"),
+                canal: z.enum(CONTACT_CHANNELS).describe("Por dónde: mobile.de, autoscout24 (formulario o chat de AutoScout24), email, whatsapp, telefono u otro"),
                 direccion: z.enum(CONTACT_DIRECTIONS).describe("'enviado' si lo mandamos nosotros, 'recibido' si es la respuesta del vendedor"),
                 mensaje: z.string().trim().min(1).max(20000).describe("Texto completo del mensaje (o resumen de la llamada)"),
                 asunto: z.string().trim().max(300).optional().describe("Asunto, si lo tiene"),

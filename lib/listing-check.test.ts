@@ -134,3 +134,12 @@ describe("estado 'retirado' (Vendido / retirado)", () => {
         expect(isRetiredDiscard({ estado: "nuevo", notas: "❌ Anuncio retirado", anuncio_estado: "retirado" })).toBe(false)
     })
 })
+
+import { CONTACT_CHANNELS, CONTACT_CHANNEL_LABELS } from "./claude-cars"
+
+describe("contactos · canal autoscout24", () => {
+    it("está entre los canales permitidos, con su nombre", () => {
+        expect(CONTACT_CHANNELS).toEqual(["mobile.de", "autoscout24", "email", "whatsapp", "telefono", "otro"])
+        expect(CONTACT_CHANNEL_LABELS.autoscout24).toBe("AutoScout24")
+    })
+})

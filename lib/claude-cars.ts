@@ -197,10 +197,10 @@ export interface ClaudeCar extends ClaudeCarFields, ClaudeCarCalc {
 
 // --- Historial de contactos con el vendedor (tabla contactos_claude) -----------------------------------------------------
 
-export const CONTACT_CHANNELS = ["mobile.de", "email", "whatsapp", "telefono", "otro"] as const
+export const CONTACT_CHANNELS = ["mobile.de", "autoscout24", "email", "whatsapp", "telefono", "otro"] as const
 export type ContactChannel = (typeof CONTACT_CHANNELS)[number]
 export const CONTACT_CHANNEL_LABELS: Record<ContactChannel, string> = {
-    "mobile.de": "mobile.de", email: "Email", whatsapp: "WhatsApp", telefono: "Teléfono", otro: "Otro",
+    "mobile.de": "mobile.de", autoscout24: "AutoScout24", email: "Email", whatsapp: "WhatsApp", telefono: "Teléfono", otro: "Otro",
 }
 export const CONTACT_DIRECTIONS = ["enviado", "recibido"] as const
 export type ContactDirection = (typeof CONTACT_DIRECTIONS)[number]
