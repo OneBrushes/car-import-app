@@ -3,7 +3,7 @@
 -- 1) Nuevo estado "candidato": lo que encuentra la búsqueda nocturna y pasa todos los filtros
 alter table public.coches_claude drop constraint if exists coches_claude_estado_check;
 alter table public.coches_claude add constraint coches_claude_estado_check
-  check (estado in ('candidato', 'nuevo', 'interesante', 'contactado', 'descartado', 'comprado'));
+  check (estado in ('candidato', 'nuevo', 'interesante', 'contactado', 'descartado', 'comprado', 'retirado'));
 
 -- 2) Búsquedas guardadas (las crea Claude con crear_busqueda o tú desde la app)
 create table if not exists public.busquedas (
