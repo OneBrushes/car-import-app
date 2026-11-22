@@ -23,3 +23,22 @@ describe("viaje para traer el coche", () => {
         expect(formatTravelHours(0.5)).toBe("30 min")
     })
 })
+
+import { activeFilterCount, matchesCarFilters } from "./claude-cars"
+
+describe("filtros por rangos de Guardados por Claude", () => {
+    const golf = { marca: "Volkswagen", precio_alemania: 28000, km: 60000, anio: 2021, coste_total_espana: 32000, beneficio: 3500 }
+    const m2 = { marca: "BMW", precio_alemania: 39000, km: 30000, anio: 2019, coste_total_espana: 45000, beneficio: null }
+    it("varios filtros a la vez", () => {
+        const f = { precioMax: 30000, kmMax: 80000, anioMin: 2020 }
+        expect(activeFilterCount(f)).toBe(3)
+        expect(matchesCarFilters(golf, f)).toBe(true)
+        expect(matchesCarFilters(m2, f)).toBe(false)
+    })
+    it("si falta el dato y el filtro está puesto, no pasa; marcas", () => {
+        expect(matchesCarFilters(m2, { beneficioMin: 1000 })).toBe(false)
+        expect(matchesCarFilters(m2, { marcas: ["bmw"] })).toBe(true)
+        expect(matchesCarFilters(golf, { marcas: ["BMW", "Audi"] })).toBe(false)
+        expect(matchesCarFilters(golf, {})).toBe(true)
+    })
+})

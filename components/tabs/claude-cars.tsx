@@ -4,7 +4,7 @@
 // Solo la ve la cuenta dueña (is_claude_owner() en Supabase); la base de datos tampoco deja leerlos a nadie más.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  AlertTriangle, ArrowRightLeft, ArrowUpDown, TrendingDown, Bookmark, Bot, ClipboardPaste, ChevronDown, ChevronUp, Clock, ExternalLink, History, ImageDown, Images, Loader2, MessageSquare, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
+  AlertTriangle, ArrowRightLeft, ArrowUpDown, SlidersHorizontal, TrendingDown, Bookmark, Bot, ClipboardPaste, ChevronDown, ChevronUp, Clock, ExternalLink, History, ImageDown, Images, Loader2, MessageSquare, RefreshCw, ShieldCheck, Star, Undo2, XCircle,
 } from "lucide-react"
 import { PhotoViewer } from "@/components/photo-viewer"
 import { ClaudeReviewPanel } from "@/components/claude-review-panel"
@@ -30,6 +30,9 @@ import {
   needsFollowUp,
   saleEaseLabel,
   travelTransport,
+  activeFilterCount,
+  matchesCarFilters,
+  type CarRangeFilters,
   formatTravelHours,
   TRAVEL_DESTINATION,
   SALE_EASE_LABELS,
@@ -113,6 +116,31 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "anio", label: "Más nuevo" },
 ]
 const SORT_STORAGE_KEY = "nordrive.claude.sort"
+const FILTERS_STORAGE_KEY = "nordrive.claude.filtros"
+
+/** Par de casillas "desde / hasta" (vacío = sin límite) */
+function RangeInput({ label, min, max, step, onChange, onlyMin, onlyMax }: {
+  label: string
+  min?: number | null
+  max?: number | null
+  step: number
+  onChange: (min: number | null, max: number | null) => void
+  onlyMin?: boolean
+  onlyMax?: boolean
+}) {
+  const parse = (v: string) => (v.trim() === "" ? null : Number(v.replace(/\./g, "").replace(",", ".")))
+  const cls = "h-8 w-full min-w-0 rounded-md border bg-background px-2 text-sm tabular outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+  return (
+    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+      <span>{label}</span>
+      <div className="flex items-center gap-1.5">
+        {!onlyMax && <input type="number" inputMode="numeric" step={step} placeholder="desde" className={cls} value={min ?? ""} onChange={e => onChange(parse(e.target.value), max ?? null)} />}
+        {!onlyMin && !onlyMax && <span>–</span>}
+        {!onlyMin && <input type="number" inputMode="numeric" step={step} placeholder="hasta" className={cls} value={max ?? ""} onChange={e => onChange(min ?? null, parse(e.target.value))} />}
+      </div>
+    </label>
+  )
+}
 
 /** Valor por el que se ordena (mayor primero) y si se ordena de menor a mayor; los que no tienen el dato van al final */
 function sortValue(car: ClaudeCar, key: SortKey): number | null {
@@ -220,12 +248,28 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
     try { localStorage.setItem(SORT_STORAGE_KEY, key) } catch {}
   }
 
+  // Filtros por rangos (precio, km, año…): se pueden combinar y se recuerdan en este navegador
+  const [ranges, setRanges] = useState<CarRangeFilters>({})
+  const [showFilters, setShowFilters] = useState(false)
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(FILTERS_STORAGE_KEY) ?? "null")
+      if (saved && typeof saved === "object") setRanges(saved)
+    } catch {}
+  }, [])
+  const changeRanges = (next: CarRangeFilters) => {
+    setRanges(next)
+    try { localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(next)) } catch {}
+  }
+  const nFilters = activeFilterCount(ranges)
+  const brands = useMemo(() => [...new Set(cars.map(c => c.marca).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "es")), [cars])
+
   const visible = useMemo(
     () => sortClaudeCars(cars.filter(car =>
-      filter === "activos" ? car.estado !== "descartado"
+      (filter === "activos" ? car.estado !== "descartado"
         : filter === "sin_respuesta" ? car.estado !== "descartado" && needsFollowUp(car.contactos)
-          : car.estado === filter), sort),
-    [cars, filter, sort],
+          : car.estado === filter) && matchesCarFilters(car, ranges)), sort),
+    [cars, filter, sort, ranges],
   )
 
   const patch = (id: string, changes: Partial<ClaudeCar>) =>
@@ -305,6 +349,13 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
             {SORT_OPTIONS.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
           </SelectContent>
         </Select>
+        <button
+          type="button"
+          onClick={() => setShowFilters(v => !v)}
+          className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors ${nFilters ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Filtros{nFilters ? <span className="tabular rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{nFilters}</span> : null}
+        </button>
         <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
         {(["activos", "sin_respuesta", ...CLAUDE_CAR_STATES] as Filter[]).map(f => (
           <button
@@ -318,9 +369,47 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
         ))}
       </div>
 
+      {showFilters && (
+        <div className="space-y-3 rounded-xl border bg-card p-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <RangeInput label="Precio Alemania (€)" min={ranges.precioMin} max={ranges.precioMax} step={500}
+              onChange={(precioMin, precioMax) => changeRanges({ ...ranges, precioMin, precioMax })} />
+            <RangeInput label="Kilómetros" min={ranges.kmMin} max={ranges.kmMax} step={5000}
+              onChange={(kmMin, kmMax) => changeRanges({ ...ranges, kmMin, kmMax })} />
+            <RangeInput label="Año" min={ranges.anioMin} max={ranges.anioMax} step={1}
+              onChange={(anioMin, anioMax) => changeRanges({ ...ranges, anioMin, anioMax })} />
+            <RangeInput label="Coste en España máx. (€)" max={ranges.costeMax} step={500} onlyMax
+              onChange={(_, costeMax) => changeRanges({ ...ranges, costeMax })} />
+            <RangeInput label="Beneficio mín. (€)" min={ranges.beneficioMin} step={500} onlyMin
+              onChange={beneficioMin => changeRanges({ ...ranges, beneficioMin })} />
+          </div>
+          {brands.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs font-medium text-muted-foreground">Marca</span>
+              {brands.map(b => {
+                const on = ranges.marcas?.includes(b)
+                return (
+                  <button key={b} type="button"
+                    onClick={() => changeRanges({ ...ranges, marcas: on ? ranges.marcas!.filter(m => m !== b) : [...(ranges.marcas ?? []), b] })}
+                    className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
+                    {b}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{visible.length} coche(s) con estos filtros</span>
+            {nFilters > 0 && <button type="button" className="font-medium text-foreground underline-offset-2 hover:underline" onClick={() => changeRanges({})}>Quitar filtros</button>}
+          </div>
+        </div>
+      )}
+
       {visible.length === 0 ? (
         <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">
-          {cars.length === 0
+          {cars.length > 0 && nFilters > 0 ? (
+            <>Ningún coche cumple los filtros. <button type="button" className="font-medium text-foreground underline" onClick={() => changeRanges({})}>Quitar filtros</button></>
+          ) : cars.length === 0
             ? "Todavía no hay coches. Pídele a Claude en claude.ai que busque coches en mobile.de y los guarde con la herramienta guardar_coche."
             : filter === "sin_respuesta" ? "Nadie te debe una respuesta: todos los vendedores han contestado o se les escribió hace menos de 3 días." : "No hay coches en este estado."}
         </div>

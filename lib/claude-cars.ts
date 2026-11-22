@@ -35,6 +35,42 @@ export const SALE_EASE_LABELS: Record<SaleEase, string> = {
 export const saleEaseLabel = (n: number | null | undefined) =>
     n != null && n >= 1 && n <= 5 ? SALE_EASE_LABELS[Math.round(n) as SaleEase] : null
 
+/** Filtros por rangos de la pestaña "Guardados por Claude" (todos a la vez; vacío = sin filtro) */
+export interface CarRangeFilters {
+    precioMin?: number | null
+    precioMax?: number | null
+    costeMax?: number | null
+    kmMin?: number | null
+    kmMax?: number | null
+    anioMin?: number | null
+    anioMax?: number | null
+    beneficioMin?: number | null
+    marcas?: string[]
+}
+
+const isSet = (n: number | null | undefined): n is number => n != null && Number.isFinite(n)
+
+/** Cuántos filtros hay puestos */
+export function activeFilterCount(f: CarRangeFilters): number {
+    return [f.precioMin, f.precioMax, f.costeMax, f.kmMin, f.kmMax, f.anioMin, f.anioMax, f.beneficioMin].filter(isSet).length + (f.marcas?.length ? 1 : 0)
+}
+
+/** ¿Cumple el coche todos los filtros? Si un filtro está puesto y al coche le falta ese dato, no lo cumple */
+export function matchesCarFilters(car: Partial<ClaudeCar>, f: CarRangeFilters): boolean {
+    const inRange = (v: number | null | undefined, min?: number | null, max?: number | null) => {
+        if (!isSet(min) && !isSet(max)) return true
+        if (v == null || !Number.isFinite(v)) return false
+        return (!isSet(min) || v >= min) && (!isSet(max) || v <= max)
+    }
+    if (!inRange(car.precio_alemania, f.precioMin, f.precioMax)) return false
+    if (!inRange(car.coste_total_espana, null, f.costeMax)) return false
+    if (!inRange(car.km, f.kmMin, f.kmMax)) return false
+    if (!inRange(car.anio, f.anioMin, f.anioMax)) return false
+    if (!inRange(car.beneficio, f.beneficioMin, null)) return false
+    if (f.marcas?.length && !f.marcas.some(m => m.toLowerCase() === (car.marca ?? "").toLowerCase())) return false
+    return true
+}
+
 /** A dónde se trae el coche (base de NorDrive) */
 export const TRAVEL_DESTINATION = "Sant Cugat"
 
