@@ -29,6 +29,9 @@ import {
   daysSince,
   needsFollowUp,
   saleEaseLabel,
+  travelTransport,
+  formatTravelHours,
+  TRAVEL_DESTINATION,
   SALE_EASE_LABELS,
   SALE_EASE_LEVELS,
   sortContacts,
@@ -544,6 +547,23 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
             ].filter(Boolean).join(" · ") || "Sin datos"}
           </p>
         </div>
+
+        {(car.viaje_ciudad_origen || car.viaje_km || car.viaje_coste_ruta != null) && (
+          <p className="text-sm text-muted-foreground" title={[
+            car.viaje_coste_ruta != null ? `Ruta (gasolina + peajes): ${formatEUR(car.viaje_coste_ruta)}` : null,
+            car.viaje_extras ? `Extras (vuelo, hotel, comidas, placas): ${formatEUR(car.viaje_extras)}` : null,
+            travelTransport(car) != null ? `Transporte total: ${formatEUR(travelTransport(car)!)}` : null,
+            car.viaje_detalle,
+          ].filter(Boolean).join("\n") || undefined}>
+            🚗 {[
+              `${car.viaje_ciudad_origen ?? "?"} → ${TRAVEL_DESTINATION}`,
+              car.viaje_km ? `${car.viaje_km.toLocaleString("es-ES")} km` : null,
+              formatTravelHours(car.viaje_horas),
+              car.viaje_coste_ruta != null ? formatEUR(car.viaje_coste_ruta) : null,
+            ].filter(Boolean).join(" · ")}
+            {!!car.viaje_extras && <span className="text-xs"> + {formatEUR(car.viaje_extras)} extras</span>}
+          </p>
+        )}
 
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {(car.tipo_vendedor || car.nombre_vendedor) && (

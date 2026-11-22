@@ -35,6 +35,23 @@ export const SALE_EASE_LABELS: Record<SaleEase, string> = {
 export const saleEaseLabel = (n: number | null | undefined) =>
     n != null && n >= 1 && n <= 5 ? SALE_EASE_LABELS[Math.round(n) as SaleEase] : null
 
+/** A dónde se trae el coche (base de NorDrive) */
+export const TRAVEL_DESTINATION = "Sant Cugat"
+
+/** Transporte cuando se va a buscar el coche conduciendo: ruta (gasolina + peajes) + extras. null si no hay coste de ruta */
+export function travelTransport(car: Pick<ClaudeCarFields, "viaje_coste_ruta" | "viaje_extras">): number | null {
+    if (car.viaje_coste_ruta == null || !Number.isFinite(car.viaje_coste_ruta)) return null
+    return Math.round((car.viaje_coste_ruta + (car.viaje_extras ?? 0)) * 100) / 100
+}
+
+/** 13.1667 → "13 h 10 min" */
+export function formatTravelHours(h: number | null | undefined): string | null {
+    if (h == null || !Number.isFinite(h) || h <= 0) return null
+    const total = Math.round(h * 60)
+    const hh = Math.floor(total / 60), mm = total % 60
+    return hh ? (mm ? `${hh} h ${mm} min` : `${hh} h`) : `${mm} min`
+}
+
 /** Máximo de fotos por coche */
 export const MAX_CLAUDE_PHOTOS = 30
 
@@ -87,6 +104,15 @@ export interface ClaudeCarFields {
     anuncio_fallos_seguidos?: number | null
     precio_actual?: number | null
     precio_bajado?: boolean | null
+    /** Viaje para traer el coche conduciendo (si hay coste de ruta, el transporte = ruta + extras) */
+    viaje_ciudad_origen?: string | null
+    viaje_km?: number | null
+    viaje_horas?: number | null
+    /** Gasolina + peajes (ViaMichelin) */
+    viaje_coste_ruta?: number | null
+    /** Vuelo + hotel + comidas + placas de exportación */
+    viaje_extras?: number | null
+    viaje_detalle?: string | null
     /** Facilidad de venta en España (1 = fácil … 5 = difícil) */
     facilidad_venta?: number | null
     /** Por qué se vende fácil o difícil (demanda, color, cambio manual, precio de mercado…) */
@@ -215,7 +241,7 @@ export function computeClaudeCar(car: ClaudeCarFields, settings: ImportCostSetti
         foreignUsed: true,
         payVat,
         registrationTaxOverride: car.impuesto_matriculacion ?? null,
-        transport: pick(car.transporte, settings.transport),
+        transport: pick(travelTransport(car) ?? car.transporte, settings.transport),
         itv: pick(car.itv, settings.itv),
         homologation: pick(car.homologacion, settings.homologation),
         plates: pick(car.placas, settings.plates),

@@ -13,6 +13,9 @@ import {
     MAX_CLAUDE_PHOTOS,
     awaitingReplySince,
     saleEaseLabel,
+    travelTransport,
+    formatTravelHours,
+    TRAVEL_DESTINATION,
     computeClaudeCar,
     daysSince,
     normalizeListingUrl,
@@ -54,7 +57,13 @@ const carFields = {
     valor_hacienda: euros("Valor de tablas de Hacienda del modelo nuevo (Orden HAC/1501/2025). Si no lo das, la app lo busca sola en las tablas con marca, modelo, versión, año, CV y combustible (y avisa si hay que verificar la versión); también puedes consultarlo con buscar_valor_hacienda"),
     impuesto_matriculacion: euros("Impuesto de matriculación (IEDMT) que has calculado. Si lo das, es el que se aplica al coste; la app guarda también el suyo y avisa si difieren más de 100 €"),
     precio_venta_estimado_espana: euros("Precio de venta estimado en España"),
-    transporte: euros("Transporte (si no lo das, se usa el de los ajustes de la app)"),
+    transporte: euros("Transporte (si no lo das, se usa el de los ajustes de la app). Si das viaje_coste_ruta, el transporte pasa a ser viaje_coste_ruta + viaje_extras"),
+    viaje_ciudad_origen: z.string().trim().min(1).max(80).describe("Ciudad donde está el coche (origen del viaje para traerlo conduciendo), p. ej. Bitburg"),
+    viaje_km: z.number().int().positive().max(5000).describe("Kilómetros de la ruta en coche hasta Sant Cugat (ViaMichelin)"),
+    viaje_horas: z.number().positive().max(100).describe("Horas de conducción de la ruta, con decimales (13 h 10 min = 13.17)"),
+    viaje_coste_ruta: euros("Coste de la ruta: gasolina + peajes según ViaMichelin. Si lo das, el transporte = viaje_coste_ruta + viaje_extras"),
+    viaje_extras: euros("Extras del viaje: vuelo de ida + hotel + comidas + placas de exportación"),
+    viaje_detalle: z.string().trim().max(1000).describe("Desglose del viaje: vuelo, hotel, peajes por país, paradas…"),
     itv: euros("ITV de importación (si no lo das, se usa el de los ajustes)"),
     homologacion: euros("Homologación / ficha técnica (si no lo das, se usa el de los ajustes)"),
     placas: euros("Placas (si no lo das, se usa el de los ajustes)"),
@@ -82,6 +91,7 @@ const stateSchema = z.enum(CLAUDE_CAR_STATES)
 const CALC_KEYS: (keyof ClaudeCarFields)[] = [
     "anio", "mes_matriculacion", "km", "precio_alemania", "precio_neto", "iva_deducible", "co2", "valor_hacienda",
     "impuesto_matriculacion", "precio_venta_estimado_espana", "transporte", "itv", "homologacion", "placas", "gestoria",
+    "viaje_coste_ruta", "viaje_extras",
 ]
 const PHOTO_KEYS = ["foto_url", "fotos", "foto_posicion_y"] as const
 /** Columnas que identifican la versión: si cambian, se vuelve a buscar el valor de Hacienda */
@@ -107,6 +117,15 @@ function summary(c: ClaudeCar) {
     }
     const ease = saleEaseLabel(c.facilidad_venta)
     if (ease) parts.push(`Facilidad de venta: ${ease} (${c.facilidad_venta}/5)${c.facilidad_venta_motivo ? ` — ${c.facilidad_venta_motivo}` : ""}`)
+    if (c.viaje_ciudad_origen || c.viaje_km || c.viaje_coste_ruta != null) {
+        const trip = [
+            `${c.viaje_ciudad_origen ?? "?"} → ${TRAVEL_DESTINATION}`,
+            c.viaje_km ? `${c.viaje_km.toLocaleString("es-ES")} km` : null,
+            formatTravelHours(c.viaje_horas),
+            c.viaje_coste_ruta != null ? `ruta ${eur(c.viaje_coste_ruta)}${c.viaje_extras ? ` + extras ${eur(c.viaje_extras)}` : ""} = transporte ${eur(travelTransport(c))}` : null,
+        ].filter(Boolean).join(" · ")
+        parts.push(`Viaje: ${trip}`)
+    }
     if (c.fotos?.length) parts.push(`Fotos: ${c.fotos.length}`)
     const last = c.contactos?.at(-1)
     if (last) {
@@ -175,7 +194,10 @@ async function autoHaciendaValue(client: SupabaseClient, car: Partial<ClaudeCar>
 }
 
 /** Columnas añadidas después (2026-11_coches_claude_facilidad_venta.sql, 2026-11_valores_hacienda.sql) */
-const NEWER_COLUMNS = ["facilidad_venta", "facilidad_venta_motivo", "valor_hacienda_origen", "valor_hacienda_version", "verificar_version"]
+const NEWER_COLUMNS = [
+    "facilidad_venta", "facilidad_venta_motivo", "valor_hacienda_origen", "valor_hacienda_version", "verificar_version",
+    "viaje_ciudad_origen", "viaje_km", "viaje_horas", "viaje_coste_ruta", "viaje_extras", "viaje_detalle",
+]
 
 /** Guarda la fila; si falla porque aún no se ha ejecutado el SQL de alguna columna nueva, la guarda sin ellas */
 async function saveTolerant<T extends { error: { message: string } | null }>(row: Record<string, unknown>, run: (r: Record<string, unknown>) => PromiseLike<T>): Promise<T> {
@@ -299,6 +321,9 @@ export function buildServer(env: Env): McpServer {
             const auto = await autoHaciendaValue(client, { ...(existing.data ?? {}), ...incoming }).catch(() => null)
             if (auto) { Object.assign(incoming, auto.fields); if (auto.note) haciendaNotes.push(auto.note) }
 
+            // Viaje: si hay coste de ruta, el transporte es ruta + extras (la columna transporte se mantiene igual que el cálculo)
+            const viaje = travelTransport({ ...(existing.data ?? {}), ...incoming })
+            if (viaje != null && (incoming.viaje_coste_ruta !== undefined || incoming.viaje_extras !== undefined)) incoming.transporte = viaje
             const merged = { ...(existing.data ?? {}), ...incoming } as ClaudeCarFields
             const row = { ...incoming, ...computeClaudeCar(merged, settings), updated_at: new Date().toISOString() }
             const saved = await saveTolerant(row, r => existing.data
@@ -404,6 +429,10 @@ export function buildServer(env: Env): McpServer {
                 if (auto) { Object.assign(patch, auto.fields); if (auto.note) notes.push(auto.note) }
             }
             let row: Record<string, unknown> = { ...patch, updated_at: new Date().toISOString() }
+            if ("viaje_coste_ruta" in patch || "viaje_extras" in patch) {
+                const viaje = travelTransport({ ...current.data, ...patch })
+                if (viaje != null) patch.transporte = viaje
+            }
             if (CALC_KEYS.some(key => key in patch)) {
                 const settings = await costSettings(client)
                 row = { ...row, ...computeClaudeCar({ ...current.data, ...patch } as ClaudeCarFields, settings) }
