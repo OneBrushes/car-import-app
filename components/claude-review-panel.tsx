@@ -92,7 +92,7 @@ export function ClaudeReviewPanel({ cars }: { cars: ClaudeCar[] }) {
                     <Section title="Retirados" empty="Ningún anuncio retirado hoy.">
                         {summary.retirados.map(r => {
                             const c = byId.get(r.coche_id)
-                            return <Row key={r.id} car={c} right={c?.estado === "descartado" ? "Descartado" : `${c?.anuncio_fallos_seguidos ?? 1}/2`} detail={`${r.motivo ?? ""} · ${time(r.fecha)}`} tone="text-destructive" />
+                            return <Row key={r.id} car={c} right={c?.estado === "retirado" ? "Vendido / retirado" : c?.estado === "descartado" ? "Descartado" : `${c?.anuncio_fallos_seguidos ?? 1}/2`} detail={`${r.motivo ?? ""} · ${time(r.fecha)}`} tone="text-destructive" />
                         })}
                     </Section>
                     <Section title="Bajadas de precio" empty="Ninguna bajada de precio hoy.">

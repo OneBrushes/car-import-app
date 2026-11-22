@@ -196,7 +196,7 @@ async function autoHaciendaValue(client: SupabaseClient, car: Partial<ClaudeCar>
 /** Columnas añadidas después (2026-11_coches_claude_facilidad_venta.sql, 2026-11_valores_hacienda.sql) */
 const NEWER_COLUMNS = [
     "facilidad_venta", "facilidad_venta_motivo", "valor_hacienda_origen", "valor_hacienda_version", "verificar_version",
-    "viaje_ciudad_origen", "viaje_km", "viaje_horas", "viaje_coste_ruta", "viaje_extras", "viaje_detalle",
+    "viaje_ciudad_origen", "viaje_km", "viaje_horas", "viaje_coste_ruta", "viaje_extras", "viaje_detalle", "retirado_en",
 ]
 
 /** Guarda la fila; si falla porque aún no se ha ejecutado el SQL de alguna columna nueva, la guarda sin ellas */
@@ -371,7 +371,7 @@ export function buildServer(env: Env): McpServer {
             title: "Listar coches",
             description:
                 "Lista los coches de 'Guardados por Claude', del más reciente al más antiguo, con su coste total en España, su beneficio y su " +
-                "historial de contactos (ultimo_contacto y contactos). Filtros opcionales: estado, marca y beneficio mínimo en euros.",
+                "historial de contactos (ultimo_contacto y contactos). Filtros opcionales: estado (p. ej. 'retirado' = vendidos / anuncio retirado), marca y beneficio mínimo en euros.",
             inputSchema: {
                 estado: stateSchema.optional().describe("Solo coches en este estado"),
                 marca: z.string().trim().min(1).max(60).optional().describe("Solo esta marca (no distingue mayúsculas)"),
@@ -403,7 +403,7 @@ export function buildServer(env: Env): McpServer {
         {
             title: "Actualizar coche",
             description:
-                "Cambia cualquier campo o el estado (nuevo, interesante, contactado, descartado, comprado) de un coche de 'Guardados por Claude', por su id. " +
+                "Cambia cualquier campo o el estado (candidato, nuevo, interesante, contactado, descartado, comprado, retirado = vendido / anuncio retirado) de un coche de 'Guardados por Claude', por su id. " +
                 "Si cambian datos que afectan al precio, la app recalcula el coste y el beneficio. Devuelve el coche actualizado con su historial de contactos.",
             inputSchema: {
                 id: z.string().uuid().describe("id del coche (lo devuelven guardar_coche y listar_coches)"),
@@ -429,6 +429,8 @@ export function buildServer(env: Env): McpServer {
                 if (auto) { Object.assign(patch, auto.fields); if (auto.note) notes.push(auto.note) }
             }
             let row: Record<string, unknown> = { ...patch, updated_at: new Date().toISOString() }
+            // Vendido / retirado: se guarda cuándo (al salir de ese estado se borra)
+            if (patch.estado && patch.estado !== current.data.estado) row.retirado_en = patch.estado === "retirado" ? new Date().toISOString() : null
             if ("viaje_coste_ruta" in patch || "viaje_extras" in patch) {
                 const viaje = travelTransport({ ...current.data, ...patch })
                 if (viaje != null) patch.transporte = viaje
@@ -732,7 +734,7 @@ export function buildServer(env: Env): McpServer {
             description:
                 "Guarda lo que has visto al abrir un anuncio con el navegador: 'activo' (sigue publicado; pasa el precio que ves) o 'retirado' " +
                 "(la página dice que ya no está, redirige al buscador o da 404). Igual que la revisión automática: retirado dos veces seguidas → el coche " +
-                "pasa a descartado con una nota; si el precio ha bajado, se recalculan el coste y el beneficio. Si no has podido verlo (captcha), no lo marques.",
+                "pasa a 'retirado' (Vendido / retirado) con una nota y la fecha; si el precio ha bajado, se recalculan el coste y el beneficio. Si no has podido verlo (captcha), no lo marques.",
             inputSchema: {
                 id: z.string().uuid().describe("id del coche (de revisar_anuncios_pendientes)"),
                 estado: z.enum(["activo", "retirado"]).describe("Lo que has visto"),
@@ -752,7 +754,7 @@ export function buildServer(env: Env): McpServer {
             return {
                 result: { content: [{ type: "text", text: `${review.nombre}: ${estado}. ${review.cambios.join("; ")}.` }] },
                 carId: id,
-                resumen: `${review.nombre}: ${estado}${precio ? ` · ${eur(precio)}` : ""}${review.patch.estado === "descartado" ? " → descartado" : ""}`,
+                resumen: `${review.nombre}: ${estado}${precio ? ` · ${eur(precio)}` : ""}${review.patch.estado === "retirado" ? " → vendido / retirado" : ""}`,
             }
         }),
     )

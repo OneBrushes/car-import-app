@@ -11,7 +11,7 @@ import {
     type TaxRegion,
 } from "./import-costs"
 
-export const CLAUDE_CAR_STATES = ["candidato", "nuevo", "interesante", "contactado", "descartado", "comprado"] as const
+export const CLAUDE_CAR_STATES = ["candidato", "nuevo", "interesante", "contactado", "descartado", "comprado", "retirado"] as const
 export type ClaudeCarState = (typeof CLAUDE_CAR_STATES)[number]
 
 export const CLAUDE_CAR_STATE_LABELS: Record<ClaudeCarState, string> = {
@@ -21,7 +21,11 @@ export const CLAUDE_CAR_STATE_LABELS: Record<ClaudeCarState, string> = {
     contactado: "Contactado",
     descartado: "Descartado",
     comprado: "Comprado",
+    retirado: "Vendido / retirado",
 }
+
+/** Estados que ya no son coches "vivos" (no cuentan como activos ni se siguen) */
+export const isClosedClaudeCar = (estado: string | null | undefined) => estado === "descartado" || estado === "retirado"
 
 /** Facilidad de venta en España: 1 = fácil … 5 = difícil (2 y 4 son los términos medios) */
 export const SALE_EASE_LEVELS = [1, 2, 3, 4, 5] as const
@@ -141,6 +145,8 @@ export interface ClaudeCarFields {
     anuncio_fallos_seguidos?: number | null
     precio_actual?: number | null
     precio_bajado?: boolean | null
+    /** Cuándo pasó a "Vendido / retirado" (2.ª revisión seguida con el anuncio retirado) */
+    retirado_en?: string | null
     /** Viaje para traer el coche conduciendo (si hay coste de ruta, el transporte = ruta + extras) */
     viaje_ciudad_origen?: string | null
     viaje_km?: number | null

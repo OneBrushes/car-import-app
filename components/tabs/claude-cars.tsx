@@ -22,6 +22,7 @@ import { formatEUR } from "@/lib/import-costs"
 import {
   CLAUDE_CAR_STATE_LABELS,
   CLAUDE_CAR_STATES,
+  isClosedClaudeCar,
   CONTACT_CHANNEL_LABELS,
   NO_REPLY_DAYS,
   awaitingReplySince,
@@ -183,7 +184,13 @@ const STATE_STYLES: Record<ClaudeCarState, string> = {
   contactado: "bg-success text-success-foreground",
   descartado: "bg-muted text-muted-foreground",
   comprado: "bg-foreground text-background",
+  // Gris oscuro con 🏷️: distinto del gris claro de "descartado"
+  retirado: "bg-slate-500 text-white",
 }
+
+/** Icono delante del nombre del estado (solo los que lo llevan) */
+const STATE_ICONS: Partial<Record<ClaudeCarState, string>> = { retirado: "🏷️" }
+const stateLabel = (s: ClaudeCarState) => (STATE_ICONS[s] ? `${STATE_ICONS[s]} ${CLAUDE_CAR_STATE_LABELS[s]}` : CLAUDE_CAR_STATE_LABELS[s])
 
 export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
   const { user } = useAuth()
@@ -232,8 +239,8 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
     for (const s of CLAUDE_CAR_STATES) c[s] = 0
     for (const car of cars) {
       c[car.estado]++
-      if (car.estado !== "descartado") c.activos++
-      if (car.estado !== "descartado" && needsFollowUp(car.contactos)) c.sin_respuesta++
+      if (!isClosedClaudeCar(car.estado)) c.activos++
+      if (!isClosedClaudeCar(car.estado) && needsFollowUp(car.contactos)) c.sin_respuesta++
     }
     return c
   }, [cars])
@@ -268,8 +275,8 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
 
   const visible = useMemo(
     () => sortClaudeCars(cars.filter(car =>
-      (filter === "activos" ? car.estado !== "descartado"
-        : filter === "sin_respuesta" ? car.estado !== "descartado" && needsFollowUp(car.contactos)
+      (filter === "activos" ? !isClosedClaudeCar(car.estado)
+        : filter === "sin_respuesta" ? !isClosedClaudeCar(car.estado) && needsFollowUp(car.contactos)
           : car.estado === filter) && matchesCarFilters(car, ranges)), sort),
     [cars, filter, sort, ranges],
   )
@@ -278,11 +285,13 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
     setCars(prev => prev.map(car => (car.id === id ? { ...car, ...changes } : car)))
 
   const setState = async (car: ClaudeCar, estado: ClaudeCarState) => {
-    const previous = car.estado
-    patch(car.id, { estado })
-    const { error } = await supabase.from("coches_claude").update({ estado, updated_at: new Date().toISOString() }).eq("id", car.id)
+    const previous = { estado: car.estado, retirado_en: car.retirado_en ?? null }
+    // Vendido / retirado: se guarda cuándo (al salir de ese estado se borra)
+    const retirado_en = estado === "retirado" ? new Date().toISOString() : null
+    patch(car.id, { estado, retirado_en })
+    const { error } = await supabase.from("coches_claude").update({ estado, retirado_en, updated_at: new Date().toISOString() }).eq("id", car.id)
     if (error) {
-      patch(car.id, { estado: previous })
+      patch(car.id, previous)
       toast.error("No se pudo cambiar el estado: " + error.message)
     }
   }
@@ -368,7 +377,7 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
             onClick={() => setFilter(f)}
             className={`rounded-full border px-3 py-1 text-sm transition-colors ${filter === f ? "border-foreground bg-foreground text-background" : "hover:bg-accent"}`}
           >
-            {f === "activos" ? "Activos" : f === "sin_respuesta" ? `Sin respuesta +${NO_REPLY_DAYS} días` : CLAUDE_CAR_STATE_LABELS[f]} <span className="tabular opacity-60">{counts[f]}</span>
+            {f === "activos" ? "Activos" : f === "sin_respuesta" ? `Sin respuesta +${NO_REPLY_DAYS} días` : stateLabel(f)} <span className="tabular opacity-60">{counts[f]}</span>
           </button>
         ))}
       </div>
@@ -507,12 +516,13 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
   const lines = car.desglose?.lines ?? []
   const taxLine = lines.find(l => l.label === "Impuesto de matriculación")
   const href = car.url.startsWith("http") ? car.url : `https://${car.url}`
-  const discarded = car.estado === "descartado"
+  const discarded = isClosedClaudeCar(car.estado)
+  const sold = car.estado === "retirado"
 
   return (
     <div className={`group relative overflow-hidden rounded-xl border bg-card shadow-xs transition-all hover:shadow-md ${discarded ? "opacity-70 hover:opacity-100" : ""}`}>
       <div className="absolute left-2.5 top-2.5 z-10 flex flex-wrap gap-1">
-        <Badge className={`border-transparent shadow-sm ${STATE_STYLES[car.estado]}`}>{CLAUDE_CAR_STATE_LABELS[car.estado]}</Badge>
+        <Badge className={`border-transparent shadow-sm ${STATE_STYLES[car.estado]}`} title={sold && car.retirado_en ? `Desde el ${new Date(car.retirado_en).toLocaleDateString("es-ES")}` : undefined}>{stateLabel(car.estado)}</Badge>
         {car.movido_a && <Badge variant="secondary" className="bg-background/90 shadow-sm backdrop-blur">En mis coches</Badge>}
         {lastContact && (
           waitingSince ? (
@@ -526,7 +536,7 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
           )
         )}
         {car.anuncio_estado === "retirado" && !discarded && (
-          <Badge className="border-transparent bg-destructive text-white shadow-sm" title="La revisión diaria no encuentra el anuncio; a la 2.ª vez seguida se descarta">
+          <Badge className="border-transparent bg-destructive text-white shadow-sm" title="La revisión diaria no encuentra el anuncio; a la 2.ª vez seguida pasa a Vendido / retirado">
             Anuncio retirado {car.anuncio_fallos_seguidos ?? 1}/2
           </Badge>
         )}
@@ -746,7 +756,7 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
         <Select value={car.estado} onValueChange={v => onState(v as ClaudeCarState)}>
           <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {CLAUDE_CAR_STATES.map(s => <SelectItem key={s} value={s}>{CLAUDE_CAR_STATE_LABELS[s]}</SelectItem>)}
+            {CLAUDE_CAR_STATES.map(s => <SelectItem key={s} value={s}>{stateLabel(s)}</SelectItem>)}
           </SelectContent>
         </Select>
 

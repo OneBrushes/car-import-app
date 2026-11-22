@@ -1,7 +1,7 @@
 // Revisión diaria de anuncios de coches_claude (cron del Worker, 06:00–07:00 hora de Madrid, cada 10 min).
 //  · Cada ejecución revisa los RUN_BATCH coches pendientes de hoy (nuevo/interesante/contactado), de uno en uno, con
 //    3–5 s de pausa y cabeceras de navegador. El plan gratuito permite 50 subpeticiones por ejecución.
-//  · retirado dos veces seguidas → descartado con nota. Bajada de precio → se recalcula coste y beneficio.
+//  · retirado dos veces seguidas → estado "retirado" (Vendido / retirado) con nota y retirado_en. Bajada de precio → se recalcula coste y beneficio.
 //  · Lo que no se puede comprobar (mobile.de bloquea a Cloudflare) queda "no_comprobado" para que Claude lo mire con
 //    Chrome (herramientas revisar_anuncios_pendientes y marcar_anuncio).
 import type { SupabaseClient } from "@supabase/supabase-js"
@@ -69,7 +69,12 @@ export async function checkListing(url: string): Promise<{ check: ListingCheck; 
 
 export async function saveReviews(client: SupabaseClient, reviews: AppliedReview[]) {
     for (const r of reviews) {
-        const { error } = await client.from(CARS_TABLE).update(r.patch).eq("id", r.id)
+        let { error } = await client.from(CARS_TABLE).update(r.patch).eq("id", r.id)
+        // Sin la migración 2026-11_estado_retirado.sql (no existe retirado_en o el CHECK no admite "retirado"): se descarta como antes
+        if (error && r.patch.estado === "retirado" && /retirado_en|estado_check/.test(error.message)) {
+            const { retirado_en: _, ...rest } = r.patch
+            ;({ error } = await client.from(CARS_TABLE).update({ ...rest, estado: "descartado" }).eq("id", r.id))
+        }
         if (error) throw new Error(`Guardando ${r.nombre}: ${error.message}`)
     }
     if (reviews.length) {

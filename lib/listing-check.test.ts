@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { classifyListing, planReview, type CarRow, type ListingFetch } from "./listing-check"
+import { classifyListing, isRetiredDiscard, planReview, type CarRow, type ListingFetch } from "./listing-check"
 import { DEFAULT_IMPORT_COST_SETTINGS } from "./import-costs"
-import type { ClaudeCar } from "./claude-cars"
+import { CLAUDE_CAR_STATE_LABELS, CLAUDE_CAR_STATES, isClosedClaudeCar, type ClaudeCar } from "./claude-cars"
 
 const AS = "https://www.autoscout24.de/angebote/bmw-x3-m40i-xdrive-benzin-schwarz-fe330ec7-3fd4-430d-90e3-cd5db0ebe67c"
 const SMYLE = "https://www.autoscout24.de/smyle/details/d1ee7f10-e23e-40d4-b9f2-dcbbbf033227"
@@ -65,12 +65,13 @@ describe("revisión de anuncios · qué cambia en el coche", () => {
         ...extra,
     }) as CarRow
 
-    it("retirado: 1.º aviso; 2.º seguido → descartado con nota y fecha", () => {
+    it("retirado: 1.º aviso; 2.º seguido → 'retirado' (Vendido / retirado) con nota y fecha", () => {
         const first = planReview(car(), { resultado: "retirado", motivo: "404", http_status: 404, precio: null }, settings, NOW)
         expect(first.patch).toMatchObject({ anuncio_estado: "retirado", anuncio_fallos_seguidos: 1 })
         expect(first.patch.estado).toBeUndefined()
         const second = planReview(car({ anuncio_fallos_seguidos: 1 }), { resultado: "retirado", motivo: "404", http_status: 404, precio: null }, settings, NOW)
-        expect(second.patch.estado).toBe("descartado")
+        expect(second.patch.estado).toBe("retirado")
+        expect(second.patch.retirado_en).toBe(NOW.toISOString())
         expect(second.patch.notas).toBe("Buen coche\n\nAnuncio retirado o vendido (detectado el 22/11/2026)")
     })
 
@@ -87,5 +88,49 @@ describe("revisión de anuncios · qué cambia en el coche", () => {
         expect(r.patch).toMatchObject({ precio_actual: 26990, precio_alemania: 26990, precio_bajado: true })
         expect(r.patch.coste_total_espana).toBeLessThan(planReview(car(), { resultado: "activo", motivo: "", http_status: 200, precio: 28790 }, settings, NOW).patch.coste_total_espana as number ?? Infinity)
         expect(r.historial).toMatchObject({ precio_detectado: 26990, precio_anterior: 28790 })
+    })
+
+    it("cron: nunca pasa a 'descartado'; el 1.º aviso no pone retirado_en", () => {
+        const first = planReview(car(), { resultado: "retirado", motivo: "410", http_status: 410, precio: null }, settings, NOW)
+        expect(first.patch.retirado_en).toBeUndefined()
+        for (const estado of ["nuevo", "interesante", "contactado", "candidato"] as const) {
+            const r = planReview(car({ estado, anuncio_fallos_seguidos: 1 }), { resultado: "retirado", motivo: "410", http_status: 410, precio: null }, settings, NOW)
+            expect(r.patch.estado).toBe("retirado")
+            expect(r.cambios[0]).toMatch(/VENDIDO \/ RETIRADO/)
+        }
+    })
+
+    it("ya retirado o comprado: no cambia el estado ni repite la nota", () => {
+        for (const estado of ["retirado", "comprado"] as const) {
+            const r = planReview(car({ estado, anuncio_fallos_seguidos: 2 }), { resultado: "retirado", motivo: "404", http_status: 404, precio: null }, settings, NOW)
+            expect(r.patch.estado).toBeUndefined()
+            expect(r.patch.notas).toBeUndefined()
+            expect(r.patch.anuncio_fallos_seguidos).toBe(3)
+        }
+    })
+
+    it("marcar_anuncio (origen claude): la misma regla", () => {
+        const r = planReview(car({ anuncio_fallos_seguidos: 1 }), { resultado: "retirado", motivo: "comprobado por Claude con el navegador", http_status: null, precio: null }, settings, NOW, "claude")
+        expect(r.patch.estado).toBe("retirado")
+        expect(r.historial.origen).toBe("claude")
+    })
+})
+
+describe("estado 'retirado' (Vendido / retirado)", () => {
+    it("está en los estados, con su texto, y no cuenta como activo", () => {
+        expect(CLAUDE_CAR_STATES).toContain("retirado")
+        expect(CLAUDE_CAR_STATE_LABELS.retirado).toBe("Vendido / retirado")
+        expect(isClosedClaudeCar("retirado")).toBe(true)
+        expect(isClosedClaudeCar("descartado")).toBe(true)
+        expect(isClosedClaudeCar("contactado")).toBe(false)
+    })
+
+    it("migración: descartados por anuncio retirado → retirado; el resto se queda", () => {
+        expect(isRetiredDiscard({ estado: "descartado", notas: "❌ Anuncio retirado del portal" })).toBe(true)
+        expect(isRetiredDiscard({ estado: "descartado", notas: "Retirado por el vendedor" })).toBe(true)
+        expect(isRetiredDiscard({ estado: "descartado", notas: "Buen coche\n\nAnuncio retirado o vendido (detectado el 20/11/2026)" })).toBe(true)
+        expect(isRetiredDiscard({ estado: "descartado", notas: "Caro", anuncio_estado: "retirado" })).toBe(true)
+        expect(isRetiredDiscard({ estado: "descartado", notas: "Demasiados km" })).toBe(false)
+        expect(isRetiredDiscard({ estado: "nuevo", notas: "❌ Anuncio retirado", anuncio_estado: "retirado" })).toBe(false)
     })
 })

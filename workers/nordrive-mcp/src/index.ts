@@ -62,11 +62,11 @@ export default {
                 const { revisados, results } = await runDailyBatch(client, await costSettings(client))
                 if (!revisados) return
                 const count = (r: string) => results.filter(x => x.resultado === r).length
-                const descartados = results.filter(x => x.patch.estado === "descartado").length
+                const vendidos = results.filter(x => x.patch.estado === "retirado").length
                 const bajadas = results.filter(x => x.patch.precio_bajado === true).length
                 await logCall(client, {
                     herramienta: "revision_diaria", ok: true,
-                    resumen: `${revisados} revisados · ${count("activo")} activos · ${count("retirado")} retirados${descartados ? ` (${descartados} descartados)` : ""} · ${count("no_comprobado")} sin comprobar${bajadas ? ` · ${bajadas} bajadas de precio` : ""}`,
+                    resumen: `${revisados} revisados · ${count("activo")} activos · ${count("retirado")} retirados${vendidos ? ` (${vendidos} pasan a vendido / retirado)` : ""} · ${count("no_comprobado")} sin comprobar${bajadas ? ` · ${bajadas} bajadas de precio` : ""}`,
                 })
             } catch (e) {
                 await logCall(client, { herramienta: "revision_diaria", ok: false, error: e instanceof Error ? e.message : String(e) })

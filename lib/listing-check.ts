@@ -133,8 +133,20 @@ function safePath(u: string) {
 export const isPriceDrop = (actual: number | null | undefined, guardado: number | null | undefined) =>
     !!actual && !!guardado && actual < guardado - 1
 
-/** Fallos seguidos (retirado) a partir de los que el coche se descarta */
+/** Fallos seguidos (retirado) a partir de los que el coche pasa a "retirado" (Vendido / retirado) */
 export const RETIRED_STRIKES = 2
+
+/**
+ * Coches que la migración 2026-11_estado_retirado.sql pasa de "descartado" a "retirado" (misma regla que el SQL):
+ * descartados con anuncio_estado = retirado, notas que empiezan por "❌ Anuncio retirado" o "retirado",
+ * o con la nota que añadía la revisión diaria.
+ */
+export function isRetiredDiscard(car: { estado?: string | null; notas?: string | null; anuncio_estado?: string | null }): boolean {
+    if (car.estado !== "descartado") return false
+    if (car.anuncio_estado === "retirado") return true
+    const notas = (car.notas ?? "").trim().toLowerCase()
+    return notas.startsWith("❌ anuncio retirado") || notas.startsWith("retirado") || notas.includes("anuncio retirado o vendido (detectado el ")
+}
 
 /** Estados del coche que se revisan cada día */
 export const REVIEWED_CAR_STATES = ["nuevo", "interesante", "contactado"] as const
@@ -197,12 +209,13 @@ export function planReview(car: CarRow, check: Pick<ListingCheck, "resultado" | 
         const n = fallos + 1
         patch.anuncio_estado = "retirado"
         patch.anuncio_fallos_seguidos = n
-        if (n >= RETIRED_STRIKES && car.estado !== "descartado" && car.estado !== "comprado") {
+        if (n >= RETIRED_STRIKES && car.estado !== "retirado" && car.estado !== "comprado") {
             const nota = `Anuncio retirado o vendido (detectado el ${madridDateEs(now)})`
-            patch.estado = "descartado"
+            patch.estado = "retirado"
+            patch.retirado_en = now.toISOString()
             patch.notas = car.notas ? `${car.notas}\n\n${nota}` : nota
-            cambios.push(`retirado ${n}/${RETIRED_STRIKES} → DESCARTADO`)
-        } else cambios.push(`retirado ${n}/${RETIRED_STRIKES} (se descarta a la ${RETIRED_STRIKES}.ª)`)
+            cambios.push(`retirado ${n}/${RETIRED_STRIKES} → VENDIDO / RETIRADO`)
+        } else cambios.push(`retirado ${n}/${RETIRED_STRIKES} (pasa a "Vendido / retirado" a la ${RETIRED_STRIKES}.ª)`)
     } else if (check.resultado === "activo") {
         patch.anuncio_estado = "activo"
         if (fallos) { patch.anuncio_fallos_seguidos = 0; cambios.push("vuelve a estar activo: fallos a 0") }
