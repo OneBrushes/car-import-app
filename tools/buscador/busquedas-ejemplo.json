@@ -1,0 +1,28 @@
+[
+  {
+    "nombre": "VW Golf R 2020–2022",
+    "marca": "Volkswagen",
+    "modelos": ["Golf"],
+    "palabras_version": ["R"],
+    "anio_min": 2020,
+    "anio_max": 2022,
+    "km_max": 90000,
+    "precio_max": 38000,
+    "cv_min": 300,
+    "combustibles": ["Benzin"],
+    "carrocerias_excluidas": ["familiar", "descapotable"]
+  },
+  {
+    "nombre": "Cupra León VZ 2021–2023",
+    "marca": "Cupra",
+    "modelos": ["Leon"],
+    "palabras_version": ["VZ"],
+    "anio_min": 2021,
+    "anio_max": 2023,
+    "km_max": 80000,
+    "precio_max": 34000,
+    "cv_min": 290,
+    "combustibles": ["Benzin"],
+    "carrocerias_excluidas": ["familiar"]
+  }
+]

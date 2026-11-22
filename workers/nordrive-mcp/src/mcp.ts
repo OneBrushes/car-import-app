@@ -280,7 +280,7 @@ function photoNotes(stored: { avisos: string[]; pendientes: number; leidas?: num
 export function buildServer(env: Env): McpServer {
     const client = db(env)
     const server = new McpServer(
-        { name: "nordrive-coches", version: "1.5.0" },
+        { name: "nordrive-coches", version: "1.6.0" },
         {
             jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
             instructions:
@@ -619,6 +619,83 @@ export function buildServer(env: Env): McpServer {
                 result: { content: [{ type: "text", text }] },
                 resumen: `${simular ? "simulación · " : ""}${done.length} recalculados, ${kept.length} de Claude sin tocar, ${missing.length} sin encontrar${forzar ? " (forzado)" : ""}${left ? `, quedan ${left}` : ""}`,
             }
+        }),
+    )
+
+    const SEARCHES_TABLE = "busquedas"
+    const busquedaTexto = (b: Record<string, any>) => [
+        `${b.activa ? "▶" : "⏸"} [${b.id}] ${b.nombre}`,
+        `${b.marca} ${(b.modelos ?? []).join("/")}${b.palabras_version?.length ? ` (versión con: ${b.palabras_version.join(", ")})` : ""}`,
+        [b.anio_min || b.anio_max ? `${b.anio_min ?? "…"}–${b.anio_max ?? "…"}` : null, b.km_max ? `≤ ${Number(b.km_max).toLocaleString("es-ES")} km` : null,
+            b.precio_max ? `≤ ${eur(b.precio_max)}` : null, b.cv_min ? `≥ ${b.cv_min} CV` : null, b.combustibles?.length ? b.combustibles.join("/") : null,
+            b.carrocerias_excluidas?.length ? `sin ${b.carrocerias_excluidas.join(", ")}` : null].filter(Boolean).join(" · "),
+        b.ultima_ejecucion ? `última noche: ${fecha(b.ultima_ejecucion)}` : "aún no se ha ejecutado",
+    ].join(" · ")
+
+    server.registerTool(
+        "crear_busqueda",
+        {
+            title: "Crear búsqueda automática",
+            description:
+                "Crea una búsqueda que el buscador de NorDrive ejecuta cada noche a las 02:00 en el PC (AutoScout24.de y Kleinanzeigen; precio de " +
+                "venta con Wallapop y AutoScout24.es; filtros de alarma, lectura con IA, impuesto con las tablas de Hacienda). Lo que pase todos los " +
+                "filtros (beneficio > 3.000 € y facilidad de venta ≤ 3) aparece en 'Guardados por Claude' con estado 'candidato'.",
+            inputSchema: {
+                nombre: z.string().trim().min(2).max(80).describe("Nombre corto, p. ej. 'Golf R 2020-2022'"),
+                marca: z.string().trim().min(1).max(40).describe("Marca como en los portales: Volkswagen, Cupra, Mercedes-Benz, BMW…"),
+                modelos: z.array(z.string().trim().min(1).max(40)).min(1).max(5).describe("Modelos, p. ej. ['Golf'] o ['Leon']"),
+                palabras_version: z.array(z.string().trim().min(1).max(20)).max(5).optional().describe("Palabras que debe tener la versión: ['R'] para Golf R, ['VZ'] para León VZ, ['AMG','63']…"),
+                anio_min: z.number().int().min(1980).max(2100).optional(),
+                anio_max: z.number().int().min(1980).max(2100).optional(),
+                km_max: z.number().int().positive().optional(),
+                precio_max: z.number().int().positive().optional().describe("Precio máximo en Alemania (€)"),
+                cv_min: z.number().int().positive().optional(),
+                combustibles: z.array(z.enum(["Benzin", "Diesel", "Elektro", "Hybrid"])).optional().describe("Combustibles (nombres alemanes de los portales)"),
+                carrocerias_excluidas: z.array(z.enum(["familiar", "descapotable", "suv", "coupe", "sedan", "monovolumen"])).optional(),
+            },
+        },
+        async (args) => logged(client, "crear_busqueda", async () => {
+            const { data, error } = await client.from(SEARCHES_TABLE).insert({ ...args, activa: true }).select("*").single()
+            if (error) throw new Error(`${error.message}${/busquedas/.test(error.message) ? " (falta ejecutar supabase/2026-11_busquedas.sql)" : ""}`)
+            return { result: { content: [{ type: "text", text: `Búsqueda creada. Se ejecutará esta noche a las 02:00.\n${busquedaTexto(data)}` }] }, resumen: args.nombre }
+        }),
+    )
+
+    server.registerTool(
+        "listar_busquedas",
+        {
+            title: "Listar búsquedas automáticas",
+            description:
+                "Lista las búsquedas automáticas (activas y pausadas) y el resultado de la última noche. La búsqueda nocturna NO cubre mobile.de " +
+                "(bloquea al navegador automatizado): si el usuario te lo pide, ábrela tú con el navegador (Claude en Chrome) con los mismos filtros, " +
+                "y guarda con guardar_coche (estado 'candidato' vía actualizar_coche) lo que valga la pena.",
+            inputSchema: {},
+            annotations: { readOnlyHint: true },
+        },
+        async () => logged(client, "listar_busquedas", async () => {
+            const [{ data, error }, last] = await Promise.all([
+                client.from(SEARCHES_TABLE).select("*").order("created_at", { ascending: true }),
+                client.from("ejecuciones").select("inicio, fichas_vistas, candidatos, descartes, simulacion").eq("simulacion", false).order("inicio", { ascending: false }).limit(1).maybeSingle(),
+            ])
+            if (error) throw new Error(error.message)
+            const lines = (data ?? []).map(busquedaTexto)
+            const noche = last.data ? `Última noche (${fecha(last.data.inicio)}): ${last.data.fichas_vistas} fichas, ${last.data.candidatos} candidato(s), descartes ${JSON.stringify(last.data.descartes)}` : "Aún no ha corrido ninguna noche."
+            return { result: { content: [{ type: "text", text: `${lines.length ? lines.join("\n") : "No hay búsquedas."}\n\n${noche}` }] }, resumen: `${lines.length} búsqueda(s)` }
+        }),
+    )
+
+    server.registerTool(
+        "pausar_busqueda",
+        {
+            title: "Pausar o reanudar búsqueda",
+            description: "Pausa (activa = false) o reanuda (activa = true) una búsqueda automática.",
+            inputSchema: { id: z.string().uuid(), activa: z.boolean().optional().describe("false = pausar (por defecto), true = reanudar") },
+        },
+        async ({ id, activa }) => logged(client, "pausar_busqueda", async () => {
+            const { data, error } = await client.from(SEARCHES_TABLE).update({ activa: activa ?? false }).eq("id", id).select("*").maybeSingle()
+            if (error) throw new Error(error.message)
+            if (!data) return { result: errorResult(`No existe la búsqueda ${id}.`) }
+            return { result: { content: [{ type: "text", text: `${data.activa ? "Reanudada" : "Pausada"}: ${busquedaTexto(data)}` }] }, resumen: `${data.nombre}: ${data.activa ? "activa" : "pausada"}` }
         }),
     )
 

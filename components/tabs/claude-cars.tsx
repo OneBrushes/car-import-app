@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { PhotoViewer } from "@/components/photo-viewer"
 import { ClaudeReviewPanel } from "@/components/claude-review-panel"
+import { ClaudeSearchPanel } from "@/components/claude-search-panel"
 import { BOOKMARKLET, photosFromPasted } from "@/components/import-from-url"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { autoFramingY, DEFAULT_PHOTO_POSITION_Y } from "@/lib/image-size"
@@ -176,6 +177,7 @@ interface McpLog {
 }
 
 const STATE_STYLES: Record<ClaudeCarState, string> = {
+  candidato: "bg-violet-600 text-white",
   nuevo: "bg-primary text-primary-foreground",
   interesante: "bg-warning text-warning-foreground",
   contactado: "bg-success text-success-foreground",
@@ -336,6 +338,8 @@ export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {
       </div>
 
       {showLogs && <LogsPanel logs={logs} />}
+
+      <ClaudeSearchPanel />
 
       <ClaudeReviewPanel cars={cars} />
 

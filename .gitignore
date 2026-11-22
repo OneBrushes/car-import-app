@@ -45,3 +45,6 @@ wrangler.toml
 
 # supabase cli
 supabase/.temp/
+
+# Búsqueda automática: informes locales
+tools/buscador/informes/
