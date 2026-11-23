@@ -10,15 +10,16 @@ compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 PUBLIC_URL = "https://nordrive-mcp.infonordrive.workers.dev"
 SUPABASE_URL = "https://luzacvchtxkurisuywic.supabase.co"
 
-# Secretos (no van aquí): npx wrangler secret put MCP_SECRET / SUPABASE_SERVICE_ROLE_KEY
+# Secretos (no van aquí): npx wrangler secret put MCP_SECRET / SUPABASE_SERVICE_ROLE_KEY / LOCAL_REVIEW_TOKEN
 
 [[kv_namespaces]]
 binding = "OAUTH_KV"
 id = "94265d2988b34768a127eaa47ee3e9b4"
 
-# Revisión diaria de anuncios (src/revision.ts): cada 10 min de 04:00 a 05:59 UTC; el código solo actúa a las 6 de Madrid
+# Revisión diaria de anuncios (src/revision.ts): cada 5 min de 04:00 a 05:59 UTC; el código solo actúa a las 6 de Madrid
+# (12 tandas de 15 coches = 180 coches al día como mucho, sin contar mobile.de)
 [triggers]
-crons = ["*/10 4,5 * * *"]
+crons = ["*/5 4,5 * * *"]
 
 [observability]
 enabled = true

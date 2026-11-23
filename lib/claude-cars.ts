@@ -133,8 +133,11 @@ export interface ClaudeCarFields {
     fotos?: string[] | null
     /** Encuadre vertical de la foto principal en la tarjeta (0 = arriba, 100 = abajo) */
     foto_posicion_y?: number | null
-    /** De dónde sale valor_hacienda: lo dio Claude o la app lo buscó en valores_hacienda (lib/hacienda.ts) */
-    valor_hacienda_origen?: "claude" | "tabla" | null
+    /**
+     * De dónde sale valor_hacienda: lo dio Claude o la app lo buscó en valores_hacienda (lib/hacienda.ts).
+     * "pendiente" = no está en las tablas: el impuesto NO se calcula sobre el precio de compra; queda fuera del coste hasta tener el valor.
+     */
+    valor_hacienda_origen?: "claude" | "tabla" | "pendiente" | null
     /** Versión del BOE de la que sale valor_hacienda cuando lo busca la app */
     valor_hacienda_version?: string | null
     /** Había varias versiones posibles en las tablas de Hacienda: comprobar que es la buena */
@@ -145,6 +148,8 @@ export interface ClaudeCarFields {
     anuncio_fallos_seguidos?: number | null
     precio_actual?: number | null
     precio_bajado?: boolean | null
+    /** Precio con el que se guardó, antes del primer cambio de precio que detectó la revisión diaria */
+    precio_original?: number | null
     /** Cuándo pasó a "Vendido / retirado" (2.ª revisión seguida con el anuncio retirado) */
     retirado_en?: string | null
     /** Viaje para traer el coche conduciendo (si hay coste de ruta, el transporte = ruta + extras) */
@@ -178,7 +183,7 @@ export interface ClaudeCarCalc {
         tipo_iedmt: number
         depreciacion: number
         antiguedad_anios: number
-        impuesto_aplicado: "claude" | "app"
+        impuesto_aplicado: "claude" | "app" | "pendiente"
     }
 }
 
@@ -265,6 +270,10 @@ export function isNewForVat(firstRegistration: Date, km: number | null | undefin
     return today < sixMonthsLater || (km != null && km < 6000)
 }
 
+/** Sin valor de Hacienda (pendiente) ni impuesto puesto por Claude: no se puede calcular el impuesto de matriculación */
+export const isHaciendaPending = (car: Pick<ClaudeCarFields, "valor_hacienda" | "valor_hacienda_origen" | "impuesto_matriculacion">) =>
+    car.valor_hacienda_origen === "pendiente" && !car.valor_hacienda && car.impuesto_matriculacion == null
+
 /** Calcula coste en España, beneficio y desglose con la fórmula única de la app */
 export function computeClaudeCar(car: ClaudeCarFields, settings: ImportCostSettings, today = new Date()): ClaudeCarCalc {
     const year = car.anio || today.getFullYear()
@@ -272,6 +281,10 @@ export function computeClaudeCar(car: ClaudeCarFields, settings: ImportCostSetti
     const firstRegistration = new Date(year, month - 1, 1)
     const payVat = isNewForVat(firstRegistration, car.km, today)
     const pick = (value: number | null | undefined, fallback: number) => (value != null && Number.isFinite(value) && value >= 0 ? value : fallback)
+
+    // Valor de Hacienda pendiente (no está en las tablas) y sin impuesto de Claude: no se usa el precio de compra como base;
+    // el impuesto queda a 0 y se avisa de que el coste y el beneficio no lo incluyen
+    const haciendaPendiente = isHaciendaPending(car)
 
     const result = calculateImportCost({
         purchasePrice: car.precio_alemania || 0,
@@ -283,7 +296,7 @@ export function computeClaudeCar(car: ClaudeCarFields, settings: ImportCostSetti
         region: settings.region,
         foreignUsed: true,
         payVat,
-        registrationTaxOverride: car.impuesto_matriculacion ?? null,
+        registrationTaxOverride: haciendaPendiente ? 0 : car.impuesto_matriculacion ?? null,
         transport: pick(travelTransport(car) ?? car.transporte, settings.transport),
         itv: pick(car.itv, settings.itv),
         homologation: pick(car.homologacion, settings.homologation),
@@ -295,7 +308,9 @@ export function computeClaudeCar(car: ClaudeCarFields, settings: ImportCostSetti
     })
 
     let aviso: string | null = null
-    if (result.registrationTaxOverridden) {
+    if (haciendaPendiente) {
+        aviso = "Valor de Hacienda PENDIENTE (no está en las tablas del BOE): el impuesto de matriculación NO está incluido en el coste ni en el beneficio"
+    } else if (result.registrationTaxOverridden) {
         const diff = Math.abs(result.registrationTax - result.computedRegistrationTax)
         if (diff > TAX_WARNING_THRESHOLD) {
             aviso = `El impuesto de Claude (${eur(result.registrationTax)}) difiere ${eur(diff)} del calculado por la app (${eur(result.computedRegistrationTax)})`
@@ -307,7 +322,7 @@ export function computeClaudeCar(car: ClaudeCarFields, settings: ImportCostSetti
         coste_total_espana: result.totalCost,
         beneficio: result.margin,
         margen_pct: result.marginPercent != null ? Math.round(result.marginPercent * 10) / 10 : null,
-        impuesto_calculado: result.computedRegistrationTax,
+        impuesto_calculado: haciendaPendiente ? 0 : result.computedRegistrationTax,
         aviso_impuesto: aviso,
         desglose: {
             lines: result.lines,
@@ -317,7 +332,7 @@ export function computeClaudeCar(car: ClaudeCarFields, settings: ImportCostSetti
             tipo_iedmt: result.taxRate,
             depreciacion: result.depreciation,
             antiguedad_anios: result.ageYears,
-            impuesto_aplicado: result.registrationTaxOverridden ? "claude" : "app",
+            impuesto_aplicado: haciendaPendiente ? "pendiente" : result.registrationTaxOverridden ? "claude" : "app",
         },
     }
 }

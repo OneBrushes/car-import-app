@@ -48,3 +48,9 @@ supabase/.temp/
 
 # Búsqueda automática: informes locales
 tools/buscador/informes/
+
+# Revisión de mobile.de desde el PC (configuración, logs, perfil del navegador)
+tools/revision-mobile/.env
+tools/revision-mobile/logs/
+tools/revision-mobile/perfil/
+tools/revision-mobile/estado.json

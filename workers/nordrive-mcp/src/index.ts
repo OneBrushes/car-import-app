@@ -10,8 +10,8 @@
 import { AuthorizationError, CimdFetchError, OAuthProvider, type ConsentDescription } from "@cloudflare/workers-oauth-provider"
 import { handleMcp, refreshCarPhotos } from "./mcp"
 import { CARS_TABLE, costSettings, db, logCall, ownerId } from "./db"
-import { reviewCars, runDailyBatch } from "./revision"
-import { madridHour } from "../../../lib/listing-check"
+import { reviewCars, runDailyBatch, saveReviews, saveSummary, reviewableCars, SUMMARY_TABLE } from "./revision"
+import { compareReviewPriority, listingPortal, madridDate, madridHour, mobileAdId, planReview, reviewedToday, type CarRow } from "../../../lib/listing-check"
 import type { Env } from "./env"
 
 const SCOPE = "coches"
@@ -52,21 +52,21 @@ export default {
         return getProvider(env).fetch(request, env, ctx)
     },
 
-    // Revisión diaria de anuncios: el cron salta cada 10 min de 04:00 a 05:59 UTC y solo trabaja a las 6 de Madrid
-    // (06:00–06:50, en invierno y en verano). Cada ejecución revisa la siguiente tanda de coches pendientes de hoy.
+    // Revisión diaria de anuncios: el cron salta cada 5 min de 04:00 a 05:59 UTC y solo trabaja a las 6 de Madrid
+    // (06:00–06:55, en invierno y en verano). Cada ejecución revisa la siguiente tanda de coches pendientes de hoy (sin mobile.de).
     async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
         if (madridHour(new Date(controller.scheduledTime)) !== 6) return
         ctx.waitUntil((async () => {
             const client = db(env)
             try {
-                const { revisados, results } = await runDailyBatch(client, await costSettings(client))
+                const { revisados, quedan, results } = await runDailyBatch(client, await costSettings(client))
                 if (!revisados) return
                 const count = (r: string) => results.filter(x => x.resultado === r).length
                 const vendidos = results.filter(x => x.patch.estado === "retirado").length
-                const bajadas = results.filter(x => x.patch.precio_bajado === true).length
+                const precios = results.filter(x => "precio_alemania" in x.patch).length
                 await logCall(client, {
                     herramienta: "revision_diaria", ok: true,
-                    resumen: `${revisados} revisados · ${count("activo")} activos · ${count("retirado")} retirados${vendidos ? ` (${vendidos} pasan a vendido / retirado)` : ""} · ${count("no_comprobado")} sin comprobar${bajadas ? ` · ${bajadas} bajadas de precio` : ""}`,
+                    resumen: `${revisados} revisados · ${count("activo")} activos · ${count("retirado")} retirados${vendidos ? ` (${vendidos} pasan a vendido / retirado)` : ""} · ${count("no_comprobado")} sin comprobar${precios ? ` · ${precios} cambios de precio` : ""} · quedan ${quedan}`,
                 })
             } catch (e) {
                 await logCall(client, { herramienta: "revision_diaria", ok: false, error: e instanceof Error ? e.message : String(e) })
@@ -82,6 +82,7 @@ async function defaultHandler(request: Request, env: Env): Promise<Response> {
     if (url.pathname === "/" && request.method === "GET") return text("NorDrive MCP · el servidor está en /mcp")
     if (url.pathname === "/api/fotos") return photosApi(request, env)
     if (url.pathname === "/api/revision") return revisionApi(request, env)
+    if (url.pathname.startsWith("/api/anuncios/")) return localReviewApi(request, env, url.pathname)
     if (url.pathname !== "/authorize") return text("No encontrado", 404)
 
     const oauth = env.OAUTH_PROVIDER
@@ -233,4 +234,75 @@ async function revisionApi(request: Request, env: Env): Promise<Response> {
     const simular = body.simular !== false
     const results = await reviewCars(client, cars as never, settings, { simular, origen: "api" })
     return new Response(JSON.stringify({ simular, results }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } })
+}
+
+// --- Script del PC de casa: revisión de mobile.de (tools/revision-mobile) -------------------------------------------------
+//   GET  /api/anuncios/mobile   → coches activos con anuncio de mobile.de (id, idMobile, precio) y si ya se revisó hoy
+//   POST /api/anuncios/marcar   → { resultados: [{ id, estado: "activo"|"retirado", precio?, motivo?, http_status? }] }
+//                                 misma lógica que marcar_anuncio (retirado 2 veces → "retirado"; cambio de precio → recalcula)
+//   POST /api/anuncios/fin      → resumen de la pasada (tabla revisiones, origen "local")
+//   Autenticación: "Authorization: Bearer LOCAL_REVIEW_TOKEN" (secreto del Worker; el mismo en tools/revision-mobile/.env)
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json; charset=utf-8" } })
+
+async function localReviewApi(request: Request, env: Env, path: string): Promise<Response> {
+    const token = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "")
+    if (!env.LOCAL_REVIEW_TOKEN || env.LOCAL_REVIEW_TOKEN.length < 32) return text("Falta el secreto LOCAL_REVIEW_TOKEN en el Worker", 500)
+    if (!token || !safeEqual(token, env.LOCAL_REVIEW_TOKEN)) return text("No autorizado", 401)
+    const client = db(env)
+    const now = new Date()
+    try {
+        if (path === "/api/anuncios/mobile" && request.method === "GET") {
+            const [cars, done] = await Promise.all([
+                reviewableCars(client),
+                client.from(SUMMARY_TABLE).select("id").eq("fecha", madridDate(now)).eq("origen", "local").eq("completa", true).limit(1),
+            ])
+            const mobile = cars.filter(c => listingPortal(c.url) === "mobile.de").sort(compareReviewPriority)
+            return json({
+                fecha: madridDate(now),
+                ya_revisado_hoy: !done.error && (done.data?.length ?? 0) > 0,
+                coches: mobile.map(c => ({
+                    id: c.id, idMobile: mobileAdId(c.url), url: c.url, precio: c.precio_alemania ?? null,
+                    nombre: [c.marca, c.modelo, c.anio ? `(${c.anio})` : null].filter(Boolean).join(" "),
+                    revisado_hoy: reviewedToday(c.anuncio_ultima_comprobacion, now),
+                })),
+            })
+        }
+        if (path === "/api/anuncios/marcar" && request.method === "POST") {
+            const body = (await request.json().catch(() => ({}))) as { resultados?: { id: string; estado: string; precio?: number | null; motivo?: string; http_status?: number | null }[] }
+            const items = (body.resultados ?? []).filter(r => r && typeof r.id === "string" && (r.estado === "activo" || r.estado === "retirado"))
+            if (!items.length || items.length > 50) return text("Pasa entre 1 y 50 resultados (estado activo o retirado)", 400)
+            const [{ data, error }, settings] = await Promise.all([client.from(CARS_TABLE).select("*").in("id", items.map(r => r.id)), costSettings(client)])
+            if (error) return text(error.message, 500)
+            const byId = new Map((data ?? []).map(c => [c.id as string, c as CarRow]))
+            const reviews = items.filter(r => byId.has(r.id)).map(r => planReview(byId.get(r.id)!, {
+                resultado: r.estado as "activo" | "retirado",
+                precio: r.estado === "activo" && r.precio && r.precio > 0 ? Math.round(r.precio) : null,
+                http_status: r.http_status ?? null,
+                motivo: `PC de casa (mobile.de)${r.motivo ? `: ${r.motivo}` : ""}`,
+            }, settings, now, "local"))
+            await saveReviews(client, reviews)
+            return json({ guardados: reviews.length, desconocidos: items.filter(r => !byId.has(r.id)).map(r => r.id), cambios: reviews.map(r => ({ id: r.id, nombre: r.nombre, cambios: r.cambios })) })
+        }
+        if (path === "/api/anuncios/fin" && request.method === "POST") {
+            const b = (await request.json().catch(() => ({}))) as Record<string, unknown>
+            const n = (k: string) => (typeof b[k] === "number" && Number.isFinite(b[k]) ? Math.max(0, Math.round(b[k] as number)) : 0)
+            const inicio = typeof b.inicio === "string" && !Number.isNaN(Date.parse(b.inicio)) ? new Date(b.inicio) : now
+            const row = {
+                origen: "local" as const, inicio, completa: b.completa === true,
+                revisados: n("revisados"), activos: n("activos"), retirados: n("retirados"), cambios_precio: n("cambios_precio"), errores: n("errores"),
+                detalle: (b.detalle && typeof b.detalle === "object" ? b.detalle : {}) as Record<string, unknown>,
+            }
+            await saveSummary(client, row, now)
+            await logCall(client, {
+                herramienta: "revision_mobile", ok: row.completa,
+                resumen: `PC de casa: ${row.revisados} revisados · ${row.activos} activos · ${row.retirados} retirados · ${row.cambios_precio} cambios de precio · ${row.errores} errores${row.completa ? "" : " · INCOMPLETA"}`,
+                error: row.completa ? undefined : String(row.detalle.motivo ?? "revisión incompleta"),
+            })
+            return json({ ok: true })
+        }
+        return text("No encontrado", 404)
+    } catch (e) {
+        return text(e instanceof Error ? e.message : String(e), 500)
+    }
 }

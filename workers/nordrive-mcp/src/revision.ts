@@ -1,19 +1,22 @@
-// Revisión diaria de anuncios de coches_claude (cron del Worker, 06:00–07:00 hora de Madrid, cada 10 min).
-//  · Cada ejecución revisa los RUN_BATCH coches pendientes de hoy (nuevo/interesante/contactado), de uno en uno, con
-//    3–5 s de pausa y cabeceras de navegador. El plan gratuito permite 50 subpeticiones por ejecución.
-//  · retirado dos veces seguidas → estado "retirado" (Vendido / retirado) con nota y retirado_en. Bajada de precio → se recalcula coste y beneficio.
-//  · Lo que no se puede comprobar (mobile.de bloquea a Cloudflare) queda "no_comprobado" para que Claude lo mire con
-//    Chrome (herramientas revisar_anuncios_pendientes y marcar_anuncio).
+// Revisión diaria de anuncios de coches_claude (cron del Worker cada 5 min de 06:00 a 06:55, hora de Madrid).
+//  · Cada ejecución coge la siguiente tanda (RUN_BATCH) de coches sin revisar hoy, por prioridad: 'contactado' primero,
+//    luego más beneficio, luego la comprobación más antigua (lib/listing-check.ts → nextWorkerBatch). Lo revisado hoy hace de cursor.
+//  · mobile.de NO se revisa aquí (bloquea a Cloudflare): lo hace el script del PC de casa (tools/revision-mobile) con
+//    /api/anuncios/mobile y /api/anuncios/marcar. El Worker no los toca ni los marca "no_comprobado".
+//  · retirado dos veces seguidas → estado "retirado" (Vendido / retirado) con nota y retirado_en.
+//    Cambio de precio (baja o sube) → se recalculan coste y beneficio; el precio inicial queda en precio_original.
+//  · Plan gratuito: 50 peticiones por ejecución. Por eso las escrituras van juntas (aplicar_revisiones_anuncios).
 import type { SupabaseClient } from "@supabase/supabase-js"
 import {
-    classifyListing, listingPortal, madridDate, planReview, type AppliedReview, type CarRow, type ListingCheck, type ListingFetch,
+    classifyListing, listingPortal, madridDate, nextWorkerBatch, planReview, REVIEWED_CAR_STATES, type AppliedReview, type CarRow, type ListingCheck, type ListingFetch,
 } from "../../../lib/listing-check"
 import type { ImportCostSettings } from "../../../lib/import-costs"
 import { CARS_TABLE } from "./db"
 
 export const REVIEWS_TABLE = "revisiones_anuncios"
-/** Coches por ejecución: cada uno gasta 1–3 peticiones al portal + 1 escritura; el resto (lectura, historial) unas 4 */
-export const RUN_BATCH = 8
+/** Coches por ejecución: 1 petición al portal cada uno (+1 si redirige). Con 15 caben de sobra en las 50 peticiones del plan gratuito, incluso guardando coche a coche si falta el SQL de aplicar_revisiones_anuncios */
+export const RUN_BATCH = 15
+export const SUMMARY_TABLE = "revisiones"
 const MAX_REDIRECTS = 3
 
 const BROWSER_HEADERS: Record<string, string> = {
@@ -53,6 +56,8 @@ export async function fetchListing(url: string): Promise<ListingFetch> {
             if (!loc) return { status: res.status, finalUrl: current, redirects }
             redirects.push(current)
             current = new URL(loc, current).toString()
+            // Redirige al buscador de AutoScout24 (/lst/) = retirado: no hace falta pedirlo (ahorra una petición)
+            if (/autoscout24\./.test(current) && /\/lst(\/|\?|$)/.test(new URL(current).pathname)) return { status: res.status, finalUrl: current, redirects }
             continue
         }
         // Las fichas pesan ~1 MB; con 1,5 MB sobra para __NEXT_DATA__ y el precio
@@ -67,42 +72,76 @@ export async function checkListing(url: string): Promise<{ check: ListingCheck; 
     return { check: classifyListing(url, fetched), fetched }
 }
 
+/**
+ * Guarda los cambios de varias revisiones: una sola llamada (aplicar_revisiones_anuncios) + el historial.
+ * Sin la migración 2026-11_revision_v2.sql, coche a coche como antes.
+ */
 export async function saveReviews(client: SupabaseClient, reviews: AppliedReview[]) {
-    for (const r of reviews) {
-        let { error } = await client.from(CARS_TABLE).update(r.patch).eq("id", r.id)
-        // Sin la migración 2026-11_estado_retirado.sql (no existe retirado_en o el CHECK no admite "retirado"): se descarta como antes
-        if (error && r.patch.estado === "retirado" && /retirado_en|estado_check/.test(error.message)) {
-            const { retirado_en: _, ...rest } = r.patch
-            ;({ error } = await client.from(CARS_TABLE).update({ ...rest, estado: "descartado" }).eq("id", r.id))
+    if (!reviews.length) return
+    const rpc = await client.rpc("aplicar_revisiones_anuncios", { cambios: reviews.map(r => ({ id: r.id, patch: r.patch })) })
+    if (rpc.error) {
+        if (!/aplicar_revisiones_anuncios|function|schema cache/i.test(rpc.error.message)) throw new Error(`Guardando revisiones: ${rpc.error.message}`)
+        for (const r of reviews) {
+            let { error } = await client.from(CARS_TABLE).update(r.patch).eq("id", r.id)
+            // Columnas nuevas aún sin crear (precio_original, retirado_en…): se guardan sin ellas
+            if (error && /precio_original|retirado_en|estado_check/.test(error.message)) {
+                const { precio_original: _p, retirado_en: _r, ...rest } = r.patch
+                const fallback = /estado_check/.test(error.message) && rest.estado === "retirado" ? { ...rest, estado: "descartado" } : rest
+                ;({ error } = await client.from(CARS_TABLE).update(fallback).eq("id", r.id))
+            }
+            if (error) throw new Error(`Guardando ${r.nombre}: ${error.message}`)
         }
-        if (error) throw new Error(`Guardando ${r.nombre}: ${error.message}`)
     }
-    if (reviews.length) {
-        const { error } = await client.from(REVIEWS_TABLE).insert(reviews.map(r => r.historial))
-        if (error) throw new Error(`Historial: ${error.message}`)
+    const { error } = await client.from(REVIEWS_TABLE).insert(reviews.map(r => r.historial))
+    if (error) throw new Error(`Historial: ${error.message}`)
+}
+
+/** Cuenta lo que ha pasado en una tanda (para la tabla revisiones y los registros) */
+export function summarizeReviews(results: Pick<AppliedReview, "resultado" | "patch">[]) {
+    return {
+        revisados: results.length,
+        activos: results.filter(r => r.resultado === "activo").length,
+        retirados: results.filter(r => r.resultado === "retirado").length,
+        cambios_precio: results.filter(r => "precio_alemania" in r.patch).length,
+        errores: results.filter(r => r.resultado === "no_comprobado").length,
+        pasan_a_retirado: results.filter(r => r.patch.estado === "retirado").length,
     }
 }
 
-/** Coches que tocan hoy: estados revisables y sin comprobar hoy (los más antiguos primero) */
-export async function pendingCars(client: SupabaseClient, limit: number, now = new Date()): Promise<CarRow[]> {
-    const startOfDay = new Date(`${madridDate(now)}T00:00:00+01:00`) // margen: en verano empieza 1 h antes, da igual
-    const { data, error } = await client.from(CARS_TABLE).select("*")
-        .in("estado", ["nuevo", "interesante", "contactado"])
-        .or(`anuncio_ultima_comprobacion.is.null,anuncio_ultima_comprobacion.lt.${startOfDay.toISOString()}`)
-        .order("anuncio_ultima_comprobacion", { ascending: true, nullsFirst: true })
-        .limit(limit)
+export interface SummaryRow {
+    origen: "worker" | "local"
+    inicio: Date
+    completa: boolean
+    revisados: number
+    activos: number
+    retirados: number
+    cambios_precio: number
+    errores: number
+    detalle?: Record<string, unknown>
+}
+
+/** Apunta la ejecución en la tabla revisiones (si aún no existe la tabla, solo lo deja en el log) */
+export async function saveSummary(client: SupabaseClient, row: SummaryRow, now = new Date()) {
+    const { error } = await client.from(SUMMARY_TABLE).insert({
+        fecha: madridDate(row.inicio), origen: row.origen, inicio: row.inicio.toISOString(), fin: now.toISOString(),
+        revisados: row.revisados, activos: row.activos, retirados: row.retirados, cambios_precio: row.cambios_precio, errores: row.errores,
+        completa: row.completa, detalle: row.detalle ?? {},
+    })
+    if (error) console.error("revisiones:", error.message)
+}
+
+/** Coches en estados revisables (todos: el orden y la tanda los decide nextWorkerBatch) */
+export async function reviewableCars(client: SupabaseClient): Promise<CarRow[]> {
+    const { data, error } = await client.from(CARS_TABLE).select("*").in("estado", [...REVIEWED_CAR_STATES])
     if (error) throw new Error(error.message)
     return (data ?? []) as CarRow[]
 }
 
-/** Revisa coches de uno en uno con pausa; en simulación no guarda nada */
 export type ReviewResult = AppliedReview & { diagnostico: Record<string, unknown> }
 
 /**
  * Revisa coches de uno en uno con 3–5 s de pausa; en simulación no guarda nada.
- *  · maxFetches: peticiones a portales como mucho (las redirecciones cuentan aparte, 1–2 más).
- *  · mobile.de bloquea a Cloudflare (403): si la primera petición a mobile.de de la tanda da 403/429, el resto de coches
- *    de mobile.de se marcan "no comprobado" sin volver a pedir (no insistir; Claude los revisa con Chrome).
+ * Los de mobile.de se saltan sin marcar nada (los revisa el script del PC de casa).
  */
 export async function reviewCars(
     client: SupabaseClient, cars: CarRow[], settings: ImportCostSettings,
@@ -110,19 +149,12 @@ export async function reviewCars(
 ): Promise<ReviewResult[]> {
     const results: ReviewResult[] = []
     let fetches = 0
-    let mobileBlocked: number | null = null
     for (const car of cars) {
-        const portal = listingPortal(car.url)
-        if (portal === "mobile.de" && mobileBlocked != null) {
-            const check: ListingCheck = { resultado: "no_comprobado", http_status: null, precio: null, motivo: `mobile.de bloquea al servidor (HTTP ${mobileBlocked} en la primera consulta de esta tanda); no se insiste` }
-            results.push({ ...planReview(car, check, settings, new Date(), opts.origen ?? "cron"), diagnostico: { sin_peticion: true } })
-            continue
-        }
+        if (listingPortal(car.url) === "mobile.de") continue
         if (opts.maxFetches != null && fetches >= opts.maxFetches) break
         if (fetches > 0) await politePause()
         fetches++
         const { check, fetched } = await checkListing(car.url)
-        if (portal === "mobile.de" && (check.http_status === 403 || check.http_status === 429)) mobileBlocked = check.http_status
         results.push({
             ...planReview(car, check, settings, new Date(), opts.origen ?? "cron"),
             diagnostico: {
@@ -136,11 +168,19 @@ export async function reviewCars(
     return results
 }
 
-/** Una ejecución del cron: los coches pendientes de hoy, hasta RUN_BATCH peticiones a portales */
+/** Una ejecución del cron: la siguiente tanda de hoy (sin mobile.de), por prioridad */
 export async function runDailyBatch(client: SupabaseClient, settings: ImportCostSettings, now = new Date()) {
-    // Se leen más de RUN_BATCH: los de mobile.de bloqueado se marcan sin petición y no gastan cupo
-    const cars = await pendingCars(client, RUN_BATCH * 3, now)
-    if (!cars.length) return { revisados: 0, results: [] as ReviewResult[] }
-    const results = await reviewCars(client, cars, settings, { simular: false, origen: "cron", maxFetches: RUN_BATCH })
-    return { revisados: results.length, results }
+    const all = await reviewableCars(client)
+    const pending = nextWorkerBatch(all, Infinity, now)
+    if (!pending.length) return { revisados: 0, quedan: 0, results: [] as ReviewResult[] }
+    // Las pausas de 3–5 s no gastan CPU; 15 coches son ~1 min de reloj
+    const results = await reviewCars(client, pending.slice(0, RUN_BATCH), settings, { simular: false, origen: "cron", maxFetches: RUN_BATCH })
+    const quedan = pending.length - results.length
+    const resumen = summarizeReviews(results)
+    await saveSummary(client, {
+        origen: "worker", inicio: now, completa: quedan <= 0,
+        revisados: resumen.revisados, activos: resumen.activos, retirados: resumen.retirados, cambios_precio: resumen.cambios_precio, errores: resumen.errores,
+        detalle: { quedan, pasan_a_retirado: resumen.pasan_a_retirado },
+    })
+    return { revisados: results.length, quedan, results }
 }

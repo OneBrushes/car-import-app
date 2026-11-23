@@ -541,8 +541,13 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
           </Badge>
         )}
         {car.precio_bajado && !discarded && (
-          <Badge className="border-transparent bg-primary text-primary-foreground shadow-sm" title="Bajó de precio: coste y beneficio recalculados">
+          <Badge className="border-transparent bg-primary text-primary-foreground shadow-sm" title={`Bajó de precio${car.precio_original ? ` (antes ${formatEUR(car.precio_original)})` : ""}: coste y beneficio recalculados`}>
             <TrendingDown className="h-3 w-3" /> Bajó de precio
+          </Badge>
+        )}
+        {!car.precio_bajado && car.precio_original != null && car.precio_alemania != null && car.precio_alemania > car.precio_original + 1 && !discarded && (
+          <Badge className="border-transparent bg-warning text-warning-foreground shadow-sm" title={`Subió de precio (antes ${formatEUR(car.precio_original)}): coste y beneficio recalculados`}>
+            Subió de precio
           </Badge>
         )}
       </div>
@@ -691,8 +696,14 @@ function ClaudeCarCard({ car, busy, onState, onMove, onPatch }: {
           <dd className="tabular text-right font-medium">
             {taxLine ? formatEUR(taxLine.amount) : "—"}
             {car.desglose?.impuesto_aplicado === "claude" && <span className="block text-xs font-normal text-muted-foreground">de Claude · app {formatEUR(car.impuesto_calculado ?? 0)}</span>}
+            {car.desglose?.impuesto_aplicado === "pendiente" && <span className="block text-xs font-normal text-warning">pendiente: falta valor de Hacienda</span>}
           </dd>
-          {car.valor_hacienda ? (
+          {car.valor_hacienda_origen === "pendiente" && !car.valor_hacienda ? (
+            <>
+              <dt className="text-muted-foreground">Valor Hacienda</dt>
+              <dd className="text-right text-xs font-semibold text-warning" title="No está en las tablas del BOE: el impuesto no se incluye en el coste ni en el beneficio">Pendiente</dd>
+            </>
+          ) : car.valor_hacienda ? (
             <>
               <dt className="text-muted-foreground">Valor Hacienda</dt>
               <dd className="tabular text-right font-medium" title={car.valor_hacienda_version ?? undefined}>

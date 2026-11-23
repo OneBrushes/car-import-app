@@ -25,7 +25,10 @@ import {
     type ClaudeContact,
 } from "../../../lib/claude-cars"
 import { HACIENDA_MIN_SCORE, buscarValorHacienda, needsVersionCheck, type HaciendaMatch } from "../../../lib/hacienda"
-import { REVIEWED_CAR_STATES, planReview, type CarRow } from "../../../lib/listing-check"
+import {
+    REVIEWED_CAR_STATES, compareReviewPriority, listingPortal, madridDate, planReview, reviewedToday, revisionDayText, summarizeRevisionDays,
+    type CarRow, type RevisionRow,
+} from "../../../lib/listing-check"
 import { saveReviews } from "./revision"
 import { CARS_TABLE, CONTACTS_TABLE, costSettings, db, logCall, ownerId } from "./db"
 import { publicPrefix, pruneCarFolder, refreshFromListing, samePhoto, storePhotos, type StoredPhotos } from "./photos"
@@ -89,7 +92,7 @@ const stateSchema = z.enum(CLAUDE_CAR_STATES)
 
 /** Columnas que afectan al cálculo: si cambia alguna, se recalcula */
 const CALC_KEYS: (keyof ClaudeCarFields)[] = [
-    "anio", "mes_matriculacion", "km", "precio_alemania", "precio_neto", "iva_deducible", "co2", "valor_hacienda",
+    "anio", "mes_matriculacion", "km", "precio_alemania", "precio_neto", "iva_deducible", "co2", "valor_hacienda", "valor_hacienda_origen",
     "impuesto_matriculacion", "precio_venta_estimado_espana", "transporte", "itv", "homologacion", "placas", "gestoria",
     "viaje_coste_ruta", "viaje_extras",
 ]
@@ -176,14 +179,14 @@ async function autoHaciendaValue(client: SupabaseClient, car: Partial<ClaudeCar>
     const { matches, error } = await buscarValorHacienda(client, {
         marca: car.marca, modelo: car.modelo, version: car.version, anio: car.anio, cv: car.potencia_cv, combustible: car.combustible,
     }, 5)
-    if (error && !matches.length) return { fields: {}, note: `Valor de Hacienda: no se ha podido buscar (${error}). Pásalo en valor_hacienda o usa buscar_valor_hacienda.` }
+    // Sin valor en las tablas: NO se usa el precio de compra como base; queda "pendiente" (el impuesto no entra en el coste) y se avisa
+    const pending: Partial<ClaudeCar> = { valor_hacienda: null, valor_hacienda_origen: "pendiente", valor_hacienda_version: null, verificar_version: false }
+    const pendingNote = (why: string) =>
+        `⚠️ Valor de Hacienda PENDIENTE: ${why}. El impuesto de matriculación NO está incluido en el coste ni en el beneficio ` +
+        "(no se usa el precio de compra). Búscalo con buscar_valor_hacienda y pásalo en valor_hacienda (o pasa impuesto_matriculacion)."
+    if (error && !matches.length) return { fields: pending, note: pendingNote(`no se ha podido buscar en las tablas (${error})`) }
     const best = matches[0]
-    if (!best || best.parecido < HACIENDA_MIN_SCORE) {
-        return {
-            fields: car.valor_hacienda_origen === "tabla" ? { valor_hacienda: null, valor_hacienda_origen: null, valor_hacienda_version: null, verificar_version: false } : {},
-            note: "Valor de Hacienda: no hay ninguna versión parecida en las tablas; el impuesto se ha calculado sobre el precio de compra. Usa buscar_valor_hacienda y pasa valor_hacienda.",
-        }
-    }
+    if (!best || best.parecido < HACIENDA_MIN_SCORE) return { fields: pending, note: pendingNote("no hay ninguna versión parecida en las tablas del BOE") }
     const verify = needsVersionCheck(matches)
     const others = matches.slice(1, 4).map(m => `${versionName(m)}: ${eur(m.valor)}`).join("; ")
     return {
@@ -318,7 +321,8 @@ export function buildServer(env: Env): McpServer {
             // Valor de Hacienda: el de Claude si lo da; si no, la app lo busca en las tablas del BOE
             if (incoming.valor_hacienda !== undefined) Object.assign(incoming, { valor_hacienda_origen: "claude", valor_hacienda_version: null, verificar_version: false })
             const haciendaNotes: string[] = []
-            const auto = await autoHaciendaValue(client, { ...(existing.data ?? {}), ...incoming }).catch(() => null)
+            const auto = await autoHaciendaValue(client, { ...(existing.data ?? {}), ...incoming })
+                .catch(() => ({ fields: { valor_hacienda_origen: "pendiente" as const }, note: "⚠️ Valor de Hacienda PENDIENTE: falló la búsqueda en las tablas. El impuesto NO está incluido en el coste ni en el beneficio." }))
             if (auto) { Object.assign(incoming, auto.fields); if (auto.note) haciendaNotes.push(auto.note) }
 
             // Viaje: si hay coste de ruta, el transporte es ruta + extras (la columna transporte se mantiene igual que el cálculo)
@@ -706,24 +710,59 @@ export function buildServer(env: Env): McpServer {
         {
             title: "Anuncios pendientes de comprobar",
             description:
-                "Lista los coches activos (nuevo, interesante, contactado) cuyo anuncio no se ha podido comprobar en la revisión automática de cada mañana " +
-                "(anuncio_estado = no_comprobado; casi siempre mobile.de, que bloquea al servidor). Ábrelos con el navegador (Claude en Chrome), mira si el " +
-                "anuncio sigue publicado y su precio, y guarda el resultado de cada uno con marcar_anuncio.",
+                "Lista los coches activos (nuevo, interesante, contactado) cuyo anuncio no se ha podido comprobar hoy: los que la revisión automática " +
+                "dejó en no_comprobado y los de mobile.de que el PC de casa aún no ha revisado hoy (por ejemplo, si estaba apagado o con VPN). " +
+                "Ábrelos con el navegador (Claude en Chrome), mira si el anuncio sigue publicado y su precio, y guarda el resultado de cada uno con marcar_anuncio.",
             inputSchema: { limite: z.number().int().min(1).max(100).optional().describe("Máximo de coches (por defecto 50)") },
             annotations: { readOnlyHint: true },
         },
         async ({ limite }) => logged(client, "revisar_anuncios_pendientes", async () => {
             const { data, error } = await client.from(CARS_TABLE)
-                .select("id, marca, modelo, anio, url, precio_alemania, anuncio_ultima_comprobacion, anuncio_fallos_seguidos")
-                .in("estado", [...REVIEWED_CAR_STATES]).eq("anuncio_estado", "no_comprobado")
-                .order("anuncio_ultima_comprobacion", { ascending: true }).limit(limite ?? 50)
+                .select("id, marca, modelo, anio, url, estado, beneficio, precio_alemania, anuncio_estado, anuncio_ultima_comprobacion, anuncio_fallos_seguidos")
+                .in("estado", [...REVIEWED_CAR_STATES]).or("anuncio_estado.eq.no_comprobado,url.ilike.*mobile.de*")
             if (error) throw new Error(error.message)
-            const cars = data ?? []
+            const now = new Date()
+            const cars = (data ?? [])
+                .filter(c => c.anuncio_estado === "no_comprobado" || !reviewedToday(c.anuncio_ultima_comprobacion, now))
+                .sort(compareReviewPriority)
+                .slice(0, limite ?? 50)
             const text = cars.length
                 ? `${cars.length} anuncio(s) por comprobar. Abre cada URL, comprueba si sigue publicado y su precio, y llama a marcar_anuncio(id, estado, precio).\n` +
                   cars.map(c => `• [${c.id}] ${carName(c as Partial<ClaudeCar>)} · guardado ${eur(c.precio_alemania)}${c.anuncio_fallos_seguidos ? ` · ya salió retirado ${c.anuncio_fallos_seguidos} vez` : ""}\n  ${c.url}`).join("\n")
                 : "No hay anuncios pendientes de comprobar."
             return { result: { content: [{ type: "text", text }, { type: "text", text: JSON.stringify(cars, null, 2) }] }, resumen: `${cars.length} pendiente(s)` }
+        }),
+    )
+
+    server.registerTool(
+        "resumen_revision",
+        {
+            title: "Resumen de la revisión de anuncios",
+            description:
+                "Resumen de la revisión diaria de anuncios por día y origen: 'worker' (servidor, AutoScout24 y demás, cada mañana de 06:00 a 06:55) " +
+                "y 'local' (PC de casa, solo mobile.de). Por día: revisados, activos, retirados, cambios de precio, errores, si se completó y cuántos " +
+                "coches activos quedan sin revisar hoy.",
+            inputSchema: { dias: z.number().int().min(1).max(30).optional().describe("Días hacia atrás (por defecto 7)") },
+            annotations: { readOnlyHint: true },
+        },
+        async ({ dias }) => logged(client, "resumen_revision", async () => {
+            const n = dias ?? 7
+            const desde = madridDate(new Date(Date.now() - (n - 1) * 86_400_000))
+            const [{ data, error }, cars] = await Promise.all([
+                client.from("revisiones").select("*").gte("fecha", desde).order("fecha", { ascending: false }).order("inicio", { ascending: true }),
+                client.from(CARS_TABLE).select("url, estado, anuncio_ultima_comprobacion").in("estado", [...REVIEWED_CAR_STATES]),
+            ])
+            if (error) throw new Error(`${error.message} (¿falta ejecutar supabase/2026-11_revision_v2.sql?)`)
+            const days = summarizeRevisionDays((data ?? []) as RevisionRow[])
+            const now = new Date()
+            const sinRevisar = (cars.data ?? []).filter(c => !reviewedToday(c.anuncio_ultima_comprobacion, now))
+            const mobile = sinRevisar.filter(c => listingPortal(c.url) === "mobile.de").length
+            const lines = days.length ? days.map(revisionDayText) : ["No hay revisiones registradas en esos días."]
+            const text = [
+                `Hoy (${madridDate(now)}) quedan ${sinRevisar.length} coche(s) activos sin revisar${sinRevisar.length ? ` (${mobile} de mobile.de, ${sinRevisar.length - mobile} de otros portales)` : ""}.`,
+                ...lines,
+            ].join("\n")
+            return { result: { content: [{ type: "text", text }] }, resumen: `${days.length} día(s)` }
         }),
     )
 

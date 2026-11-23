@@ -14,6 +14,7 @@
     "check:visor": "node scripts/check-photo-viewer.mjs",
     "import:hacienda": "tsx scripts/import-hacienda.ts",
     "buscador": "tsx tools/buscador/run.ts",
+    "revision:mobile": "tsx tools/revision-mobile/revisar.ts",
     "buscador:simular": "tsx tools/buscador/run.ts --simular"
   },
   "dependencies": {
