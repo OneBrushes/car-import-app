@@ -205,9 +205,12 @@ export function nextWorkerBatch<T extends PriorityCar & { url: string }>(cars: T
 
 // --- Resumen por día (tabla revisiones, herramienta resumen_revision) ----------------------------------------------------
 
+/** worker = servidor (cron) · local = script del PC de casa · manual = revisión hecha por Claude con el navegador (marcar_anuncios) */
+export type RevisionOrigin = "worker" | "local" | "manual"
+
 export interface RevisionRow {
     fecha: string
-    origen: "worker" | "local"
+    origen: RevisionOrigin
     inicio?: string | null
     revisados: number
     activos: number
@@ -220,7 +223,7 @@ export interface RevisionRow {
 
 export interface RevisionDay {
     fecha: string
-    origenes: Partial<Record<"worker" | "local", { ejecuciones: number; revisados: number; activos: number; retirados: number; cambios_precio: number; errores: number; completa: boolean; motivo: string | null }>>
+    origenes: Partial<Record<RevisionOrigin, { ejecuciones: number; revisados: number; activos: number; retirados: number; cambios_precio: number; errores: number; completa: boolean; motivo: string | null }>>
 }
 
 /** Suma las filas de revisiones por día y origen (el Worker apunta una fila por tanda; el PC, una por pasada) */
@@ -243,7 +246,8 @@ export function revisionDayText(d: RevisionDay): string {
     const part = (name: string, o: RevisionDay["origenes"]["worker"]) => !o ? `${name}: sin revisión` :
         `${name}: ${o.revisados} revisados · ${o.activos} activos · ${o.retirados} retirados · ${o.cambios_precio} cambios de precio · ${o.errores} errores` +
         (o.completa ? " · completa" : ` · INCOMPLETA${o.motivo ? ` (${o.motivo})` : ""}`)
-    return `${d.fecha} — ${part("Servidor", d.origenes.worker)} | ${part("PC de casa (mobile.de)", d.origenes.local)}`
+    return `${d.fecha} — ${part("Servidor", d.origenes.worker)} | ${part("PC de casa (mobile.de)", d.origenes.local)}` +
+        (d.origenes.manual ? ` | ${part("Manual (Claude con el navegador)", d.origenes.manual)}` : "")
 }
 
 // --- mobile.de desde el PC de casa (tools/revision-mobile) -------------------------------------------------------------
@@ -403,3 +407,80 @@ export function planReview(car: CarRow, check: Pick<ListingCheck, "resultado" | 
     }
 }
 
+
+// --- Revisión manual en bloque (herramienta marcar_anuncios) -------------------------------------------------------------
+
+export const MANUAL_REVIEW_MAX = 200
+
+export interface ManualReviewItem {
+    id: string
+    estado: "activo" | "retirado"
+    precio?: number | null
+    nota?: string | null
+}
+
+export interface ManualReviewPlan {
+    reviews: AppliedReview[]
+    /** ids que no existen o no se han podido procesar (se sigue con los demás) */
+    errores: { id: string; motivo: string }[]
+    resumen: { revisados: number; activos: number; retirados: number; cambios_precio: number; errores: number; pasan_a_retirado: number }
+    /** Solo lo que ha cambiado: pasan a "retirado", siguen retirados (1.er aviso) y cambios de precio con el beneficio antes → después */
+    cambios: string[]
+}
+
+/**
+ * Lo que hace marcar_anuncios con una lista de anuncios revisados a mano: para cada uno, lo mismo que marcar_anuncio
+ * (planReview con origen "manual"). No escribe nada; los ids que no estén en `cars` van a errores.
+ */
+export function planManualReviews(cars: CarRow[], items: ManualReviewItem[], settings: ImportCostSettings, now = new Date()): ManualReviewPlan {
+    if (items.length > MANUAL_REVIEW_MAX) throw new Error(`Como mucho ${MANUAL_REVIEW_MAX} anuncios por llamada (has pasado ${items.length})`)
+    const byId = new Map(cars.map(c => [c.id, c]))
+    const reviews: AppliedReview[] = []
+    const errores: { id: string; motivo: string }[] = []
+    const cambios: string[] = []
+    const seen = new Set<string>()
+    for (const it of items) {
+        if (seen.has(it.id)) { errores.push({ id: it.id, motivo: "repetido en la lista (se usa el primero)" }); continue }
+        seen.add(it.id)
+        const car = byId.get(it.id)
+        if (!car) { errores.push({ id: it.id, motivo: "no existe ningún coche de Claude con ese id" }); continue }
+        try {
+            const r = planReview(car, {
+                resultado: it.estado,
+                precio: it.estado === "activo" && it.precio && it.precio > 0 ? Math.round(it.precio) : null,
+                http_status: null,
+                motivo: `revisión manual con el navegador${it.nota ? `: ${it.nota}` : ""}`,
+            }, settings, now, "manual")
+            reviews.push(r)
+            if (r.patch.estado === "retirado") cambios.push(`🏷️ ${r.nombre}: retirado 2.ª vez → Vendido / retirado`)
+            else if (it.estado === "retirado") cambios.push(`⚠️ ${r.nombre}: retirado (${r.patch.anuncio_fallos_seguidos}/${RETIRED_STRIKES})`)
+            if ("precio_alemania" in r.patch) {
+                const baja = (r.patch.precio_alemania as number) < (car.precio_alemania ?? 0)
+                cambios.push(`${baja ? "📉" : "📈"} ${r.nombre}: ${eur(car.precio_alemania)} → ${eur(r.patch.precio_alemania as number)} · beneficio ${eur(car.beneficio)} → ${eur(r.patch.beneficio as number | null)}`)
+            }
+        } catch (e) {
+            errores.push({ id: it.id, motivo: e instanceof Error ? e.message : String(e) })
+        }
+    }
+    return {
+        reviews, errores, cambios,
+        resumen: {
+            revisados: reviews.length,
+            activos: reviews.filter(r => r.resultado === "activo").length,
+            retirados: reviews.filter(r => r.resultado === "retirado").length,
+            cambios_precio: reviews.filter(r => "precio_alemania" in r.patch).length,
+            errores: errores.length,
+            pasan_a_retirado: reviews.filter(r => r.patch.estado === "retirado").length,
+        },
+    }
+}
+
+/** Respuesta corta de marcar_anuncios */
+export function manualReviewText(p: ManualReviewPlan, guardado = true): string {
+    const r = p.resumen
+    return [
+        `${guardado ? "Guardados" : "NO guardados"} ${r.revisados} anuncio(s): ${r.activos} activos · ${r.retirados} retirados${r.pasan_a_retirado ? ` (${r.pasan_a_retirado} pasan a Vendido / retirado)` : ""} · ${r.cambios_precio} cambios de precio${r.errores ? ` · ${r.errores} error(es)` : ""}.`,
+        ...(p.cambios.length ? ["Cambios:", ...p.cambios.map(c => `• ${c}`)] : ["Sin cambios."]),
+        ...(p.errores.length ? ["Errores:", ...p.errores.map(e => `• ${e.id}: ${e.motivo}`)] : []),
+    ].join("\n")
+}

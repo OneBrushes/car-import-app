@@ -26,10 +26,10 @@ import {
 } from "../../../lib/claude-cars"
 import { HACIENDA_MIN_SCORE, buscarValorHacienda, needsVersionCheck, type HaciendaMatch } from "../../../lib/hacienda"
 import {
-    REVIEWED_CAR_STATES, compareReviewPriority, listingPortal, madridDate, planReview, reviewedToday, revisionDayText, summarizeRevisionDays,
+    MANUAL_REVIEW_MAX, REVIEWED_CAR_STATES, compareReviewPriority, manualReviewText, planManualReviews, listingPortal, madridDate, planReview, reviewedToday, revisionDayText, summarizeRevisionDays,
     type CarRow, type RevisionRow,
 } from "../../../lib/listing-check"
-import { saveReviews } from "./revision"
+import { saveReviews, saveSummary } from "./revision"
 import { CARS_TABLE, CONTACTS_TABLE, costSettings, db, logCall, ownerId } from "./db"
 import { publicPrefix, pruneCarFolder, refreshFromListing, samePhoto, storePhotos, type StoredPhotos } from "./photos"
 import type { Env } from "./env"
@@ -763,6 +763,49 @@ export function buildServer(env: Env): McpServer {
                 ...lines,
             ].join("\n")
             return { result: { content: [{ type: "text", text }] }, resumen: `${days.length} día(s)` }
+        }),
+    )
+
+    server.registerTool(
+        "marcar_anuncios",
+        {
+            title: "Marcar varios anuncios comprobados",
+            description:
+                `Guarda de una vez el resultado de una revisión manual de anuncios (hasta ${MANUAL_REVIEW_MAX}). Cada elemento: id, estado ('activo' o ` +
+                "'retirado'), precio que ves si está activo, y nota opcional. Mismas reglas que marcar_anuncio: retirado dos veces seguidas → " +
+                "'retirado' (Vendido / retirado); bajadas y subidas de precio → se recalculan coste y beneficio (el precio inicial queda en precio_original). " +
+                "Úsala en lugar de llamar muchas veces a marcar_anuncio. Devuelve solo el resumen y lo que ha cambiado; los ids que fallen van en 'errores'. " +
+                "No marques los que no hayas podido ver (captcha).",
+            inputSchema: {
+                anuncios: z.array(z.object({
+                    id: z.string().describe("id del coche"),
+                    estado: z.enum(["activo", "retirado"]).describe("Lo que has visto"),
+                    precio: z.number().positive().optional().describe("Precio que muestra el anuncio ahora, en euros (si está activo)"),
+                    nota: z.string().trim().max(300).optional(),
+                })).min(1).max(MANUAL_REVIEW_MAX).describe(`Anuncios revisados (máx. ${MANUAL_REVIEW_MAX})`),
+            },
+        },
+        async ({ anuncios }) => logged(client, "marcar_anuncios", async () => {
+            const inicio = new Date()
+            const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+            const ids = [...new Set(anuncios.map(a => a.id).filter(id => uuid.test(id)))]
+            const [{ data, error }, settings] = await Promise.all([
+                ids.length ? client.from(CARS_TABLE).select("*").in("id", ids) : Promise.resolve({ data: [], error: null }),
+                costSettings(client),
+            ])
+            if (error) throw new Error(error.message)
+            const plan = planManualReviews((data ?? []) as CarRow[], anuncios, settings, inicio)
+            await saveReviews(client, plan.reviews)
+            const r = plan.resumen
+            await saveSummary(client, {
+                origen: "manual", inicio, completa: true,
+                revisados: r.revisados, activos: r.activos, retirados: r.retirados, cambios_precio: r.cambios_precio, errores: r.errores,
+                detalle: { pasan_a_retirado: r.pasan_a_retirado, ...(plan.errores.length ? { errores: plan.errores.slice(0, 50) } : {}) },
+            })
+            return {
+                result: { content: [{ type: "text", text: manualReviewText(plan) }] },
+                resumen: `${r.revisados} revisados · ${r.activos} activos · ${r.retirados} retirados · ${r.cambios_precio} cambios de precio${r.errores ? ` · ${r.errores} errores` : ""}`,
+            }
         }),
     )
 
