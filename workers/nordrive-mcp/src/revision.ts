@@ -8,7 +8,7 @@
 //  · Plan gratuito: 50 peticiones por ejecución. Por eso las escrituras van juntas (aplicar_revisiones_anuncios).
 import type { SupabaseClient } from "@supabase/supabase-js"
 import {
-    classifyListing, listingPortal, madridDate, nextWorkerBatch, planReview, REVIEWED_CAR_STATES, type AppliedReview, type CarRow, type RevisionOrigin, type ListingCheck, type ListingFetch,
+    classifyListing, listingPortal, madridDate, nextWorkerBatch, planReview, REVIEWED_CAR_STATES, type AppliedReview, type CarRow, type RevisionOrigin, reviewChangeLines, type ListingCheck, type ListingFetch,
 } from "../../../lib/listing-check"
 import type { ImportCostSettings } from "../../../lib/import-costs"
 import { CARS_TABLE } from "./db"
@@ -180,7 +180,7 @@ export async function runDailyBatch(client: SupabaseClient, settings: ImportCost
     await saveSummary(client, {
         origen: "worker", inicio: now, completa: quedan <= 0,
         revisados: resumen.revisados, activos: resumen.activos, retirados: resumen.retirados, cambios_precio: resumen.cambios_precio, errores: resumen.errores,
-        detalle: { quedan, pasan_a_retirado: resumen.pasan_a_retirado },
+        detalle: { quedan, pasan_a_retirado: resumen.pasan_a_retirado, cambios: reviewChangeLines(results).slice(0, 40) },
     })
     return { revisados: results.length, quedan, results }
 }

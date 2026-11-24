@@ -33,7 +33,8 @@ import { CommandPalette, CommandPaletteTrigger, OPEN_CAR_EVENT } from "@/compone
 import { ConnectionStatus } from "@/components/connection-status"
 import { LiveCursors } from "@/components/live-cursors"
 import { useAuth } from "@/components/auth-provider"
-import { Loader2, LogOut, User as UserIcon, Shield, Menu, FileSpreadsheet } from "lucide-react"
+import { Loader2, LogOut, User as UserIcon, Shield, Menu, FileSpreadsheet, Download, Bell, BellOff, BellRing } from "lucide-react"
+import { usePwa, IosInstallDialog } from "@/components/pwa"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import {
@@ -65,6 +66,8 @@ export default function Home() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const { user, loading, signOut } = useAuth()
   const router = useRouter()
+  // Instalar la app y notificaciones push (los avisos son de "Guardados por Claude": solo la cuenta dueña)
+  const pwa = usePwa(isClaudeOwner)
 
   useEffect(() => {
     setMounted(true)
@@ -243,6 +246,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background text-foreground flex relative w-full overflow-x-clip">
       <LiveCursors />
+      <IosInstallDialog open={pwa.iosHelpOpen} onOpenChange={pwa.setIosHelpOpen} />
       <CommandPalette navGroups={navGroups} onNavigate={(tab) => handleTabSelect(tab as TabType)} />
       {/* Connection Status Indicator */}
       <ConnectionStatus />
@@ -343,6 +347,34 @@ export default function Home() {
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
                   <span>Exportar a Excel</span>
                 </DropdownMenuItem>
+                {pwa.canInstall && (
+                  <DropdownMenuItem onClick={() => pwa.install()}>
+                    <Download className="mr-2 h-4 w-4" />
+                    <span>{pwa.ios ? "Añadir a pantalla de inicio" : "Instalar app"}</span>
+                  </DropdownMenuItem>
+                )}
+                {isClaudeOwner && pwa.push !== "cargando" && pwa.push !== "no-soportado" && (
+                  pwa.push === "activado" ? (
+                    <>
+                      <DropdownMenuItem disabled={pwa.busy} onClick={() => pwa.testPush()}>
+                        <BellRing className="mr-2 h-4 w-4" />
+                        <span>Enviar notificación de prueba</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled={pwa.busy} onClick={() => pwa.disablePush()}>
+                        <BellOff className="mr-2 h-4 w-4" />
+                        <span>Desactivar notificaciones</span>
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
+                    <DropdownMenuItem
+                      disabled={pwa.busy || pwa.push === "bloqueado"}
+                      onClick={() => pwa.enablePush()}
+                    >
+                      <Bell className="mr-2 h-4 w-4" />
+                      <span>{pwa.push === "bloqueado" ? "Notificaciones bloqueadas (ajustes)" : "Activar notificaciones"}</span>
+                    </DropdownMenuItem>
+                  )
+                )}
                 <DropdownMenuItem onClick={() => router.push("/profile")}>
                   <UserIcon className="mr-2 h-4 w-4" />
                   <span>Perfil</span>

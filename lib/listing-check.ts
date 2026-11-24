@@ -484,3 +484,44 @@ export function manualReviewText(p: ManualReviewPlan, guardado = true): string {
         ...(p.errores.length ? ["Errores:", ...p.errores.map(e => `• ${e.id}: ${e.motivo}`)] : []),
     ].join("\n")
 }
+
+// --- Notificaciones push de la revisión -----------------------------------------------------------------------------
+
+/** Líneas cortas de lo que ha cambiado (para guardar en revisiones.detalle.cambios y para la notificación) */
+export function reviewChangeLines(results: Pick<AppliedReview, "nombre" | "patch" | "precio_anterior">[]): string[] {
+    const out: string[] = []
+    for (const r of results) {
+        if (r.patch.estado === "retirado") out.push(`🏷️ ${r.nombre}: vendido / retirado`)
+        if ("precio_alemania" in r.patch) {
+            const nuevo = r.patch.precio_alemania as number
+            out.push(`${r.precio_anterior != null && nuevo < r.precio_anterior ? "📉" : "📈"} ${r.nombre}: ${eur(r.precio_anterior)} → ${eur(nuevo)}`)
+        }
+    }
+    return out
+}
+
+export interface PushNotice { title: string; body: string; url?: string; tag?: string }
+
+/**
+ * Notificación con el resumen de la revisión del día (suma de todas las tandas del servidor).
+ * null si no ha cambiado nada: no se avisa por una revisión sin novedades.
+ */
+export function dailyReviewNotice(rows: Pick<RevisionRow, "fecha" | "revisados" | "cambios_precio" | "detalle">[], fecha: string): PushNotice | null {
+    const today = rows.filter(r => r.fecha === fecha)
+    const revisados = today.reduce((n, r) => n + (r.revisados ?? 0), 0)
+    const precios = today.reduce((n, r) => n + (r.cambios_precio ?? 0), 0)
+    const vendidos = today.reduce((n, r) => n + Number((r.detalle as Record<string, unknown> | null)?.pasan_a_retirado ?? 0), 0)
+    if (!vendidos && !precios) return null
+    const lines = today.flatMap(r => {
+        const c = (r.detalle as Record<string, unknown> | null)?.cambios
+        return Array.isArray(c) ? c.filter((x): x is string => typeof x === "string") : []
+    })
+    const head = [vendidos ? `${vendidos} vendido(s) / retirado(s)` : null, precios ? `${precios} cambio(s) de precio` : null].filter(Boolean).join(" · ")
+    const shown = lines.slice(0, 4)
+    return {
+        title: `Revisión de anuncios · ${revisados} revisados`,
+        body: [head, ...shown, ...(lines.length > shown.length ? [`… y ${lines.length - shown.length} más`] : [])].join("\n"),
+        url: "/?tab=claude",
+        tag: `revision-${fecha}`,
+    }
+}

@@ -11,8 +11,9 @@ import { AuthorizationError, CimdFetchError, OAuthProvider, type ConsentDescript
 import { handleMcp, refreshCarPhotos } from "./mcp"
 import { CARS_TABLE, costSettings, db, logCall, ownerId } from "./db"
 import { reviewCars, runDailyBatch, saveReviews, saveSummary, reviewableCars, SUMMARY_TABLE } from "./revision"
-import { compareReviewPriority, listingPortal, madridDate, madridHour, mobileAdId, planReview, reviewedToday, type CarRow } from "../../../lib/listing-check"
+import { compareReviewPriority, dailyReviewNotice, listingPortal, madridDate, madridHour, mobileAdId, planReview, reviewedToday, type CarRow } from "../../../lib/listing-check"
 import type { Env } from "./env"
+import { deletePushSubscription, notifyOwner, notifyUser, pushConfigured, savePushSubscription } from "./push"
 
 const SCOPE = "coches"
 
@@ -68,6 +69,13 @@ export default {
                     herramienta: "revision_diaria", ok: true,
                     resumen: `${revisados} revisados · ${count("activo")} activos · ${count("retirado")} retirados${vendidos ? ` (${vendidos} pasan a vendido / retirado)` : ""} · ${count("no_comprobado")} sin comprobar${precios ? ` · ${precios} cambios de precio` : ""} · quedan ${quedan}`,
                 })
+                // Última tanda del día: un solo aviso al móvil con todo lo que ha cambiado (si ha cambiado algo)
+                if (quedan <= 0) {
+                    const fecha = madridDate(new Date(controller.scheduledTime))
+                    const { data } = await client.from(SUMMARY_TABLE).select("fecha, revisados, cambios_precio, detalle").eq("fecha", fecha).eq("origen", "worker")
+                    const notice = dailyReviewNotice(data ?? [], fecha)
+                    if (notice) await notifyOwner(client, env, notice)
+                }
             } catch (e) {
                 await logCall(client, { herramienta: "revision_diaria", ok: false, error: e instanceof Error ? e.message : String(e) })
             }
@@ -83,6 +91,7 @@ async function defaultHandler(request: Request, env: Env): Promise<Response> {
     if (url.pathname === "/api/fotos") return photosApi(request, env)
     if (url.pathname === "/api/revision") return revisionApi(request, env)
     if (url.pathname.startsWith("/api/anuncios/")) return localReviewApi(request, env, url.pathname)
+    if (url.pathname.startsWith("/api/push/")) return pushApi(request, env, url.pathname)
     if (url.pathname !== "/authorize") return text("No encontrado", 404)
 
     const oauth = env.OAUTH_PROVIDER
@@ -145,13 +154,9 @@ async function photosApi(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors })
     if (request.method !== "POST") return json({ error: "Método no permitido" }, 405)
 
-    const auth = request.headers.get("Authorization") ?? ""
-    if (!auth.startsWith("Bearer ")) return json({ error: "Falta la sesión" }, 401)
-    const userRes = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: auth } })
-    if (!userRes.ok) return json({ error: "Sesión no válida" }, 401)
-    const user = (await userRes.json()) as { id?: string }
     const client = db(env)
-    if (!user.id || user.id !== (await ownerId(client))) return json({ error: "Solo la cuenta dueña puede hacer esto" }, 403)
+    const owner = await ownerFromRequest(request, env, client)
+    if ("error" in owner) return json({ error: owner.error }, owner.status)
 
     const body = (await request.json().catch(() => ({}))) as { id?: string; fotos?: unknown }
     const given = Array.isArray(body.fotos) ? body.fotos.filter((u): u is string => typeof u === "string" && /^https?:\/\//.test(u)).slice(0, 60) : undefined
@@ -169,6 +174,69 @@ async function photosApi(request: Request, env: Env): Promise<Response> {
         const message = e instanceof Error ? e.message : String(e)
         await logCall(client, { herramienta: "actualizar_fotos (app)", ok: false, coche_id: body.id, error: message })
         return json({ error: message }, 500)
+    }
+}
+
+/** La sesión de Supabase de la app ("Authorization: Bearer …") tiene que ser la de la cuenta dueña (mcp_config) */
+async function ownerFromRequest(request: Request, env: Env, client: ReturnType<typeof db>): Promise<{ userId: string } | { error: string; status: number }> {
+    const auth = request.headers.get("Authorization") ?? ""
+    if (!auth.startsWith("Bearer ")) return { error: "Falta la sesión", status: 401 }
+    const userRes = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: auth } })
+    if (!userRes.ok) return { error: "Sesión no válida", status: 401 }
+    const user = (await userRes.json()) as { id?: string }
+    if (!user.id || user.id !== (await ownerId(client))) return { error: "Solo la cuenta dueña puede hacer esto", status: 403 }
+    return { userId: user.id }
+}
+
+// --- Notificaciones push de la app (PWA) ---------------------------------------------------------------------------
+//   GET  /api/push/clave                         → { publicKey } (clave VAPID pública, para suscribirse)
+//   POST /api/push/suscribir { subscription, dispositivo }
+//   POST /api/push/baja      { endpoint }
+//   POST /api/push/prueba                        → { enviados, dispositivos }
+// Todas con "Authorization: Bearer <sesión de Supabase>" de la cuenta dueña.
+
+async function pushApi(request: Request, env: Env, path: string): Promise<Response> {
+    const origin = request.headers.get("Origin") ?? ""
+    const cors: Record<string, string> = {
+        "Access-Control-Allow-Origin": APP_ORIGINS.includes(origin) ? origin : APP_ORIGINS[0],
+        "Access-Control-Allow-Headers": "authorization, content-type",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        Vary: "Origin",
+    }
+    const json = (body: unknown, status = 200) => Response.json(body, { status, headers: cors })
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors })
+    if (!pushConfigured(env)) return json({ error: "Faltan las claves VAPID en el Worker" }, 503)
+    const client = db(env)
+    const owner = await ownerFromRequest(request, env, client)
+    if ("error" in owner) return json({ error: owner.error }, owner.status)
+    const action = path.slice("/api/push/".length)
+    try {
+        if (action === "clave" && request.method === "GET") return json({ publicKey: env.VAPID_PUBLIC_KEY })
+        if (request.method !== "POST") return json({ error: "Método no permitido" }, 405)
+        const body = (await request.json().catch(() => ({}))) as {
+            subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } }; dispositivo?: string; endpoint?: string
+        }
+        if (action === "suscribir") {
+            const s = body.subscription
+            if (!s?.endpoint || !s.endpoint.startsWith("https://") || !s.keys?.p256dh || !s.keys?.auth) return json({ error: "Suscripción no válida" }, 400)
+            await savePushSubscription(client, owner.userId, { endpoint: s.endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth }, body.dispositivo ?? null)
+            await logCall(client, { herramienta: "push_suscribir (app)", ok: true, resumen: body.dispositivo ?? "dispositivo" })
+            return json({ ok: true })
+        }
+        if (action === "baja") {
+            if (!body.endpoint) return json({ error: "Falta el endpoint" }, 400)
+            await deletePushSubscription(client, owner.userId, body.endpoint)
+            return json({ ok: true })
+        }
+        if (action === "prueba") {
+            const r = await notifyUser(client, env, owner.userId, {
+                title: "NorDrive", body: "✅ Las notificaciones funcionan en este dispositivo.", url: "/?tab=claude", tag: "prueba",
+            })
+            return json(r)
+        }
+        return json({ error: "No encontrado" }, 404)
+    } catch (e) {
+        return json({ error: e instanceof Error ? e.message : String(e) }, 500)
     }
 }
 

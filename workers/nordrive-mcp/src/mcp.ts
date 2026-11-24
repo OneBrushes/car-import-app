@@ -30,6 +30,8 @@ import {
     type CarRow, type RevisionRow,
 } from "../../../lib/listing-check"
 import { saveReviews, saveSummary } from "./revision"
+import { notifyOwner } from "./push"
+import { reviewChangeLines } from "../../../lib/listing-check"
 import { CARS_TABLE, CONTACTS_TABLE, costSettings, db, logCall, ownerId } from "./db"
 import { publicPrefix, pruneCarFolder, refreshFromListing, samePhoto, storePhotos, type StoredPhotos } from "./photos"
 import type { Env } from "./env"
@@ -360,6 +362,11 @@ export function buildServer(env: Env): McpServer {
 
             ;[car] = await attachContacts(client, [car])
             const action = existing.data ? "Actualizado (la URL ya estaba guardada)" : "Guardado"
+            if (!existing.data) await notifyOwner(client, env, {
+                title: `🚗 Nuevo coche: ${carName(car)}`,
+                body: [`Coste en España ${eur(car.coste_total_espana)} · beneficio ${eur(car.beneficio)}`, car.valor_hacienda_origen === "pendiente" ? "⚠️ Hacienda pendiente" : null].filter(Boolean).join("\n"),
+                url: "/?tab=claude", tag: `coche-${car.id}`,
+            })
             notes = [...haciendaNotes, ...notes]
             return {
                 result: carResult(car, withWarnings(`${action} en 'Guardados por Claude'.`, notes)),
@@ -800,7 +807,13 @@ export function buildServer(env: Env): McpServer {
             await saveSummary(client, {
                 origen: "manual", inicio, completa: true,
                 revisados: r.revisados, activos: r.activos, retirados: r.retirados, cambios_precio: r.cambios_precio, errores: r.errores,
-                detalle: { pasan_a_retirado: r.pasan_a_retirado, ...(plan.errores.length ? { errores: plan.errores.slice(0, 50) } : {}) },
+                detalle: { pasan_a_retirado: r.pasan_a_retirado, cambios: reviewChangeLines(plan.reviews).slice(0, 40), ...(plan.errores.length ? { errores: plan.errores.slice(0, 50) } : {}) },
+            })
+            const lines = reviewChangeLines(plan.reviews)
+            if (lines.length) await notifyOwner(client, env, {
+                title: `Revisión manual · ${r.revisados} anuncios`,
+                body: [...lines.slice(0, 4), ...(lines.length > 4 ? [`… y ${lines.length - 4} más`] : [])].join("\n"),
+                url: "/?tab=claude", tag: "revision-manual",
             })
             return {
                 result: { content: [{ type: "text", text: manualReviewText(plan) }] },

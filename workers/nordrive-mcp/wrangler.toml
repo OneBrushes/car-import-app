@@ -9,8 +9,10 @@ compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 # URL pública del Worker, sin barra final. Cámbiala si usas un dominio propio (p. ej. https://mcp.nordrivecars.com)
 PUBLIC_URL = "https://nordrive-mcp.infonordrive.workers.dev"
 SUPABASE_URL = "https://luzacvchtxkurisuywic.supabase.co"
+# Notificaciones push: clave pública VAPID (la privada es el secreto VAPID_PRIVATE_KEY). Se generan con node scripts/generar-vapid.mjs
+VAPID_PUBLIC_KEY = "BNNC4zvxH0BTeTZ0OanZJ3Fe5hyE44mVEPBwVda0-z4vdWrj0cOgn_EnFmWAjsqQpkjQump-Vzl4NdppCRFCeXA"
 
-# Secretos (no van aquí): npx wrangler secret put MCP_SECRET / SUPABASE_SERVICE_ROLE_KEY / LOCAL_REVIEW_TOKEN
+# Secretos (no van aquí): npx wrangler secret put MCP_SECRET / SUPABASE_SERVICE_ROLE_KEY / LOCAL_REVIEW_TOKEN / VAPID_PRIVATE_KEY
 
 [[kv_namespaces]]
 binding = "OAUTH_KV"
