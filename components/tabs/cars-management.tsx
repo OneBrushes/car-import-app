@@ -10,6 +10,7 @@ import { SellCarModal } from "@/components/modals/sell-car-modal"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { loadClientCars } from "@/lib/client-cars"
 import { loadPurchasePhotos } from "@/lib/purchase-photos"
+import { PurchasePanel } from "@/components/purchase-panel"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
@@ -62,6 +63,8 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | "inventory" | "sold">("inventory")
   const [viewMode, setViewMode] = useState<"list" | "board">("board")
+  /** Coche abierto en el panel lateral (ficha) */
+  const [panelId, setPanelId] = useState<string | null>(null)
 
   // Delete confirmation state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -98,9 +101,9 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
     return () => window.removeEventListener(OPEN_CAR_EVENT, onOpenCar)
   }, [boughtCars])
 
-  const fetchCars = async () => {
+  const fetchCars = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const { data: carsData, error: carsError } = await supabase
         .from('inventory_cars')
         .select(`
@@ -405,13 +408,17 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
                 }}
                 onDelete={() => deleteCar(car.id)}
                 onPrintInvoice={() => printInvoice(car.id)}
-                onChanged={() => fetchCars()}
+                onChanged={() => fetchCars(true)}
+                onOpen={() => setPanelId(car.id)}
               />
               </div>
             ))}
           </div>
         )
       )}
+
+      {/* Ficha del coche (panel lateral) */}
+      {viewMode === "list" && <PurchasePanel carId={panelId} onClose={() => setPanelId(null)} onChanged={() => fetchCars(true)} />}
 
       {/* Modales */}
       <MarkAsBoughtModal

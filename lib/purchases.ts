@@ -138,3 +138,65 @@ export function stagePatch(current: Pick<PurchaseCar, "logistic_status">, next: 
     else if (fecha) patch.date_purchased = fecha
     return patch
 }
+
+// --- Ficha (panel) de un coche de Comprados ---------------------------------------------------------------------------
+
+/** Lo que estimó Claude del coche enlazado (coches_claude) */
+export interface ClaudeEstimate {
+    precio_alemania?: number | null
+    coste_total_espana?: number | null
+    precio_venta_estimado_espana?: number | null
+}
+
+/**
+ * Cuentas previstas: precio acordado + gastos (los que estimó Claude — impuesto, transporte, ITV… — o los apuntados si
+ * ya los superan). Así el beneficio previsto no mejora solo porque aún no hayas pagado el impuesto, y empeora si el
+ * viaje se come el margen. null si no hay estimación de Claude.
+ */
+export function purchaseForecast(car: PurchaseCar, est: ClaudeEstimate | null | undefined) {
+    if (!est?.coste_total_espana) return null
+    const t = purchaseTotals(car)
+    const previstos = Math.max(0, num(est.coste_total_espana) - num(est.precio_alemania))
+    const gastos = Math.max(previstos, t.gastos)
+    const coste = t.precio + gastos
+    const venta = est.precio_venta_estimado_espana ? num(est.precio_venta_estimado_espana) : null
+    return {
+        gastosPrevistos: previstos,
+        gastosApuntados: t.gastos,
+        /** Los gastos apuntados ya superan lo que estimó Claude */
+        superado: t.gastos > previstos,
+        coste,
+        venta,
+        beneficio: venta != null ? venta - coste : null,
+        /** Diferencia de precio negociada respecto al anuncio (negativa = rebaja conseguida) */
+        rebaja: est.precio_alemania ? t.precio - num(est.precio_alemania) : null,
+    }
+}
+
+/** Gastos rápidos del panel: un toque y solo falta el importe */
+export const QUICK_EXPENSES: { label: string; concept: string; category: ExpenseCategory }[] = [
+    { label: "Vuelo", concept: "Vuelo", category: "Viaje" },
+    { label: "Hotel", concept: "Hotel", category: "Viaje" },
+    { label: "Gasolina", concept: "Gasolina", category: "Viaje" },
+    { label: "Peajes", concept: "Peajes", category: "Viaje" },
+    { label: "Comida", concept: "Comida", category: "Viaje" },
+    { label: "Transporte", concept: "Transporte del coche", category: "Transporte" },
+    { label: "Otro", concept: "", category: "Otro" },
+]
+
+/** Emoji del gasto: por el concepto (vuelo, hotel…) y si no por la categoría */
+export function expenseIcon(e: Pick<PurchaseExpense, "concept" | "category">): string {
+    const c = (e.concept || "").toLowerCase()
+    if (/vuelo|avi[oó]n|flight|ryanair|iberia|vueling|lufthansa/.test(c)) return "✈️"
+    if (/hotel|airbnb|hostal|alojamiento|booking/.test(c)) return "🏨"
+    if (/gasolina|gasoil|di[eé]sel|combustible|repostaje/.test(c)) return "⛽"
+    if (/peaje|vi[ñn]eta|autopista/.test(c)) return "🛣️"
+    if (/tren|bus|taxi|uber|metro/.test(c)) return "🚆"
+    if (/comida|cena|desayuno|restaurante|dieta/.test(c)) return "🍽️"
+    if (/placa/.test(c)) return "🪪"
+    const byCategory: Record<string, string> = {
+        Viaje: "🧳", Transporte: "🚚", ITV: "🔍", "Trámites": "📄", "Reparación": "🔧", Mantenimiento: "🛠️",
+        Seguro: "🛡️", Impuestos: "🏛️", "Precio del coche": "🚗",
+    }
+    return byCategory[e.category ?? ""] ?? "💶"
+}

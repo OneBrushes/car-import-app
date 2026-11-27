@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { PURCHASE_STAGE_BY_NAME, purchaseStageLabel, purchaseText, purchaseTotals, stageName, stagePatch, type PurchaseCar } from "./purchases"
+import { expenseIcon, purchaseForecast, PURCHASE_STAGE_BY_NAME, purchaseStageLabel, purchaseText, purchaseTotals, stageName, stagePatch, type PurchaseCar } from "./purchases"
 
 const reserved: PurchaseCar = {
     id: "inv-1", brand: "BMW", model: "X3", year: 2021, initial_price: 30000, initial_expenses: 0, date_purchased: "2026-11-27",
@@ -41,5 +41,34 @@ describe("Comprados: reservado y gastos", () => {
         expect(stagePatch({ logistic_status: "reserved" }, "purchased", null, "2026-12-05")).toEqual({ logistic_status: "purchased", date_purchased: "2026-12-05" })
         expect(stagePatch({ logistic_status: "reserved" }, "purchased", "2026-12-04", "2026-12-05")).toEqual({ logistic_status: "purchased", date_purchased: "2026-12-04" })
         expect(stagePatch({ logistic_status: "purchased" }, "in_transit", null)).toEqual({ logistic_status: "in_transit" })
+    })
+})
+
+
+describe("ficha de Comprados", () => {
+    const est = { precio_alemania: 11000, coste_total_espana: 14000, precio_venta_estimado_espana: 16500 }
+
+    it("previsión: precio acordado + gastos estimados por Claude mientras los apuntados no los superen", () => {
+        const f = purchaseForecast({ ...reserved, initial_price: 10800, expenses: [{ id: "a", concept: "Vuelo", amount: 189 }] }, est)!
+        expect(f).toEqual({ gastosPrevistos: 3000, gastosApuntados: 189, superado: false, coste: 13800, venta: 16500, beneficio: 2700, rebaja: -200 })
+    })
+
+    it("previsión: si los gastos apuntados superan lo estimado, cuentan los apuntados", () => {
+        const f = purchaseForecast({ ...reserved, initial_price: 11000, expenses: [{ id: "a", concept: "Transporte", amount: 3500 }] }, est)!
+        expect(f.superado).toBe(true)
+        expect(f.coste).toBe(14500)
+        expect(f.beneficio).toBe(2000)
+    })
+
+    it("sin estimación de Claude no hay previsión", () => {
+        expect(purchaseForecast(reserved, null)).toBeNull()
+        expect(purchaseForecast(reserved, { precio_alemania: 1 })).toBeNull()
+    })
+
+    it("icono del gasto por concepto o categoría", () => {
+        expect(expenseIcon({ concept: "Vuelo Madrid-Múnich", category: "Viaje" })).toBe("✈️")
+        expect(expenseIcon({ concept: "Hotel Ibis", category: "Viaje" })).toBe("🏨")
+        expect(expenseIcon({ concept: "Cambio de aceite", category: "Mantenimiento" })).toBe("🛠️")
+        expect(expenseIcon({ concept: "Algo", category: null })).toBe("💶")
     })
 })

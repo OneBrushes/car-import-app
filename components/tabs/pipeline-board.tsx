@@ -13,6 +13,7 @@ import { OPEN_CAR_EVENT, type OpenCarDetail } from "@/components/command-palette
 import { cn } from "@/lib/utils"
 import { loadClientCars, type ClientCarInfo } from "@/lib/client-cars"
 import { loadPurchasePhotos, type PurchasePhoto } from "@/lib/purchase-photos"
+import { PurchasePanel } from "@/components/purchase-panel"
 
 type ImportedStage = "found" | "contacted" | "negotiating"
 type LogisticStage = "reserved" | "purchased" | "in_transit" | "homologation" | "detailing" | "ready"
@@ -77,14 +78,16 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
   const [showDiscarded, setShowDiscarded] = useState(false)
 
   const [buyCarId, setBuyCarId] = useState<string | null>(null)
+  /** Coche de Comprados abierto en el panel lateral */
+  const [panelId, setPanelId] = useState<string | null>(null)
   /** Fase en la que entra el coche al pasarlo de importación: comprado o reservado (señal pagada) */
   const [buyStage, setBuyStage] = useState<"purchased" | "reserved">("purchased")
   const [sellCar, setSellCar] = useState<any | null>(null)
 
   const companyRole = ["importador", "admin", "super_admin"].includes(profile?.role || "")
 
-  const load = async () => {
-    setLoading(true)
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true)
     const [imp, inv, clients] = await Promise.all([
       supabase
         .from("imported_cars")
@@ -282,6 +285,8 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
   }
 
   const openCard = (card: BoardCard) => {
+    // Coches de Comprados: ficha en un panel lateral, sin salir del tablero
+    if (card.table === "inventory_cars") { setPanelId(card.id); return }
     const tab = card.table === "imported_cars" ? "import" : "management"
     window.dispatchEvent(new CustomEvent("changeTab", { detail: { tab } }))
     setTimeout(() => window.dispatchEvent(new CustomEvent<OpenCarDetail>(OPEN_CAR_EVENT, { detail: { table: card.table, id: card.id } })), 80)
@@ -434,6 +439,8 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
           )
         })}
       </div>
+
+      <PurchasePanel carId={panelId} onClose={() => setPanelId(null)} onChanged={() => load(true)} />
 
       <MarkAsBoughtModal
         isOpen={!!buyCarId}

@@ -22,9 +22,11 @@ interface BoughtCarCardProps {
   onPrintInvoice?: () => void
   /** Se ha cambiado algo del coche que obliga a recargar (señal, pagado…) */
   onChanged?: () => void
+  /** Abrir la ficha del coche (panel lateral) */
+  onOpen?: () => void
 }
 
-export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold, onDelete, onUpdateCar, onPrintInvoice, onChanged }: BoughtCarCardProps) {
+export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold, onDelete, onUpdateCar, onPrintInvoice, onChanged, onOpen }: BoughtCarCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isDocsOpen, setIsDocsOpen] = useState(false)
   const [isPortalOpen, setIsPortalOpen] = useState(false)
@@ -147,18 +149,22 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
       {/* Header */}
       <div className="p-4 flex items-start justify-between gap-3 border-b">
         {/* Miniatura: primera foto del coche del que viene, con el mismo encuadre que en "Guardados por Claude" */}
-        <div className="h-16 w-24 shrink-0 overflow-hidden rounded-md bg-muted">
+        <button type="button" onClick={onOpen} disabled={!onOpen} title="Abrir ficha" className="h-16 w-24 shrink-0 overflow-hidden rounded-md bg-muted enabled:hover:opacity-90">
           {car.photo?.src ? (
             <img src={car.photo.src} alt={`${car.brand} ${car.model}`} loading="lazy" className="h-full w-full object-cover"
               style={{ objectPosition: `center ${car.photo.posY}%` }} />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">Sin foto</div>
           )}
-        </div>
+        </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h3 className="font-semibold truncate">
-              {car.brand} {car.model}
+              {onOpen ? (
+                <button type="button" onClick={onOpen} className="truncate text-left hover:underline">{car.brand} {car.model}</button>
+              ) : (
+                <>{car.brand} {car.model}</>
+              )}
             </h3>
             <span
               className={`px-2 py-0.5 rounded-full text-xs font-medium ${reserved ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"
