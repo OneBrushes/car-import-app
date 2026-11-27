@@ -4,7 +4,7 @@ import type { MarkAsBoughtData } from "@/components/modals/mark-as-bought-modal"
 import type { SellCarData } from "@/components/modals/sell-car-modal"
 
 /** Pasa un coche de Importación al inventario con su precio y gastos reales. */
-export async function markImportedCarAsBought(userId: string, data: MarkAsBoughtData) {
+export async function markImportedCarAsBought(userId: string, data: MarkAsBoughtData, stage: "purchased" | "reserved" = "purchased") {
     const { data: importedCar, error: readError } = await supabase
         .from("imported_cars")
         .select("*")
@@ -25,7 +25,7 @@ export async function markImportedCarAsBought(userId: string, data: MarkAsBought
             initial_expenses: data.expenses,
             date_purchased: data.datePurchased,
             status: "inventory",
-            logistic_status: "purchased",
+            logistic_status: stage,
         })
         .select()
         .single()

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 import { loadClientCars, type ClientCarInfo } from "@/lib/client-cars"
 
 type ImportedStage = "found" | "contacted" | "negotiating"
-type LogisticStage = "purchased" | "in_transit" | "homologation" | "detailing" | "ready"
+type LogisticStage = "reserved" | "purchased" | "in_transit" | "homologation" | "detailing" | "ready"
 /** Solo para coches de cliente (asignados en "Área cliente") */
 type ClientStage = "preparing" | "delivered"
 type StageId = ImportedStage | LogisticStage | ClientStage | "sold"
@@ -30,6 +30,7 @@ const COLUMNS: Column[] = [
   { id: "found", label: "Encontrado", source: "imported", hint: "Anuncios guardados" },
   { id: "contacted", label: "Contactado", source: "imported", hint: "Mensaje enviado" },
   { id: "negotiating", label: "Negociando", source: "imported", hint: "Precio en discusión" },
+  { id: "reserved", label: "Reservado", source: "inventory", hint: "Señal pagada, falta pagar" },
   { id: "purchased", label: "Comprado", source: "inventory", hint: "Pagado, por recoger" },
   { id: "in_transit", label: "Transporte", source: "inventory", hint: "Camión o grúa" },
   { id: "homologation", label: "Trámites / ITV", source: "inventory", hint: "Homologación y matrícula" },
@@ -45,7 +46,7 @@ const CLIENT_COLUMNS: Column[] = [
 ]
 
 const IMPORTED_STAGES: ImportedStage[] = ["found", "contacted", "negotiating"]
-const LOGISTIC_STAGES: LogisticStage[] = ["purchased", "in_transit", "homologation", "detailing", "ready"]
+const LOGISTIC_STAGES: LogisticStage[] = ["reserved", "purchased", "in_transit", "homologation", "detailing", "ready"]
 
 interface BoardCard {
   key: string
@@ -74,6 +75,8 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
   const [showDiscarded, setShowDiscarded] = useState(false)
 
   const [buyCarId, setBuyCarId] = useState<string | null>(null)
+  /** Fase en la que entra el coche al pasarlo de importación: comprado o reservado (señal pagada) */
+  const [buyStage, setBuyStage] = useState<"purchased" | "reserved">("purchased")
   const [sellCar, setSellCar] = useState<any | null>(null)
 
   const companyRole = ["importador", "admin", "super_admin"].includes(profile?.role || "")
@@ -177,15 +180,17 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
         continue
       }
       const stage = (LOGISTIC_STAGES as string[]).includes(car.logistic_status) ? (car.logistic_status as LogisticStage) : "purchased"
+      const isReserved = stage === "reserved"
+      const senal = Number(car.senal) || 0
       result.push({
         key: `v-${car.id}`,
         table: "inventory_cars",
         id: car.id,
         stage,
         title: `${car.brand} ${car.model}`,
-        subtitle: [car.year, car.plate].filter(Boolean).join(" · "),
-        amount: invested,
-        amountLabel: "Invertido",
+        subtitle: [car.year, isReserved ? `Señal ${eur(senal)}` : car.plate].filter(Boolean).join(" · "),
+        amount: isReserved ? Math.max(0, (Number(car.initial_price) || 0) - senal) : invested,
+        amountLabel: isReserved ? "Falta por pagar" : "Invertido",
         days: daysSince(car.date_purchased),
         raw: car,
       })
@@ -220,6 +225,8 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
   const moveInventory = async (card: BoardCard, stage: LogisticStage | ClientStage) => {
     const patch: Record<string, unknown> = { logistic_status: stage }
     if (stage === "delivered") patch.delivered_at = new Date().toISOString()
+    // Al pagar el resto de un reservado, la fecha de compra es la del pago
+    if (card.raw.logistic_status === "reserved" && stage !== "reserved") patch.date_purchased = new Date().toISOString().slice(0, 10)
     setInventory(prev => prev.map(c => (c.id === card.id ? { ...c, ...patch } : c)))
     const { error } = await supabase.from("inventory_cars").update(patch).eq("id", card.id)
     if (error) {
@@ -228,6 +235,11 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
       return
     }
     if (stage === "delivered") toast.success("Entregado: el cliente ya lo ve y puede dejar su opinión")
+    // El coche de "Guardados por Claude" sigue la misma fase (reservado / comprado)
+    const wasReserved = card.raw.logistic_status === "reserved"
+    if (card.raw.coche_claude_id && (wasReserved || stage === "reserved") && wasReserved !== (stage === "reserved")) {
+      await supabase.from("coches_claude").update({ estado: stage === "reserved" ? "reservado" : "comprado", updated_at: new Date().toISOString() }).eq("id", card.raw.coche_claude_id)
+    }
   }
 
   const handleDrop = (stage: StageId, key: string) => {
@@ -237,8 +249,8 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
 
     if (card.table === "imported_cars") {
       if ((IMPORTED_STAGES as string[]).includes(stage)) return moveImported(card, stage as ImportedStage)
-      if (stage === "purchased") return setBuyCarId(card.id)
-      toast.info("Primero pásalo a «Comprado»")
+      if (stage === "purchased" || stage === "reserved") { setBuyStage(stage); return setBuyCarId(card.id) }
+      toast.info("Primero pásalo a «Reservado» o «Comprado»")
       return
     }
 
@@ -269,8 +281,8 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
   const onBought = async (data: MarkAsBoughtData) => {
     if (!user) return
     try {
-      await markImportedCarAsBought(user.id, data)
-      toast.success("Coche pasado a inventario")
+      await markImportedCarAsBought(user.id, data, buyStage)
+      toast.success(buyStage === "reserved" ? "Coche reservado: ya puedes apuntarle gastos" : "Coche pasado a inventario")
       setBuyCarId(null)
       load()
     } catch (error: any) {

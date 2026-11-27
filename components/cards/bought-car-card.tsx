@@ -10,6 +10,7 @@ import { ClientPortalModal } from "@/components/modals/client-portal-modal"
 import { ClientRouteUpdater } from "@/components/client-route-updater"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
+import { EXPENSE_CATEGORIES, purchaseTotals } from "@/lib/purchases"
 
 interface BoughtCarCardProps {
   car: any
@@ -19,9 +20,11 @@ interface BoughtCarCardProps {
   onDelete: () => void
   onUpdateCar?: (carId: string, updates: any) => void
   onPrintInvoice?: () => void
+  /** Se ha cambiado algo del coche que obliga a recargar (señal, pagado…) */
+  onChanged?: () => void
 }
 
-export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold, onDelete, onUpdateCar, onPrintInvoice }: BoughtCarCardProps) {
+export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold, onDelete, onUpdateCar, onPrintInvoice, onChanged }: BoughtCarCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isDocsOpen, setIsDocsOpen] = useState(false)
   const [isPortalOpen, setIsPortalOpen] = useState(false)
@@ -43,6 +46,30 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
   }, 0)
 
   const totalInvested = safeInitialPrice + safeInitialExpenses + safeAdditionalExpenses
+
+  // Reservado: precio negociado y señal pagada, falta pagar el resto (los gastos ya se pueden apuntar)
+  const reserved = car.logistic_status === "reserved" && car.status !== "sold"
+  const totals = purchaseTotals({ ...car, initial_price: safeInitialPrice, initial_expenses: safeInitialExpenses, expenses: car.expenses })
+  const [senal, setSenal] = useState<string>(car.senal != null ? String(car.senal) : "")
+  const [savingSenal, setSavingSenal] = useState(false)
+  const saveSenal = async () => {
+    const value = senal.trim() === "" ? null : Number(senal)
+    if (value != null && (!Number.isFinite(value) || value < 0)) { toast.error("Importe no válido"); return }
+    setSavingSenal(true)
+    const { error } = await supabase.from("inventory_cars").update({ senal: value }).eq("id", car.id)
+    setSavingSenal(false)
+    if (error) { toast.error(/senal/.test(error.message) ? "Falta ejecutar supabase/2026-11_reservados.sql en Supabase" : error.message); return }
+    toast.success("Señal guardada")
+    onChanged?.()
+  }
+  const markPaid = async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const { error } = await supabase.from("inventory_cars").update({ logistic_status: "purchased", date_purchased: today }).eq("id", car.id)
+    if (error) { toast.error(error.message); return }
+    if (car.coche_claude_id) await supabase.from("coches_claude").update({ estado: "comprado", updated_at: new Date().toISOString() }).eq("id", car.coche_claude_id)
+    toast.success("Pagado: pasa a «Comprado»")
+    onChanged?.()
+  }
 
   // Coche de cliente: el cliente paga el coche; lo tuyo son los honorarios
   const isClientCar = Boolean(car.client_name)
@@ -88,17 +115,7 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
     }
   }
 
-  const expenseCategories = [
-    "Precio del coche",
-    "Transporte",
-    "ITV",
-    "Trámites",
-    "Reparación",
-    "Mantenimiento",
-    "Seguro",
-    "Impuestos",
-    "Otro"
-  ]
+  const expenseCategories: string[] = [...EXPENSE_CATEGORIES]
 
   const matriculationSteps = MATRICULATION_STEPS
 
@@ -135,10 +152,10 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
               {car.brand} {car.model}
             </h3>
             <span
-              className={`px-2 py-0.5 rounded-full text-xs font-medium ${car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"
+              className={`px-2 py-0.5 rounded-full text-xs font-medium ${reserved ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : car.status === "inventory" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"
                 }`}
             >
-              {isClientCar ? (delivered ? "Entregado" : "Coche de cliente") : car.status === "inventory" ? "En inventario" : "Vendido"}
+              {isClientCar ? (delivered ? "Entregado" : "Coche de cliente") : reserved ? "🤝 Reservado · señal pagada" : car.status === "inventory" ? "En inventario" : "Vendido"}
             </span>
             {isClientCar && (
               <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-warning/10 text-warning">{car.client_name}</span>
@@ -189,6 +206,39 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
           <p className="text-muted-foreground text-xs mb-1">Inversión total</p>
           <p className="font-semibold tabular">{eur(totalInvested)}</p>
         </div>
+        )}
+        {reserved && !isClientCar && (
+          <>
+            <div>
+              <p className="text-muted-foreground text-xs mb-1">Precio acordado</p>
+              <p className="font-semibold tabular">{eur(totals.precio)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs mb-1">Señal pagada</p>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={senal}
+                  onChange={(e) => setSenal(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveSenal() }}
+                  placeholder="0"
+                  className="w-24 rounded-md border bg-background px-2 py-1 text-sm tabular outline-none focus:ring-2 focus:ring-ring"
+                />
+                <span className="text-muted-foreground">€</span>
+                {senal !== (car.senal != null ? String(car.senal) : "") && (
+                  <button onClick={saveSenal} disabled={savingSenal} className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                    Guardar
+                  </button>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs mb-1">Falta por pagar</p>
+              <p className="font-semibold tabular text-amber-700 dark:text-amber-400">{eur(totals.pendiente)}</p>
+              <button onClick={markPaid} className="mt-1 text-xs font-medium text-primary hover:underline">Ya pagado → Comprado</button>
+            </div>
+          </>
         )}
         {car.status === "sold" && (
           <>

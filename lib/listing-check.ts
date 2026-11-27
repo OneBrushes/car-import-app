@@ -363,7 +363,7 @@ export function planReview(car: CarRow, check: Pick<ListingCheck, "resultado" | 
         const n = fallos + 1
         patch.anuncio_estado = "retirado"
         patch.anuncio_fallos_seguidos = n
-        if (n >= RETIRED_STRIKES && car.estado !== "retirado" && car.estado !== "comprado") {
+        if (n >= RETIRED_STRIKES && car.estado !== "retirado" && car.estado !== "comprado" && car.estado !== "reservado") {
             const nota = `Anuncio retirado o vendido (detectado el ${madridDateEs(now)})`
             patch.estado = "retirado"
             patch.retirado_en = now.toISOString()

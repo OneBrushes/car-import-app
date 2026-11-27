@@ -24,6 +24,7 @@ const eur = (value: any) => (value == null || value === "" ? "—" : `${Number(v
 const STAGES: Record<string, string> = {
   negotiating: "Negociando",
   discarded: "Descartado",
+  reserved: "Reservado",
   purchased: "Comprado",
   in_transit: "Transporte",
   homologation: "Trámites / ITV",

@@ -27,7 +27,7 @@ interface Expense {
   notes?: string
 }
 
-export type LogisticStatus = "purchased" | "in_transit" | "homologation" | "detailing" | "ready"
+export type LogisticStatus = "reserved" | "purchased" | "in_transit" | "homologation" | "detailing" | "ready"
 
 interface BoughtCar {
   id: string
@@ -143,7 +143,10 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
         // Coche de cliente: no es inversión propia, cobra honorarios
         client_name: clientCars.get(car.id)?.customerName,
         client_fee: car.client_fee != null ? Number(car.client_fee) : null,
-        delivered_at: car.delivered_at ?? null
+        delivered_at: car.delivered_at ?? null,
+        // Reservado (señal pagada) y coche de Claude del que viene
+        senal: car.senal != null ? Number(car.senal) : null,
+        coche_claude_id: car.coche_claude_id ?? null
       }))
 
       setBoughtCars(formattedCars)
@@ -397,6 +400,7 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
                 }}
                 onDelete={() => deleteCar(car.id)}
                 onPrintInvoice={() => printInvoice(car.id)}
+                onChanged={() => fetchCars()}
               />
               </div>
             ))}

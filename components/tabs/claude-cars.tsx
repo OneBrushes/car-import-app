@@ -183,13 +183,14 @@ const STATE_STYLES: Record<ClaudeCarState, string> = {
   interesante: "bg-warning text-warning-foreground",
   contactado: "bg-success text-success-foreground",
   descartado: "bg-muted text-muted-foreground",
+  reservado: "bg-amber-600 text-white",
   comprado: "bg-foreground text-background",
   // Gris oscuro con 🏷️: distinto del gris claro de "descartado"
   retirado: "bg-slate-500 text-white",
 }
 
 /** Icono delante del nombre del estado (solo los que lo llevan) */
-const STATE_ICONS: Partial<Record<ClaudeCarState, string>> = { retirado: "🏷️" }
+const STATE_ICONS: Partial<Record<ClaudeCarState, string>> = { retirado: "🏷️", reservado: "🤝" }
 const stateLabel = (s: ClaudeCarState) => (STATE_ICONS[s] ? `${STATE_ICONS[s]} ${CLAUDE_CAR_STATE_LABELS[s]}` : CLAUDE_CAR_STATE_LABELS[s])
 
 export function ClaudeCarsTab({ isActive }: { isActive: boolean }) {

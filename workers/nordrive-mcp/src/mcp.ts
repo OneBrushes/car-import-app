@@ -31,6 +31,9 @@ import {
 } from "../../../lib/listing-check"
 import { saveReviews, saveSummary } from "./revision"
 import { notifyOwner } from "./push"
+import {
+    EXPENSE_CATEGORIES, PURCHASE_STAGE_BY_NAME, PURCHASE_STAGE_NAMES, purchaseText, stagePatch, type PurchaseCar,
+} from "../../../lib/purchases"
 import { reviewChangeLines } from "../../../lib/listing-check"
 import { CARS_TABLE, CONTACTS_TABLE, costSettings, db, logCall, ownerId } from "./db"
 import { publicPrefix, pruneCarFolder, refreshFromListing, samePhoto, storePhotos, type StoredPhotos } from "./photos"
@@ -293,7 +296,9 @@ export function buildServer(env: Env): McpServer {
                 "y el beneficio con su propia fórmula (impuesto de matriculación, IVA si toca, transporte, ITV, homologación, DGT, placas y gestoría) " +
                 "y saca sola todas las fotos del anuncio. Confirma siempre al usuario el coste total y el beneficio que devuelve la herramienta. " +
                 "Cada vez que envíes o recibas un mensaje de un vendedor, regístralo con registrar_contacto (no lo escribas en las notas). " +
-                "Al guardar un coche, valora siempre facilidad_venta (1 fácil … 5 difícil) con su motivo.",
+                "Al guardar un coche, valora siempre facilidad_venta (1 fácil … 5 difícil) con su motivo. " +
+                "Cuando el usuario cierre un trato (señal pagada) usa pasar_a_comprados con estado reservado; cuando pague el resto, actualizar_comprado con estado comprado. " +
+                "Los gastos del coche (vuelo, hotel, transporte…) se apuntan con anadir_gastos, aunque aún no esté pagado.",
         },
     )
 
@@ -414,7 +419,8 @@ export function buildServer(env: Env): McpServer {
         {
             title: "Actualizar coche",
             description:
-                "Cambia cualquier campo o el estado (candidato, nuevo, interesante, contactado, descartado, comprado, retirado = vendido / anuncio retirado) de un coche de 'Guardados por Claude', por su id. " +
+                "Cambia cualquier campo o el estado (candidato, nuevo, interesante, contactado, descartado, reservado, comprado, retirado = vendido / anuncio retirado) de un coche de 'Guardados por Claude', por su id. " +
+                "Para reservar (señal pagada) o comprar un coche usa pasar_a_comprados, que además lo pone en la pestaña Comprados. " +
                 "Si cambian datos que afectan al precio, la app recalcula el coste y el beneficio. Devuelve el coche actualizado con su historial de contactos.",
             inputSchema: {
                 id: z.string().uuid().describe("id del coche (lo devuelven guardar_coche y listar_coches)"),
@@ -463,6 +469,205 @@ export function buildServer(env: Env): McpServer {
             const [car] = await attachContacts(client, [saved.data as ClaudeCar])
             const changed = [...Object.keys(patch), ...PHOTO_KEYS.filter(k => ({ foto_url, fotos, foto_posicion_y })[k] !== undefined)]
             return { result: carResult(car, withWarnings("Actualizado.", notes)), carId: id, resumen: `${carName(car)}: ${changed.join(", ")}` }
+        }),
+    )
+
+
+    // --- Comprados (inventory_cars + car_expenses): reservar, comprar y apuntar gastos ---------------------------------
+
+    const INVENTORY = "inventory_cars"
+    const EXPENSES = "car_expenses"
+    const missingSql = (msg: string) => /senal|coche_claude_id|reservado|check constraint/i.test(msg)
+        ? `${msg} — falta ejecutar supabase/2026-11_reservados.sql en Supabase` : msg
+
+    /** Coche de Comprados de la cuenta dueña, por su id o por el id del coche de Claude del que viene */
+    async function findPurchase(ref: string): Promise<PurchaseCar | null> {
+        const owner = await ownerId(client)
+        const byId = await client.from(INVENTORY).select("*, expenses:car_expenses(*)").eq("user_id", owner).eq("id", ref).maybeSingle()
+        if (byId.error) throw new Error(missingSql(byId.error.message))
+        if (byId.data) return byId.data as PurchaseCar
+        const byClaude = await client.from(INVENTORY).select("*, expenses:car_expenses(*)").eq("user_id", owner).eq("coche_claude_id", ref).maybeSingle()
+        if (byClaude.error && !missingSql(byClaude.error.message).includes("2026-11_reservados")) throw new Error(byClaude.error.message)
+        return (byClaude.data as PurchaseCar | null) ?? null
+    }
+
+    async function setClaudeState(cocheId: string | null | undefined, estado: "reservado" | "comprado") {
+        if (!cocheId) return
+        const { error } = await client.from(CARS_TABLE).update({ estado, updated_at: new Date().toISOString() }).eq("id", cocheId)
+        if (error) throw new Error(missingSql(error.message))
+    }
+
+    const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha AAAA-MM-DD")
+
+    server.registerTool(
+        "pasar_a_comprados",
+        {
+            title: "Pasar a Comprados (reservado o comprado)",
+            description:
+                "Lleva un coche de 'Guardados por Claude' a la pestaña Comprados de la app. estado 'reservado' = precio ya negociado y señal " +
+                "pagada, falta pagar el resto (es lo normal antes de ir a por él); 'comprado' = pagado del todo. Desde ese momento se le pueden " +
+                "apuntar gastos con anadir_gastos (vuelo, hotel…) aunque aún no esté pagado. El coche de Claude pasa a estado reservado o comprado. " +
+                "Si ya estaba en Comprados, lo actualiza en vez de duplicarlo. Devuelve el id de Comprados, lo que falta por pagar y los gastos.",
+            inputSchema: {
+                id: z.string().uuid().describe("id del coche de Claude"),
+                estado: z.enum(["reservado", "comprado"]).default("reservado"),
+                precio: z.number().positive().optional().describe("Precio acordado del coche en euros (si no, el del anuncio)"),
+                senal: z.number().nonnegative().optional().describe("Señal / paga y señal ya pagada, en euros"),
+                fecha: dateSchema.optional().describe("Fecha de la reserva o de la compra (AAAA-MM-DD; por defecto hoy)"),
+            },
+        },
+        async ({ id, estado, precio, senal, fecha }) => logged(client, "pasar_a_comprados", async () => {
+            const claude = await client.from(CARS_TABLE).select("*").eq("id", id).maybeSingle()
+            if (claude.error) throw new Error(claude.error.message)
+            if (!claude.data) return { result: errorResult(`No existe ningún coche de Claude con id ${id}.`), carId: id }
+            const c = claude.data as ClaudeCar
+            const stage = PURCHASE_STAGE_BY_NAME[estado]
+            const today = new Date().toISOString().slice(0, 10)
+            const existing = await findPurchase(id)
+            let saved
+            if (existing) {
+                if (existing.status === "sold") return { result: errorResult("Ese coche ya está vendido en Comprados."), carId: id }
+                const patch: Record<string, unknown> = { ...stagePatch(existing, stage, fecha, today) }
+                if (precio !== undefined) patch.initial_price = Math.round(precio)
+                if (senal !== undefined) patch.senal = Math.round(senal)
+                saved = await client.from(INVENTORY).update(patch).eq("id", existing.id).select("*, expenses:car_expenses(*)").single()
+            } else {
+                const owner = await ownerId(client)
+                saved = await client.from(INVENTORY).insert({
+                    user_id: owner,
+                    brand: c.marca || "Coche",
+                    model: [c.modelo, c.version].filter(Boolean).join(" ") || "—",
+                    year: c.anio ?? null,
+                    mileage: c.km ?? null,
+                    initial_price: Math.round(precio ?? c.precio_alemania ?? 0),
+                    initial_expenses: 0,
+                    date_purchased: fecha || today,
+                    status: "inventory",
+                    logistic_status: stage,
+                    senal: senal !== undefined ? Math.round(senal) : null,
+                    coche_claude_id: id,
+                }).select("*, expenses:car_expenses(*)").single()
+            }
+            if (saved.error) throw new Error(missingSql(saved.error.message))
+            await setClaudeState(id, estado)
+            const car = saved.data as PurchaseCar
+            const action = existing ? "Actualizado en Comprados" : estado === "reservado" ? "Reservado y añadido a Comprados" : "Añadido a Comprados"
+            return { result: { content: [{ type: "text", text: `${action}.\n${purchaseText(car)}` }] }, carId: id, resumen: `${action}: ${car.brand} ${car.model}` }
+        }),
+    )
+
+    server.registerTool(
+        "actualizar_comprado",
+        {
+            title: "Actualizar coche de Comprados",
+            description:
+                "Cambia un coche de la pestaña Comprados: fase (reservado → comprado cuando pagues el resto → transporte → tramites → taller → " +
+                "a_la_venta), precio acordado, señal, fecha de compra, matrícula o bastidor. Acepta el id de Comprados o el del coche de Claude. " +
+                "Para venderlo se usa la app (factura y cliente).",
+            inputSchema: {
+                id: z.string().uuid().describe("id de Comprados o del coche de Claude"),
+                estado: z.enum(PURCHASE_STAGE_NAMES).optional(),
+                precio: z.number().positive().optional().describe("Precio del coche en euros"),
+                senal: z.number().nonnegative().optional().describe("Señal pagada en euros"),
+                fecha_compra: dateSchema.optional().describe("AAAA-MM-DD. Al pasar de reservado a comprado, por defecto hoy"),
+                matricula: z.string().trim().max(20).optional(),
+                vin: z.string().trim().max(30).optional(),
+            },
+        },
+        async ({ id, estado, precio, senal, fecha_compra, matricula, vin }) => logged(client, "actualizar_comprado", async () => {
+            const car = await findPurchase(id)
+            if (!car) return { result: errorResult(`No hay ningún coche tuyo en Comprados con id ${id}. Usa listar_comprados o pasar_a_comprados.`) }
+            if (car.status === "sold") return { result: errorResult("Ese coche ya está vendido.") }
+            const patch: Record<string, unknown> = estado ? stagePatch(car, PURCHASE_STAGE_BY_NAME[estado], fecha_compra) : {}
+            if (!estado && fecha_compra) patch.date_purchased = fecha_compra
+            if (precio !== undefined) patch.initial_price = Math.round(precio)
+            if (senal !== undefined) patch.senal = Math.round(senal)
+            if (matricula !== undefined) patch.plate = matricula || null
+            if (vin !== undefined) patch.vin = vin || null
+            if (!Object.keys(patch).length) return { result: errorResult("No has indicado ningún cambio.") }
+            const saved = await client.from(INVENTORY).update(patch).eq("id", car.id).select("*, expenses:car_expenses(*)").single()
+            if (saved.error) throw new Error(missingSql(saved.error.message))
+            if (estado) await setClaudeState(car.coche_claude_id, estado === "reservado" ? "reservado" : "comprado")
+            const updated = saved.data as PurchaseCar
+            return { result: { content: [{ type: "text", text: `Actualizado.\n${purchaseText(updated)}` }] }, carId: car.coche_claude_id ?? null, resumen: `${car.brand} ${car.model}: ${Object.keys(patch).join(", ")}` }
+        }),
+    )
+
+    server.registerTool(
+        "anadir_gastos",
+        {
+            title: "Añadir gastos a un coche de Comprados",
+            description:
+                "Apunta uno o varios gastos (hasta 20) en un coche de Comprados, también si solo está reservado: vuelo, hotel, gasolina, " +
+                "peajes, transporte, ITV, trámites, reparaciones… Categorías: " + EXPENSE_CATEGORIES.join(", ") + " (vuelos, hoteles y dietas = Viaje). " +
+                "Acepta el id de Comprados o el del coche de Claude. No apuntes aquí el precio del coche ni la señal: van en el propio coche.",
+            inputSchema: {
+                id: z.string().uuid().describe("id de Comprados o del coche de Claude"),
+                gastos: z.array(z.object({
+                    concepto: z.string().trim().min(1).max(200),
+                    importe: z.number().positive().describe("Euros"),
+                    fecha: dateSchema.optional().describe("AAAA-MM-DD (por defecto hoy)"),
+                    categoria: z.enum(EXPENSE_CATEGORIES).default("Otro"),
+                    notas: z.string().trim().max(500).optional(),
+                })).min(1).max(20),
+            },
+        },
+        async ({ id, gastos }) => logged(client, "anadir_gastos", async () => {
+            const car = await findPurchase(id)
+            if (!car) return { result: errorResult(`No hay ningún coche tuyo en Comprados con id ${id}. Primero pásalo con pasar_a_comprados.`) }
+            const today = new Date().toISOString().slice(0, 10)
+            const { error } = await client.from(EXPENSES).insert(gastos.map(g => ({
+                car_id: car.id, concept: g.concepto, amount: Math.round(g.importe * 100) / 100, date: g.fecha || today, category: g.categoria, notes: g.notas || null,
+            })))
+            if (error) throw new Error(error.message)
+            const updated = (await findPurchase(car.id))!
+            const total = gastos.reduce((n, g) => n + g.importe, 0)
+            return {
+                result: { content: [{ type: "text", text: `Apuntados ${gastos.length} gasto(s) por ${eur(total)}.\n${purchaseText(updated)}` }] },
+                carId: car.coche_claude_id ?? null,
+                resumen: `${car.brand} ${car.model}: ${gastos.map(g => `${g.concepto} ${eur(g.importe)}`).join(", ")}`.slice(0, 400),
+            }
+        }),
+    )
+
+    server.registerTool(
+        "borrar_gasto",
+        {
+            title: "Borrar un gasto",
+            description: "Borra un gasto de un coche de Comprados por su id (lo dan listar_comprados y anadir_gastos). Úsalo para corregir errores.",
+            inputSchema: { gasto_id: z.string().uuid() },
+        },
+        async ({ gasto_id }) => logged(client, "borrar_gasto", async () => {
+            const { data: g, error } = await client.from(EXPENSES).select("id, car_id, concept, amount").eq("id", gasto_id).maybeSingle()
+            if (error) throw new Error(error.message)
+            const car = g ? await findPurchase(g.car_id as string) : null
+            if (!g || !car) return { result: errorResult("No existe ese gasto en tus coches de Comprados.") }
+            const del = await client.from(EXPENSES).delete().eq("id", gasto_id)
+            if (del.error) throw new Error(del.error.message)
+            const updated = (await findPurchase(car.id))!
+            return { result: { content: [{ type: "text", text: `Borrado «${g.concept}» (${eur(Number(g.amount))}).\n${purchaseText(updated)}` }] }, carId: car.coche_claude_id ?? null, resumen: `${car.brand} ${car.model}: borrado ${g.concept}` }
+        }),
+    )
+
+    server.registerTool(
+        "listar_comprados",
+        {
+            title: "Listar Comprados",
+            description: "Coches de la pestaña Comprados (reservados, comprados y en proceso) con lo que falta por pagar y sus gastos con sus ids.",
+            inputSchema: {
+                estado: z.enum(PURCHASE_STAGE_NAMES).optional().describe("Solo los de esta fase"),
+                incluir_vendidos: z.boolean().default(false),
+            },
+        },
+        async ({ estado, incluir_vendidos }) => logged(client, "listar_comprados", async () => {
+            let q = client.from(INVENTORY).select("*, expenses:car_expenses(*)").eq("user_id", await ownerId(client)).order("created_at", { ascending: false }).limit(50)
+            if (!incluir_vendidos) q = q.neq("status", "sold")
+            if (estado) q = q.eq("logistic_status", PURCHASE_STAGE_BY_NAME[estado])
+            const { data, error } = await q
+            if (error) throw new Error(error.message)
+            const cars = (data ?? []) as PurchaseCar[]
+            const text = cars.length ? cars.map(purchaseText).join("\n\n") : "No hay coches en Comprados con ese filtro."
+            return { result: { content: [{ type: "text", text }] }, resumen: `${cars.length} coche(s)` }
         }),
     )
 

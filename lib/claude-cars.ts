@@ -11,7 +11,7 @@ import {
     type TaxRegion,
 } from "./import-costs"
 
-export const CLAUDE_CAR_STATES = ["candidato", "nuevo", "interesante", "contactado", "descartado", "comprado", "retirado"] as const
+export const CLAUDE_CAR_STATES = ["candidato", "nuevo", "interesante", "contactado", "descartado", "reservado", "comprado", "retirado"] as const
 export type ClaudeCarState = (typeof CLAUDE_CAR_STATES)[number]
 
 export const CLAUDE_CAR_STATE_LABELS: Record<ClaudeCarState, string> = {
@@ -20,6 +20,7 @@ export const CLAUDE_CAR_STATE_LABELS: Record<ClaudeCarState, string> = {
     interesante: "Interesante",
     contactado: "Contactado",
     descartado: "Descartado",
+    reservado: "Reservado (señal pagada)",
     comprado: "Comprado",
     retirado: "Vendido / retirado",
 }
