@@ -12,6 +12,7 @@ import { markImportedCarAsBought, printInvoiceForCar, sellInventoryCar } from "@
 import { OPEN_CAR_EVENT, type OpenCarDetail } from "@/components/command-palette"
 import { cn } from "@/lib/utils"
 import { loadClientCars, type ClientCarInfo } from "@/lib/client-cars"
+import { loadPurchasePhotos, type PurchasePhoto } from "@/lib/purchase-photos"
 
 type ImportedStage = "found" | "contacted" | "negotiating"
 type LogisticStage = "reserved" | "purchased" | "in_transit" | "homologation" | "detailing" | "ready"
@@ -70,6 +71,7 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
   const [imported, setImported] = useState<any[]>([])
   const [inventory, setInventory] = useState<any[]>([])
   const [clientCars, setClientCars] = useState<Map<string, ClientCarInfo>>(new Map())
+  const [photos, setPhotos] = useState<Map<string, PurchasePhoto>>(new Map())
   const [loading, setLoading] = useState(true)
   const [dragOver, setDragOver] = useState<StageId | null>(null)
   const [showDiscarded, setShowDiscarded] = useState(false)
@@ -106,6 +108,7 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
 
     setImported(myImported)
     setInventory(myInventory)
+    setPhotos(await loadPurchasePhotos(myInventory).catch(() => new Map()))
     setLoading(false)
   }
 
@@ -154,6 +157,8 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
           amount: profit,
           amountLabel: "Beneficio",
           days: daysSince(car.date_purchased),
+          image: photos.get(car.id)?.src,
+
           raw: car,
         })
         continue
@@ -175,6 +180,8 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
           amount: car.client_fee != null ? Number(car.client_fee) : null,
           amountLabel: "Honorarios",
           days: daysSince(car.date_purchased),
+          image: photos.get(car.id)?.src,
+
           raw: car,
         })
         continue
@@ -192,11 +199,13 @@ export function PipelineBoard({ isActive = true, embedded = false }: { isActive?
         amount: isReserved ? Math.max(0, (Number(car.initial_price) || 0) - senal) : invested,
         amountLabel: isReserved ? "Falta por pagar" : "Invertido",
         days: daysSince(car.date_purchased),
+        image: photos.get(car.id)?.src,
+
         raw: car,
       })
     }
     return result
-  }, [imported, inventory, showDiscarded, clientCars])
+  }, [imported, inventory, showDiscarded, clientCars, photos])
 
   // Las columnas de cliente solo aparecen si hay algún coche de cliente
   const columns = useMemo(() => (inventory.some(c => clientCars.has(c.id)) ? [...COLUMNS, ...CLIENT_COLUMNS] : COLUMNS), [inventory, clientCars])

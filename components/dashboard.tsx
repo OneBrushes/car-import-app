@@ -8,6 +8,7 @@ import { DashboardCharts } from "@/components/dashboard/charts"
 import { RemindersWidget } from "@/components/tabs/reminders-tab"
 import { loadClientCars } from "@/lib/client-cars"
 import { supabase } from "@/lib/supabase"
+import { purchaseTotals } from "@/lib/purchases"
 import { useAuth } from "@/components/auth-provider"
 
 interface BoughtCar {
@@ -164,8 +165,12 @@ export function Dashboard({ isActive = true }: DashboardProps) {
           }
         } else {
           carsInInventory++
-          totalInvestment += totalInvested
-          totalProfit -= totalInvested // Cashflow realista: restamos inversión de coches no vendidos
+          // Cashflow realista: se resta solo lo que ya ha salido de la cuenta. Un coche reservado aún no está pagado:
+          // cuenta la señal y los gastos, no el precio entero (purchaseTotals().pagado)
+          const raw: any = rawById.get(car.id)
+          const paid = purchaseTotals({ ...raw, expenses: car.expenses }).pagado
+          totalInvestment += paid
+          totalProfit -= paid
         }
       })
 

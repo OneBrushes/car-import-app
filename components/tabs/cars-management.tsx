@@ -9,6 +9,7 @@ import { MarkAsBoughtModal } from "@/components/modals/mark-as-bought-modal"
 import { SellCarModal } from "@/components/modals/sell-car-modal"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { loadClientCars } from "@/lib/client-cars"
+import { loadPurchasePhotos } from "@/lib/purchase-photos"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { toast } from "sonner"
@@ -110,6 +111,9 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
 
       if (carsError) throw carsError
       const clientCars = await loadClientCars()
+      const myRows = (isGodMode || profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.role === 'importador') ? carsData : carsData.filter((car: any) => car.user_id === user?.id)
+      // Foto: la del coche del que viene (Guardados por Claude o Importación)
+      const photos = await loadPurchasePhotos(myRows).catch(() => new Map())
 
       // Bypass for God Mode or Admins/Importadores
       const isAdminOrGod = isGodMode || profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.role === 'importador'
@@ -146,7 +150,8 @@ export function CarsManagement({ isActive = true }: { isActive?: boolean }) {
         delivered_at: car.delivered_at ?? null,
         // Reservado (señal pagada) y coche de Claude del que viene
         senal: car.senal != null ? Number(car.senal) : null,
-        coche_claude_id: car.coche_claude_id ?? null
+        coche_claude_id: car.coche_claude_id ?? null,
+        photo: photos.get(car.id) ?? null
       }))
 
       setBoughtCars(formattedCars)

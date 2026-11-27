@@ -145,7 +145,16 @@ export function BoughtCarCard({ car, onAddExpense, onRemoveExpense, onMarkAsSold
   return (
     <div className="bg-card border rounded-xl overflow-hidden shadow-xs">
       {/* Header */}
-      <div className="p-4 flex items-start justify-between border-b">
+      <div className="p-4 flex items-start justify-between gap-3 border-b">
+        {/* Miniatura: primera foto del coche del que viene, con el mismo encuadre que en "Guardados por Claude" */}
+        <div className="h-16 w-24 shrink-0 overflow-hidden rounded-md bg-muted">
+          {car.photo?.src ? (
+            <img src={car.photo.src} alt={`${car.brand} ${car.model}`} loading="lazy" className="h-full w-full object-cover"
+              style={{ objectPosition: `center ${car.photo.posY}%` }} />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">Sin foto</div>
+          )}
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h3 className="font-semibold truncate">
